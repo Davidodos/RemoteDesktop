@@ -2,8 +2,15 @@
 
 Handy-App (Android) zur Fernsteuerung von PC und Laptop (beide Windows 10/11).
 
-Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan: **`docs/TASKS.md`**
-Umbau zur echten App (Phase 9+, noch nicht begonnen): **`docs/PLAN-V2.md`**
+Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
+
+**V2-Umbau zur echten App (läuft):** Begründungen in **`docs/PLAN-V2.md`**,
+Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:
+`/naechste-phase`.
+
+Toolchain im Container: `~/.bashrc` setzt `PATH` auf `~/.dotnet` und
+`DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` (libicu fehlt, kein root).
+`cd app && npm test` · `cd agent.Tests && dotnet test`.
 
 ## Aufbau
 
