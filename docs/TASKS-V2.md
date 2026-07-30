@@ -66,7 +66,7 @@ gesammelt — nicht stillschweigend abgehakt.
 
 ## Phase 9 — Plattform- und Transportschicht
 
-**Status:** offen
+**Status:** erledigt (30.07.2026)
 **Tor:** nein
 **Aufwand:** 3–4 Tage
 
@@ -94,16 +94,39 @@ Kein `rtc.ts`, kein Capacitor, kein WebView2, keine Kopplung. Nur die Schnitte.
 
 ### Abnahme
 
-- [ ] `cd app && npm test` grün, **ohne dass ein bestehender Test geändert wurde**
-- [ ] `cd app && npx tsc -b` ohne Fehler
-- [ ] `agentClient.ts` und `inputChannel.ts` enthalten kein `fetch(` und kein
-      `new WebSocket(` mehr — der Nachweis, dass der Schnitt wirklich sitzt
-- [ ] Neue Tests für die Web-Umsetzung der Plattformschicht
-- [ ] Die PWA funktioniert unverändert (`npm run build` läuft durch)
+- [x] `cd app && npm test` grün, **ohne dass ein bestehender Test geändert wurde**
+      — 132 statt 108, kein `.test.ts` aus dem Bestand im Diff
+- [x] `cd app && npx tsc -b` ohne Fehler
+- [x] `agentClient.ts` und `inputChannel.ts` enthalten kein `fetch(` und kein
+      `new WebSocket(` mehr — Grep über alle vier Client-Dateien ohne Treffer
+- [x] Neue Tests für die Web-Umsetzung der Plattformschicht
+      (`platform/web.test.ts`, 11 Tests; `transport/direct.test.ts`, 13 Tests)
+- [x] Die PWA funktioniert unverändert (`npm run build` läuft durch)
 
 ### Notizen
 
-_(leer)_
+- Die Netz-Zugriffe liegen jetzt in genau zwei Dateien: `transport/direct.ts`
+  und `hubClient.ts`. Letzteres ist gewollt — der Hub ist einer von mehreren
+  Geräte-Anbietern (`lib/deviceSources.ts`) und stirbt erst in Phase 14.
+- **Das Coalescing in `inputChannel.ts` wurde nicht angefasst.** `pendingMove`
+  und `flushPendingMove` stehen unverändert; getauscht ist nur, worüber
+  gesendet wird. Damit gilt die Garantie weiter, dass ein Klick nie vor der
+  Bewegung ankommt, die ihn positioniert.
+- Der Transport wird als Konstruktor-Parameter mit Vorgabewert übergeben
+  (`transport: Transport = directTransport(device)`). Dadurch blieben die
+  bestehenden Aufrufstellen unverändert und die neuen Tests kommen ohne
+  Netzwerk-Mocks aus.
+- `platform/web.ts` sagt bei `camera`, `pointerLock`, `backgroundSession` und
+  `selfUpdate` bewusst `false`. Das ist der Ist-Zustand der PWA, kein Versäumnis
+  — Phase 11 und 12 setzen diese Fähigkeiten auf `true`.
+- **Zwischenfall:** Der erste Anlauf wurde unterbrochen und hatte dabei in
+  `docs/TASKS.md` fünf offene Hardware-Prüfpunkte aus den Phasen 1–8 gelöscht
+  statt sie stehen zu lassen. Zurückgesetzt. Erledigt ist davon nichts.
+- **Kleine offene Aufräumarbeit:** `app/tsconfig.tsbuildinfo` ist ein
+  Build-Artefakt, wurde aber im Ausgangs-Commit mitversioniert. In
+  `.gitignore` steht es jetzt; einmalig fehlt noch
+  `git rm --cached app/tsconfig.tsbuildinfo`. Sonst taucht die Datei in jedem
+  Diff auf.
 
 ---
 

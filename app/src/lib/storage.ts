@@ -1,40 +1,62 @@
+import { getPlatform } from '../platform/index.ts'
+
 const TOKEN_KEY = 'remotedesktop.hubToken'
+const DEVICES_KEY = 'remotedesktop.devices'
 const LAST_DEVICE_KEY = 'remotedesktop.lastDevice'
 const TRANSPORT_KEY = 'remotedesktop.transport'
 const SHORTCUTS_KEY = 'remotedesktop.shortcuts'
 const DEFAULT_MONITOR_PREFIX = 'remotedesktop.monitor.'
 
 /**
- * Kleine Hülle um localStorage.
+ * Was die App sich merkt — benannt statt als lose Schlüssel.
  *
- * Zugriffe sind gekapselt, weil localStorage im privaten Modus mancher
- * Browser wirft — ein Absturz beim Start wäre die Folge.
+ * Wo es tatsächlich landet, entscheidet die Plattformschicht: im Browser der
+ * localStorage, unter Android die Preferences. Alles, was ein Geheimnis ist —
+ * Tokens heute, Geräteschlüssel ab Phase 10 — geht in den Schlüsselspeicher,
+ * weil die anderen Plattformen dafür etwas Eigenes anbieten.
  */
 function read(key: string): string | undefined {
-  try {
-    return localStorage.getItem(key) ?? undefined
-  } catch {
-    return undefined
-  }
+  return getPlatform().storage.get(key)
 }
 
 function write(key: string, value: string | undefined): void {
-  try {
-    if (value === undefined) {
-      localStorage.removeItem(key)
-      return
-    }
+  const store = getPlatform().storage
 
-    localStorage.setItem(key, value)
-  } catch {
-    // Ohne Persistenz ist die App weiter benutzbar, nur muss das Token nach
-    // einem Neustart erneut eingegeben werden.
+  if (value === undefined) {
+    store.remove(key)
+    return
   }
+
+  store.set(key, value)
+}
+
+function readSecret(name: string): string | undefined {
+  return getPlatform().keystore.get(name)
+}
+
+function writeSecret(name: string, value: string | undefined): void {
+  const keystore = getPlatform().keystore
+
+  if (value === undefined) {
+    keystore.remove(name)
+    return
+  }
+
+  keystore.set(name, value)
 }
 
 export const storage = {
-  getHubToken: (): string | undefined => read(TOKEN_KEY),
-  setHubToken: (token: string | undefined): void => write(TOKEN_KEY, token),
+  getHubToken: (): string | undefined => readSecret(TOKEN_KEY),
+  setHubToken: (token: string | undefined): void => writeSecret(TOKEN_KEY, token),
+
+  /**
+   * Die Geräte, die dieses Handy selbst kennt, als JSON — ausgewertet in
+   * `deviceSources.ts`. Sie enthalten Zugangsdaten, deshalb der
+   * Schlüsselspeicher.
+   */
+  getDevices: (): string | undefined => readSecret(DEVICES_KEY),
+  setDevices: (json: string | undefined): void => writeSecret(DEVICES_KEY, json),
+
   getLastDevice: (): string | undefined => read(LAST_DEVICE_KEY),
   setLastDevice: (deviceId: string | undefined): void => write(LAST_DEVICE_KEY, deviceId),
 

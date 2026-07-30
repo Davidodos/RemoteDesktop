@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
+import { collectDevices, hubDeviceSource, localDeviceSource } from './lib/deviceSources.ts'
 import { HubClient, HubError } from './lib/hubClient.ts'
 import { InputChannel } from './lib/inputChannel.ts'
 import { storage } from './lib/storage.ts'
@@ -30,24 +31,32 @@ export function App(): React.JSX.Element {
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
 
-  // Geräteliste laden, sobald ein Token vorliegt.
+  // Geräteliste laden, sobald ein Token vorliegt. Der Hub ist dabei nur eine
+  // Quelle unter mehreren — selbst gekoppelte Geräte stehen vor ihm.
   useEffect(() => {
     if (hub === undefined) {
       return
     }
 
-    hub
-      .getDevices()
-      .then(setDevices)
-      .catch((cause: unknown) => {
-        if (cause instanceof HubError && cause.unauthorized) {
+    void collectDevices([localDeviceSource(), hubDeviceSource(hub)]).then(
+      ({ devices: found, failures }) => {
+        setDevices(found)
+
+        const failure = failures[0]
+
+        if (failure === undefined) {
+          return
+        }
+
+        if (failure instanceof HubError && failure.unauthorized) {
           // Token ist falsch oder wurde gewechselt — zurück zur Eingabe.
           storage.setHubToken(undefined)
           setHubToken(undefined)
         }
 
-        setError(cause instanceof Error ? cause.message : String(cause))
-      })
+        setError(failure instanceof Error ? failure.message : String(failure))
+      },
+    )
   }, [hub])
 
   // Eingabe-Socket an das gewählte Gerät binden.

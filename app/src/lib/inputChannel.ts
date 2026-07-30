@@ -1,3 +1,5 @@
+import { directTransport } from '../transport/direct.ts'
+import type { Channel, Transport } from '../transport/index.ts'
 import type { ConnectionState, Device, MouseButton } from './types.ts'
 
 /** Wartezeit vor dem nächsten Verbindungsversuch, wächst bis zum Maximum. */
@@ -13,7 +15,7 @@ const RECONNECT_MAX_MS = 8000
  * Eingabe sichtbar nachhängen.
  */
 export class InputChannel {
-  private socket: WebSocket | undefined
+  private channel: Channel | undefined
   private reconnectTimer: number | undefined
   private reconnectDelay = RECONNECT_BASE_MS
   private closedByUs = false
@@ -27,6 +29,7 @@ export class InputChannel {
     private readonly device: Device,
     private readonly onStateChange: (state: ConnectionState) => void,
     private readonly onError: (message: string) => void,
+    private readonly transport: Transport = directTransport(device),
   ) {}
 
   connect(): void {
@@ -47,7 +50,7 @@ export class InputChannel {
     }
 
     this.reconnectDelay = RECONNECT_BASE_MS
-    this.socket?.close()
+    this.channel?.close()
     this.open()
   }
 
@@ -65,8 +68,8 @@ export class InputChannel {
     }
 
     this.cancelPendingMove()
-    this.socket?.close()
-    this.socket = undefined
+    this.channel?.close()
+    this.channel = undefined
     this.setState('disconnected')
   }
 
@@ -155,36 +158,27 @@ export class InputChannel {
   private open(): void {
     this.setState('connecting')
 
-    // Browser können bei WebSockets keine eigenen Header setzen — deshalb das
-    // Token im Query-String. Die Verbindung ist TLS-verschlüsselt.
-    const url =
-      `wss://${this.device.host}:${this.device.port}/ws/input` +
-      `?token=${encodeURIComponent(this.device.token)}`
+    this.channel = this.transport.inputChannel({
+      onOpen: () => {
+        this.reconnectDelay = RECONNECT_BASE_MS
+        this.setState('connected')
+      },
 
-    const socket = new WebSocket(url)
-    this.socket = socket
+      onText: (data) => this.handleMessage(data),
 
-    socket.addEventListener('open', () => {
-      this.reconnectDelay = RECONNECT_BASE_MS
-      this.setState('connected')
-    })
+      onClose: () => {
+        this.setState('disconnected')
 
-    socket.addEventListener('message', (event) => {
-      this.handleMessage(event.data as string)
-    })
+        if (!this.closedByUs) {
+          this.scheduleReconnect()
+        }
+      },
 
-    socket.addEventListener('close', () => {
-      this.setState('disconnected')
-
-      if (!this.closedByUs) {
-        this.scheduleReconnect()
-      }
-    })
-
-    socket.addEventListener('error', () => {
-      // Details liefert der Browser aus Sicherheitsgründen nicht. Die
-      // häufigste Ursache ist ein abgelaufenes Tailscale-Zertifikat.
-      this.onError(`Eingabe-Verbindung zu ${this.device.name} gestört.`)
+      onError: () => {
+        // Details liefert der Browser aus Sicherheitsgründen nicht. Die
+        // häufigste Ursache ist ein abgelaufenes Tailscale-Zertifikat.
+        this.onError(`Eingabe-Verbindung zu ${this.device.name} gestört.`)
+      },
     })
   }
 
@@ -261,13 +255,10 @@ export class InputChannel {
   private send(payload: Record<string, unknown>): void {
     this.flushPendingMove()
 
-    if (this.socket?.readyState !== WebSocket.OPEN) {
-      // Eingaben nicht puffern: ein Klick, der zehn Sekunden später verspätet
-      // ankommt, trifft auf einen völlig anderen Bildschirminhalt.
-      return
-    }
-
-    this.socket.send(JSON.stringify(payload))
+    // Eingaben nicht puffern: ein Klick, der zehn Sekunden später verspätet
+    // ankommt, trifft auf einen völlig anderen Bildschirminhalt. Genau das tut
+    // der Kanal, wenn er gerade nicht offen ist.
+    this.channel?.send(JSON.stringify(payload))
   }
 
   private setState(state: ConnectionState): void {

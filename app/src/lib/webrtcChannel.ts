@@ -1,3 +1,5 @@
+import { directTransport } from '../transport/direct.ts'
+import type { Transport } from '../transport/index.ts'
 import type { Device, ScreenStats } from './types.ts'
 
 /** Wie lange auf das Sammeln der ICE-Kandidaten gewartet wird. */
@@ -37,8 +39,9 @@ export class WebRtcChannel {
   private encoder: string | undefined
 
   constructor(
-    private readonly device: Device,
+    device: Device,
     private readonly callbacks: WebRtcCallbacks,
+    private readonly transport: Transport = directTransport(device),
   ) {}
 
   get isConnected(): boolean {
@@ -103,23 +106,18 @@ export class WebRtcChannel {
       return false
     }
 
-    const response = await fetch(
-      `https://${this.device.host}:${this.device.port}/api/webrtc/${this.sessionId}/monitor`,
-      {
+    const body = await this.transport
+      .control<{ encoder?: string }>({
+        path: `/api/webrtc/${this.sessionId}/monitor`,
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.device.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ monitor }),
-      },
-    ).catch(() => undefined)
+        body: { monitor },
+      })
+      .catch(() => undefined)
 
-    if (response?.ok !== true) {
+    if (body === undefined) {
       return false
     }
 
-    const body = (await response.json()) as { encoder?: string }
     this.encoder = body.encoder
 
     return true
@@ -134,10 +132,9 @@ export class WebRtcChannel {
     if (this.sessionId !== undefined) {
       // Der Agent räumt seinen ffmpeg-Prozess sonst erst auf, wenn die
       // Verbindung von selbst zerfällt — das dauert.
-      void fetch(
-        `https://${this.device.host}:${this.device.port}/api/webrtc/${this.sessionId}`,
-        { method: 'DELETE', headers: { Authorization: `Bearer ${this.device.token}` } },
-      ).catch(() => undefined)
+      void this.transport
+        .control({ path: `/api/webrtc/${this.sessionId}`, method: 'DELETE' })
+        .catch(() => undefined)
 
       this.sessionId = undefined
     }
@@ -153,23 +150,13 @@ export class WebRtcChannel {
     monitor: number,
     fps: number,
   ): Promise<{ id: string; sdp: string; encoder?: string } | undefined> {
-    const response = await fetch(
-      `https://${this.device.host}:${this.device.port}/api/webrtc/offer`,
-      {
+    return await this.transport
+      .control<{ id: string; sdp: string; encoder?: string }>({
+        path: '/api/webrtc/offer',
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.device.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sdp, monitor, fps }),
-      },
-    ).catch(() => undefined)
-
-    if (response?.ok !== true) {
-      return undefined
-    }
-
-    return (await response.json()) as { id: string; sdp: string; encoder?: string }
+        body: { sdp, monitor, fps },
+      })
+      .catch(() => undefined)
   }
 
   private async waitForConnection(peer: RTCPeerConnection): Promise<boolean> {

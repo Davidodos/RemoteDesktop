@@ -1,17 +1,19 @@
+import { directTransport } from '../transport/direct.ts'
+import { TransportError, type Transport } from '../transport/index.ts'
 import type { AgentInfo, Device, MediaAction, MediaSession, PowerAction } from './types.ts'
 
 /**
- * REST-Zugriff auf den Agent eines Geräts.
+ * Zugriff auf den Agent eines Geräts.
  *
- * Direktverbindung zum Rechner statt über die NAS — deshalb braucht der Agent
- * ein eigenes Tailscale-Zertifikat (siehe agent/README.md).
+ * Worüber die Anfragen laufen, steht hier nicht mehr — das weiß der Transport
+ * (`transport/direct.ts`). Diese Klasse kennt nur noch die Endpunkte des
+ * Agents und die Meldungen, die der Nutzer im Fehlerfall lesen soll.
  */
 export class AgentClient {
-  constructor(private readonly device: Device) {}
-
-  get baseUrl(): string {
-    return `https://${this.device.host}:${this.device.port}`
-  }
+  constructor(
+    private readonly device: Device,
+    private readonly transport: Transport = directTransport(device),
+  ) {}
 
   async getInfo(): Promise<AgentInfo> {
     return this.request<AgentInfo>('/api/info')
@@ -38,48 +40,46 @@ export class AgentClient {
   }
 
   /**
-   * Adresse des Titelbilds. Das Token muss in die URL, weil ein
+   * Adresse des Titelbilds. Die Berechtigung muss in die Adresse, weil ein
    * <code>&lt;img&gt;</code> keine eigenen Header mitschicken kann.
    */
   thumbnailUrl(session: string, revision: string): string {
-    return (
-      `${this.baseUrl}/api/media/thumbnail` +
-      `?session=${encodeURIComponent(session)}&token=${encodeURIComponent(this.device.token)}` +
+    return this.transport.resourceUrl('/api/media/thumbnail', {
+      session,
       // Der Titel hängt mit in der Adresse, damit der Browser beim nächsten
       // Stück nicht das Cover des vorigen aus seinem Zwischenspeicher zeigt.
-      `&v=${encodeURIComponent(revision)}`
-    )
+      v: revision,
+    })
   }
 
   private async request<T>(
     path: string,
-    options: { method?: string; body?: unknown } = {},
+    options: { method?: 'POST'; body?: unknown } = {},
   ): Promise<T> {
     const { method = 'GET', body } = options
 
-    let response: Response
-
     try {
-      response = await fetch(`${this.baseUrl}${path}`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.device.token}`,
-          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      })
+      return await this.transport.control<T>({ path, method, body })
     } catch (cause) {
-      throw new AgentError(
-        `${this.device.name} nicht erreichbar. Läuft der Rechner und ist der Agent gestartet?`,
-        { cause },
-      )
+      throw new AgentError(this.describeFailure(cause), { cause })
+    }
+  }
+
+  /** Aus dem wortkargen Transportfehler wird hier ein lesbarer Satz. */
+  private describeFailure(cause: unknown): string {
+    if (!(cause instanceof TransportError)) {
+      return cause instanceof Error ? cause.message : String(cause)
     }
 
-    if (!response.ok) {
-      throw new AgentError(await describeFailure(response, this.device.name))
+    if (cause.status === undefined) {
+      return `${this.device.name} nicht erreichbar. Läuft der Rechner und ist der Agent gestartet?`
     }
 
-    return (await response.json()) as T
+    if (cause.status === 401) {
+      return `${this.device.name} hat das Token abgelehnt — stimmt es in devices.json?`
+    }
+
+    return cause.serverMessage ?? `${this.device.name} antwortete mit HTTP ${cause.status}.`
   }
 }
 
@@ -88,22 +88,4 @@ export class AgentError extends Error {
     super(message, options)
     this.name = 'AgentError'
   }
-}
-
-async function describeFailure(response: Response, deviceName: string): Promise<string> {
-  if (response.status === 401) {
-    return `${deviceName} hat das Token abgelehnt — stimmt es in devices.json?`
-  }
-
-  try {
-    const body = (await response.json()) as { error?: string }
-
-    if (typeof body.error === 'string') {
-      return body.error
-    }
-  } catch {
-    // Kein JSON — Statuscode genügt.
-  }
-
-  return `${deviceName} antwortete mit HTTP ${response.status}.`
 }

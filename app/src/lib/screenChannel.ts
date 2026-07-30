@@ -1,3 +1,5 @@
+import { directTransport } from '../transport/direct.ts'
+import type { Channel, Transport } from '../transport/index.ts'
 import type { ConnectionState, Device, QualityMode, ScreenMeta, ScreenStats } from './types.ts'
 
 /** Wartezeit vor dem nächsten Verbindungsversuch, wächst bis zum Maximum. */
@@ -37,7 +39,7 @@ interface ScreenCallbacks {
  * darüber CSS.
  */
 export class ScreenChannel {
-  private socket: WebSocket | undefined
+  private channel: Channel | undefined
   private canvas: HTMLCanvasElement | undefined
   private context: CanvasRenderingContext2D | undefined
 
@@ -58,6 +60,7 @@ export class ScreenChannel {
     private readonly device: Device,
     private readonly monitor: number,
     private readonly callbacks: ScreenCallbacks,
+    private readonly transport: Transport = directTransport(device),
   ) {}
 
   connect(): void {
@@ -80,8 +83,8 @@ export class ScreenChannel {
       this.reconnectTimer = undefined
     }
 
-    this.socket?.close()
-    this.socket = undefined
+    this.channel?.close()
+    this.channel = undefined
     this.setState('disconnected')
   }
 
@@ -119,41 +122,34 @@ export class ScreenChannel {
   private open(): void {
     this.setState('connecting')
 
-    const url =
-      `wss://${this.device.host}:${this.device.port}/ws/screen` +
-      `?monitor=${this.monitor}&token=${encodeURIComponent(this.device.token)}`
+    this.channel = this.transport.screenStream(this.monitor, {
+      onOpen: () => {
+        this.reconnectDelay = RECONNECT_BASE_MS
+        this.setState('connected')
+        this.watchForStall()
+      },
 
-    const socket = new WebSocket(url)
-    socket.binaryType = 'arraybuffer'
-    this.socket = socket
+      onText: (data) => {
+        this.lastMessageAt = Date.now()
+        this.handleText(data)
+      },
 
-    socket.addEventListener('open', () => {
-      this.reconnectDelay = RECONNECT_BASE_MS
-      this.setState('connected')
-      this.watchForStall()
-    })
+      onBinary: (data) => {
+        this.lastMessageAt = Date.now()
+        this.handleFrame(data)
+      },
 
-    socket.addEventListener('message', (event) => {
-      this.lastMessageAt = Date.now()
+      onClose: () => {
+        this.setState('disconnected')
 
-      if (typeof event.data === 'string') {
-        this.handleText(event.data)
-        return
-      }
+        if (!this.closedByUs) {
+          this.scheduleReconnect()
+        }
+      },
 
-      this.handleFrame(event.data as ArrayBuffer)
-    })
-
-    socket.addEventListener('close', () => {
-      this.setState('disconnected')
-
-      if (!this.closedByUs) {
-        this.scheduleReconnect()
-      }
-    })
-
-    socket.addEventListener('error', () => {
-      this.callbacks.onError(`Bildverbindung zu ${this.device.name} gestört.`)
+      onError: () => {
+        this.callbacks.onError(`Bildverbindung zu ${this.device.name} gestört.`)
+      },
     })
   }
 
@@ -249,7 +245,7 @@ export class ScreenChannel {
     }
 
     this.reconnectDelay = RECONNECT_BASE_MS
-    this.socket?.close()
+    this.channel?.close()
     this.open()
   }
 
@@ -266,7 +262,7 @@ export class ScreenChannel {
     this.lastMessageAt = Date.now()
 
     this.stallTimer = window.setInterval(() => {
-      if (this.closedByUs || this.socket?.readyState !== WebSocket.OPEN) {
+      if (this.closedByUs || this.channel?.isOpen !== true) {
         return
       }
 
@@ -293,11 +289,7 @@ export class ScreenChannel {
   }
 
   private send(payload: Record<string, unknown>): void {
-    if (this.socket?.readyState !== WebSocket.OPEN) {
-      return
-    }
-
-    this.socket.send(JSON.stringify(payload))
+    this.channel?.send(JSON.stringify(payload))
   }
 
   private setState(state: ConnectionState): void {
