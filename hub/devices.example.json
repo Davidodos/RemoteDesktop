@@ -1,0 +1,25 @@
+{
+  "_hinweis": "Kopieren nach devices.json und ausfüllen. devices.json steht in .gitignore.",
+
+  "hubToken": "HIER-EIN-LANGES-ZUFALLSTOKEN-MINDESTENS-32-ZEICHEN",
+  "broadcastAddress": "192.168.178.255",
+
+  "devices": [
+    {
+      "id": "pc",
+      "name": "PC",
+      "host": "pc.DEIN-TAILNET.ts.net",
+      "port": 8443,
+      "mac": "AA:BB:CC:DD:EE:FF",
+      "token": "DAS-TOKEN-AUS-REMOTEDESKTOP_TOKEN-AUF-DEM-PC"
+    },
+    {
+      "id": "laptop",
+      "name": "Laptop",
+      "host": "laptop.DEIN-TAILNET.ts.net",
+      "port": 8443,
+      "mac": "11:22:33:44:55:66",
+      "token": "DAS-TOKEN-AUS-REMOTEDESKTOP_TOKEN-AUF-DEM-LAPTOP"
+    }
+  ]
+}

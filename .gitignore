@@ -1,0 +1,26 @@
+# Secrets — niemals ins Repo
+.env
+.env.local
+devices.json
+*.crt
+*.key
+*.pfx
+appsettings.Local.json
+appsettings.Production.json
+
+# .NET
+bin/
+obj/
+*.user
+
+# Node
+node_modules/
+dist/
+.vite/
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

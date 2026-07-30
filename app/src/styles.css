@@ -1,0 +1,928 @@
+:root {
+  --bg: #101418;
+  --surface: #1a2027;
+  --surface-raised: #232b34;
+  --border: #2f3945;
+  --text: #e8edf2;
+  --text-dim: #93a1b0;
+  --accent: #4a9eff;
+  --online: #3ddc84;
+  --danger: #ff5c5c;
+  --radius: 12px;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  /* Verhindert, dass die ganze Seite mitwandert, wenn auf dem Touchpad
+     gewischt wird. */
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+}
+
+button:active:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.4;
+}
+
+input[type='text'],
+input[type='password'] {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  width: 100%;
+}
+
+/* ---- Grundgerüst ---- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+
+.header-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.connection {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.connection.connected {
+  color: var(--online);
+}
+
+.connection.disconnected {
+  color: var(--danger);
+}
+
+.app-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+/* Auf der Bildschirmseite gehört jeder Millimeter dem Bild. */
+.app-body.screen {
+  padding: 0.4rem;
+  overflow: hidden;
+}
+
+
+.placeholder {
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 3rem;
+}
+
+/* ---- Seitenleiste ---- */
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgb(0 0 0 / 55%);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: min(17rem, 80vw);
+  height: 100%;
+  padding: 0.75rem 0.6rem calc(0.75rem + env(safe-area-inset-bottom));
+  padding-top: calc(0.75rem + env(safe-area-inset-top));
+  overflow-y: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+/* Das verbundene Gerät steht abgesetzt über allem anderen. */
+.sidebar-device {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.5rem 0.9rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-label {
+  padding: 0.9rem 0.5rem 0.3rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.sidebar-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.5rem;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 8px;
+}
+
+.sidebar-entry.active {
+  background: var(--surface-raised);
+}
+
+/* ---- Anmeldung ---- */
+
+.token-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: center;
+  height: 100%;
+  padding: 2rem 1.5rem;
+}
+
+.token-prompt p {
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.error-text {
+  color: var(--danger) !important;
+}
+
+/* ---- Geräteliste ---- */
+
+.device-list {
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.device-list h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+}
+
+.device-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.device-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  background: var(--surface);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: var(--online);
+}
+
+.device-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.device-state {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.wake-button,
+.refresh-button {
+  background: var(--surface);
+}
+
+/* ---- Touchpad ---- */
+
+.touchpad-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+.touchpad-surface {
+  flex: 1;
+  min-height: 45vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  /* Ohne none fängt der Browser das Wischen als Scrollen ab. */
+  touch-action: none;
+  user-select: none;
+}
+
+.touchpad-hint {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  text-align: center;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.button-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mouse-button,
+.hold-button {
+  flex: 1;
+}
+
+.hold-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ---- Tastatur ---- */
+
+.media-view,
+.power-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.tab-panel {
+  height: 100%;
+}
+
+.keyboard-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* Im eigenen Tab dürfen die Tasten höher sein, über dem Bild zählt jeder Pixel. */
+.keyboard-controls.page {
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.keyboard-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.page-tab {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.page-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Zeigt die gesammelte Kombination oder die festgestellten Modifier. */
+.chord-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+.onscreen-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.kbd-row {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.kbd-key {
+  /* flex-grow kommt aus dem Layout — breite Tasten wie die Leertaste. */
+  flex-basis: 0;
+  min-width: 0;
+  /*
+    Feste Höhe statt Innenabstand: Zeichen wie ⌫, ⇧ oder Bild↑ kommen aus einer
+    Ersatzschrift mit eigener Zeilenhöhe und machten die Seiten sonst
+    unterschiedlich hoch — beim Umschalten sprang das Bild darüber.
+  */
+  height: 2.7rem;
+  padding: 0 0.1rem;
+  line-height: 1;
+  font-size: 0.95rem;
+  border-radius: 8px;
+}
+
+.keyboard-controls.page .kbd-key {
+  height: 3.1rem;
+  font-size: 1.05rem;
+}
+
+.kbd-key.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.key-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.key-group-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+
+/* ---- Medien und Energie ---- */
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.media-button {
+  font-size: 1.5rem;
+  padding: 1.1rem 0.5rem;
+}
+
+.power-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+.power-button.danger,
+button.danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+button.danger:active:not(:disabled) {
+  background: var(--danger);
+  color: var(--text);
+}
+
+/* ---- Dialog und Fehler ---- */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgb(0 0 0 / 70%);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 22rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.dialog p {
+  margin: 0 0 0.75rem;
+}
+
+.dialog-note {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.dialog-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+.dialog-buttons button {
+  flex: 1;
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: color-mix(in srgb, var(--danger) 20%, var(--surface));
+  border-bottom: 1px solid var(--danger);
+  font-size: 0.9rem;
+}
+
+.error-banner span {
+  flex: 1;
+}
+
+.error-banner button {
+  padding: 0.25rem 0.5rem;
+  background: none;
+  border: none;
+}
+
+/* ---- Bildschirm ---- */
+
+.screen-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  height: 100%;
+}
+
+/* Liegt die Tastatur über dem Bild, darf das Bild beliebig klein werden —
+   sonst schöbe es die Bedienleiste aus dem Fenster. */
+.screen-view.compact .screen-stage {
+  min-height: 0;
+}
+
+/* Monitorwahl, Statistik und Einstellungen teilen sich eine schmale Zeile. */
+.screen-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.monitor-select {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 60%;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: inherit;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.stats-chip {
+  margin-left: auto;
+  padding: 0.35rem 0.5rem;
+  background: none;
+  border-color: transparent;
+  color: var(--text-dim);
+  font-family: ui-monospace, monospace;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.icon-button {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.6rem;
+  background: none;
+  border-color: transparent;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.icon-button.active {
+  background: var(--surface-raised);
+  border-color: var(--border);
+}
+
+.stream-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.screen-stage {
+  position: relative;
+  flex: 1;
+  min-height: 40vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* Ohne none zoomt und scrollt der Browser selbst mit. */
+  touch-action: none;
+  user-select: none;
+}
+
+/*
+  Ausschnitt statt Verkleinern: das Bild behält die volle Breite und wird oben
+  und unten abgeschnitten. Ohne das schrumpft es auf einer flachen Bühne — etwa
+  mit offener Tastatur — auf Briefmarkengröße, und man erkennt nichts mehr.
+*/
+.screen-stage.crop .screen-canvas {
+  width: 100%;
+  height: auto;
+  max-height: none;
+}
+
+.screen-canvas {
+  max-width: 100%;
+  max-height: 100%;
+  /* Das Canvas hat Monitorauflösung und wird auf Handybreite verkleinert —
+     ohne Glättung würde Text dabei zu Punktmustern zerfallen. */
+  image-rendering: auto;
+  transform-origin: center;
+}
+
+.screen-overlay {
+  position: absolute;
+  /* Liegt über der Gestenfläche — darf ihr aber keine Berührungen wegnehmen. */
+  pointer-events: none;
+  padding: 0.5rem 1rem;
+  margin: 0;
+  background: rgb(0 0 0 / 70%);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Schmale Leiste mit den vier Overlay-Symbolen. */
+.icon-bar {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.bar-button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  color: var(--text-dim);
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.bar-button.active {
+  color: var(--text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.bar-button.active:disabled {
+  opacity: 0.75;
+}
+
+/*
+  Handy-Tastatur, direkt auf den Rechner geschaltet: eine flache Zeile unter der
+  Symbolreihe. Der Inhalt des Feldes sind unsichtbare Füllzeichen — zu sehen ist
+  nur der Textcursor.
+*/
+.text-sheet {
+  display: flex;
+  align-items: stretch;
+}
+
+.text-field {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 2.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.text-field:focus-within {
+  border-color: var(--accent);
+}
+
+.text-field textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Der Abstand gehört ins Feld selbst, sonst klebt der Textcursor am Rand
+     und sitzt oben statt mittig. */
+  padding: 0.6rem;
+  line-height: 1.2;
+  font: inherit;
+  color: transparent;
+  /* Ohne Hinweistext ist der Cursor die einzige Rückmeldung, dass das Feld
+     bereit ist. */
+  caret-color: var(--accent);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+}
+
+/*
+  Shortcuts: gespeicherte Kombinationen als Knöpfe. Feste Höhe mit Rollbalken —
+  sonst schöbe jeder weitere Shortcut das Bild ein Stück nach oben.
+*/
+.shortcut-sheet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-height: 8.5rem;
+  overflow-y: auto;
+}
+
+.shortcut-button,
+.shortcut-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  align-items: flex-start;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+}
+
+.shortcut-button {
+  flex: 1 1 8rem;
+}
+
+.shortcut-keys {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+
+.shortcuts-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.shortcut-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.shortcut-entry {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+}
+
+/* Medien und Energie liegen als flache Fläche unter dem Bild. */
+.screen-sheet {
+  max-height: 45%;
+  overflow-y: auto;
+}
+
+/* ---- Zeiger-Overlay ---- */
+
+/* Fängt alle Berührungen ab, solange das Zeiger-Overlay läuft. */
+.gesture-pad {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+/*
+  Der Bildstrom enthält den echten Mauszeiger nicht (draw_mouse=0) — diese
+  Marke ist die einzige Rückmeldung darüber, wo ein Klick landet.
+*/
+.pointer-marker {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  /* left/top sind die Zeigerposition, die Marke liegt mittig darüber. */
+  margin: -13px 0 0 -13px;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: rgb(74 158 255 / 18%);
+  /* Dunkler Rand, damit die Marke auch auf hellem Untergrund zu sehen ist. */
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 60%), 0 0 8px rgb(0 0 0 / 50%);
+  pointer-events: none;
+}
+
+.pointer-marker::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Gehaltene Maustaste — sonst sieht man dem Bild nicht an, dass gezogen wird. */
+.pointer-marker.holding {
+  border-color: var(--online);
+  background: rgb(61 220 132 / 22%);
+}
+
+.pointer-marker.holding::after {
+  background: var(--online);
+}
+
+.quality-button {
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.quality-button.active,
+.mouse-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.device-hint {
+  /* Volle Breite, damit der Hinweis unter der Karte steht und nicht neben ihr. */
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.device-hint code {
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.screen-notice {
+  position: absolute;
+  pointer-events: none;
+  bottom: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  background: rgb(0 0 0 / 70%);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* ---- Läuft gerade ---- */
+
+.now-playing {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.6rem;
+  text-align: left;
+  background: var(--surface);
+}
+
+.now-playing.selected {
+  border-color: var(--accent);
+}
+
+.now-playing-cover {
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--surface-raised);
+}
+
+.placeholder-cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+}
+
+.now-playing-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+/* Lange Titel dürfen die Karte nicht auseinanderziehen. */
+.now-playing-title,
+.now-playing-artist,
+.now-playing-app {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.now-playing-title {
+  font-weight: 600;
+}
+
+.now-playing-artist {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.now-playing-app {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.now-playing-empty {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.progress-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  /* Die Leiste rückt im halben Sekundentakt nach; ohne Übergang sähe man
+     jeden einzelnen Sprung. */
+  transition: width 0.5s linear;
+}
+
+.progress-time {
+  flex-shrink: 0;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}

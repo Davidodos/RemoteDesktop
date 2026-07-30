@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover: die App reicht bis in die Notch-Bereiche, die
+         System-Navigationsleiste bleibt aber sichtbar (siehe display im
+         Manifest). user-scalable=no verhindert, dass ein Doppeltipp auf dem
+         Touchpad versehentlich die Seite zoomt.
+         interactive-widget=resizes-content: falls doch einmal eine
+         Handy-Tastatur aufgeht (Token-Eingabe), schrumpft die Seite, statt
+         dass die Tastatur die untere Leiste verdeckt. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="theme-color" content="#101418" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>RemoteDesktop</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
