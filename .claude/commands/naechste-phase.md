@@ -8,16 +8,37 @@ Setze die nächste offene Phase des V2-Umbaus um.
 
 1. Lies `docs/TASKS-V2.md` vollständig. Das ist die Arbeitsanweisung — sie
    enthält Umfang, Abnahmekriterien und die Regeln, die für alle Phasen gelten.
-2. Nimm die **erste Phase, deren Status nicht `erledigt` ist**. Nur diese.
-3. Brauchst du das Warum hinter einer Entscheidung, steht es in
+2. **Prüfe zuerst „Offene Aufräumarbeiten"** ganz oben. Steht dort etwas,
+   erledige es, bevor du eine Phase anfängst, und streiche es aus der Liste.
+   Dieser Kram gehört zu keiner offenen Phase und würde sonst nie drankommen.
+3. Prüfe den Arbeitsbaum: `git status`. Liegt dort unversionierte Arbeit einer
+   abgebrochenen Sitzung, **beurteile sie erst**, statt sie zu überschreiben —
+   siehe „Abgebrochene Vorgänger" unten.
+5. Brauchst du das Warum hinter einer Entscheidung, steht es in
    `docs/PLAN-V2.md`. Lies dort gezielt den genannten Abschnitt, nicht alles.
-4. Arbeite den Umfang ab. Tests zuerst, wo es sinnvoll ist.
-5. Prüfe **jeden** Punkt unter „Abnahme" und zeige die Belege (Testausgabe,
+6. Arbeite den Umfang ab. Tests zuerst, wo es sinnvoll ist.
+7. Prüfe **jeden** Punkt unter „Abnahme" und zeige die Belege (Testausgabe,
    grep-Ergebnis). Nichts abhaken, was du nicht nachgewiesen hast.
-6. Trage in `docs/TASKS-V2.md` ein: Status `erledigt`, Datum, Notizen zu allem,
+8. Trage in `docs/TASKS-V2.md` ein: Status `erledigt`, Datum, Notizen zu allem,
    was abweicht. Punkte, die hier nicht prüfbar sind, kommen als
-   `offen: Hardware` in die Sammelliste am Dokumentende.
-7. Committe die Phase einzeln: `<typ>: <beschreibung>`, kein Push.
+   `offen: Hardware` in die Sammelliste am Dokumentende. Kleinkram, der zu
+   keiner Phase gehört, kommt nach oben unter „Offene Aufräumarbeiten".
+9. Committe die Phase einzeln: `<typ>: <beschreibung>`, kein Push.
+
+## Abgebrochene Vorgänger
+
+Sitzungen können mitten in einer Phase enden. Liegt bei `git status`
+unversionierte Arbeit:
+
+- **Nicht wegwerfen und nicht blind übernehmen.** Erst lesen, dann die
+  Abnahmekriterien der Phase dagegen halten.
+- `git diff -- "*.test.*"` prüfen: wurden **bestehende** Tests verändert? Das
+  ist fast immer ein Fehler des Vorgängers, kein legitimer Schritt.
+- `git diff docs/` prüfen: wurden offene Punkte **gelöscht** statt abgehakt?
+  Das ist schon einmal passiert. Solche Zeilen wiederherstellen.
+- Ist die Arbeit brauchbar, ergänze das Fehlende und schließe die Phase ab.
+  Ist sie es nicht, verwirf sie ausdrücklich und fang neu an — sag im Bericht,
+  was du warum verworfen hast.
 
 ## Grenzen
 

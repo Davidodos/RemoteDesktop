@@ -7,8 +7,18 @@ verlinkten Dateien.
 Begründungen und Alternativen: **`docs/PLAN-V2.md`**. Dieses Dokument sagt nur,
 *was* zu tun ist und *woran* man erkennt, dass es fertig ist.
 
+## Offene Aufräumarbeiten
+
+Kleinkram, der in einer Phase liegengeblieben ist und zu keiner neuen gehört.
+**Zuerst abarbeiten**, bevor eine Phase begonnen wird — sonst fällt er durchs
+Raster, weil die zugehörige Phase schon `erledigt` ist. Erledigtes hier
+löschen, nicht abhaken.
+
+_(nichts offen)_
+
 ## Ablauf je Phase
 
+0. **Aufräumliste oben abarbeiten**, falls dort etwas steht.
 1. **Zustand lesen**: die erste Phase unten, die nicht `erledigt` ist.
 2. **Arbeiten**: nur den Umfang dieser Phase. Kein Vorgriff auf spätere Phasen.
    Fällt unterwegs etwas auf, das nicht dazugehört → unter „Notizen" der Phase
@@ -122,11 +132,8 @@ Kein `rtc.ts`, kein Capacitor, kein WebView2, keine Kopplung. Nur die Schnitte.
 - **Zwischenfall:** Der erste Anlauf wurde unterbrochen und hatte dabei in
   `docs/TASKS.md` fünf offene Hardware-Prüfpunkte aus den Phasen 1–8 gelöscht
   statt sie stehen zu lassen. Zurückgesetzt. Erledigt ist davon nichts.
-- **Kleine offene Aufräumarbeit:** `app/tsconfig.tsbuildinfo` ist ein
-  Build-Artefakt, wurde aber im Ausgangs-Commit mitversioniert. In
-  `.gitignore` steht es jetzt; einmalig fehlt noch
-  `git rm --cached app/tsconfig.tsbuildinfo`. Sonst taucht die Datei in jedem
-  Diff auf.
+- `app/tsconfig.tsbuildinfo` war ein Build-Artefakt im Ausgangs-Commit. Steht
+  jetzt in `.gitignore` und ist ausgetragen.
 
 ---
 
