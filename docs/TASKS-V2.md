@@ -14,6 +14,14 @@ Kleinkram, der in einer Phase liegengeblieben ist und zu keiner neuen gehört.
 Raster, weil die zugehörige Phase schon `erledigt` ist. Erledigtes hier
 löschen, nicht abhaken.
 
+- **`hubClient.ts` benutzt relative Pfade** (`fetch('/api/devices')`). Das
+  stimmt für die PWA, die vom Hub ausgeliefert wird — im WebView2-Fenster ist
+  die Herkunft aber `https://app.remotedesktop.invalid`, und der Aufruf geht ins
+  Leere. Die App meldet dann „Hub nicht erreichbar. Läuft Tailscale?", obwohl
+  beides stimmt. Am 31.07.2026 auf echter Hardware aufgefallen. Phase 9 hat den
+  Transport eingezogen, `hubClient` aber als einzigen Netzzugriff daran vorbei
+  gelassen. Kopplung im Fenster funktioniert, der Hub nicht. Phase 14 macht die
+  Datei ohnehin auf.
 - **Editor für `actions.json` im Windows-Fenster.** Phase 13 hat den
   Schreibweg über das Netz bewusst nicht gebaut — bearbeitet wird die Datei
   heute mit einem Texteditor. Ein Editor im Fenster aus Phase 11 wäre bequemer

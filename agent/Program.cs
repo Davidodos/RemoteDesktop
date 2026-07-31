@@ -24,10 +24,13 @@ builder.Host.UseWindowsService(options => options.ServiceName = "RemoteDesktopAg
 
 var settings = AgentSettings.Load(builder.Configuration);
 
+// Einmal geladen und dann zweifach gebraucht: Kestrel zeigt es vor, und der
+// QR-Code der Kopplung liest den Namen daraus, auf den es lautet.
+var certificate = CertificateLoader.Load(settings.CertificatePath, settings.KeyPath);
+
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
-    kestrel.ListenAnyIP(settings.Port, listen =>
-        listen.UseHttps(CertificateLoader.Load(settings.CertificatePath, settings.KeyPath)));
+    kestrel.ListenAnyIP(settings.Port, listen => listen.UseHttps(certificate));
 });
 
 // Die PWA wird vom Hub auf der NAS ausgeliefert, spricht den Agent aber direkt
@@ -92,7 +95,7 @@ app.UseClientAuth();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapPairingEndpoints(settings.Port);
+app.MapPairingEndpoints(CertificateLoader.DnsName(certificate), settings.Port);
 app.MapActionEndpoints();
 
 // Hostname und Monitor-Layout — die App baut daraus ihre Monitor-Tabs.

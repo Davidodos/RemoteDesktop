@@ -10,12 +10,18 @@ namespace RemoteDesktopAgent.Api;
 /// </summary>
 public static class PairingEndpoints
 {
+    /// <param name="hostName">
+    /// Der volle MagicDNS-Name dieses Rechners, gelesen aus seinem Zertifikat
+    /// (<see cref="Services.CertificateLoader.DnsName"/>). <c>null</c>, wenn das
+    /// Zertifikat keinen führt — dann gibt es keinen QR-Code, und gekoppelt wird
+    /// über den abgetippten Code.
+    /// </param>
     /// <param name="port">
     /// Der Port, auf dem dieser Agent lauscht. Er steht im QR-Code, damit die
     /// Gegenseite ihn nicht raten muss — bei einem abweichenden Port liefe sie
     /// sonst still in die Vorgabe 8443.
     /// </param>
-    public static void MapPairingEndpoints(this WebApplication app, int port)
+    public static void MapPairingEndpoints(this WebApplication app, string? hostName, int port)
     {
         // Nur vom Rechner selbst erreichbar (siehe ClientAuthMiddleware). Ab
         // Phase 11 drückt darauf ein Knopf im Fenster; bis dahin ist es der Weg,
@@ -37,7 +43,12 @@ public static class PairingEndpoints
                 // Derselbe Code, nur als Adresse — daraus macht das Fenster den
                 // QR-Code. Er wird hier erzeugt und nicht dort, weil das Format
                 // damit an einer Stelle steht, die Tests hat.
-                pairingUri = PairingUri.Build(Environment.MachineName, port, code)
+                //
+                // Der Name kommt aus dem Zertifikat und nicht aus
+                // Environment.MachineName: Letzterer ist der Windows-Name und
+                // hat mit dem Tailnet-Namen nichts zu tun. Ein QR mit dem
+                // falschen Namen sieht gültig aus und führt ins Leere.
+                pairingUri = hostName is null ? null : PairingUri.Build(hostName, port, code)
             });
         });
 

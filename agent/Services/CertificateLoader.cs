@@ -38,4 +38,28 @@ public static class CertificateLoader
             password: (string?)null,
             keyStorageFlags: X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet);
     }
+
+    /// <summary>
+    /// Der Name, auf den das Zertifikat lautet — also der volle MagicDNS-Name
+    /// dieses Rechners, etwa <c>pc.tailnet.ts.net</c>.
+    ///
+    /// <para>
+    /// Das Zertifikat ist dafür die einzige verlässliche Quelle.
+    /// <c>Environment.MachineName</c> ist der <i>Windows</i>-Name und hat mit dem
+    /// Tailnet-Namen nichts zu tun — ein Rechner darf „DAVID" heißen und im
+    /// Tailnet trotzdem „pc" sein. Und der kurze Name allein genügt auch nicht:
+    /// bei <c>https://pc:8443</c> passt der vorgezeigte Name nicht zum
+    /// Zertifikat, und der Handshake scheitert.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// <c>null</c>, wenn das Zertifikat keinen Namen führt. Dann gibt es keinen
+    /// QR-Code, aber der abgetippte Code funktioniert weiter.
+    /// </returns>
+    public static string? DnsName(X509Certificate2 certificate)
+    {
+        var name = certificate.GetNameInfo(X509NameType.DnsName, forIssuer: false);
+
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
 }
