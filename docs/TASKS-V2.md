@@ -335,7 +335,7 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 - [x] APK bauen — **erledigt am 31.07.2026 im Container**, nicht am Windows-
       Rechner. `npm run apk` ergibt eine 34-MB-Debug-APK. Geprüft am Ergebnis:
       `minSdkVersion=26`, `targetSdkVersion=36`, `SessionService` mit
-      `foregroundServiceType=0x10` (= `CONNECTED_DEVICE`), alle drei eigenen
+      `foregroundServiceType=0x1` (= `DATA_SYNC`, siehe Notizen), alle drei eigenen
       Klassen im DEX, debug-signiert und damit installierbar
 - [ ] `offen: Hardware` — auf dem Handy gegen die PWA vergleichen: Gesten,
       Tastatur, H.264-Latenz, Verhalten beim Wegwischen
@@ -384,6 +384,23 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 - **Zwei leere Vorlagendateien entfernt:** `ExampleUnitTest.java` und
   `ExampleInstrumentedTest.java` aus `com.getcapacitor.myapp`. Sie kamen aus der
   Vorlage und nennen ein Paket, das es hier nicht gibt.
+- **Nachtrag 31.07.2026: Der Vordergrunddienst ist `dataSync`, nicht
+  `connectedDevice`.** Auf dem Gerät stürzte die App bei jedem Verbindungsversuch
+  ab. Seit Android 14 verlangt jeder Dienst-Typ eine Vorbedingung; für
+  `connectedDevice` ist das eine Erlaubnis aus Bluetooth, NFC,
+  `CHANGE_NETWORK_STATE`, `CHANGE_WIFI_STATE`, UWB oder USB. Die App hält keine
+  davon, `startForeground` warf eine `SecurityException`, und die nahm aus
+  `onStartCommand` heraus den ganzen Prozess mit. Eine dieser Erlaubnisse nur
+  zum Freischalten des Typs zu erklären wäre ein Feigenblatt gewesen —
+  übertragen wird fortlaufend Bild und Eingabe über das Netz, und dafür ist
+  `dataSync` da. Der Umfang von Phase 12 nennt `connectedDevice`; das war unter
+  Android 14 so nicht haltbar.
+- **Nachtrag 31.07.2026: Der Dienst kann die App nicht mehr mitreißen.** Start
+  und Stopp sind jetzt in `SessionService.onStartCommand` und in
+  `SessionServicePlugin` gekapselt; scheitert der Dienst, meldet die App es im
+  Fehlerband und die Sitzung läuft weiter — sie überlebt dann nur das Wegwischen
+  nicht. Das ist der eigentliche Fehler gewesen: eine Bequemlichkeit durfte die
+  ganze App beenden, und zwar reproduzierbar bei jedem Verbindungsversuch.
 - **Nachtrag 31.07.2026: `minSdk` von 24 auf 26 angehoben.** Der erste echte
   Gradle-Lauf brach ab — der QR-Scanner bringt `io.ionic.libs:ionbarcode-android`
   mit, das mindestens 26 verlangt, und der Manifest-Merger lässt das nicht durch.

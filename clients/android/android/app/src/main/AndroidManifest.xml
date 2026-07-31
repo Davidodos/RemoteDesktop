@@ -26,11 +26,19 @@
 
         <!-- Hält die Sitzung offen, während die App im Hintergrund ist. Der Typ
              muss ab Android 14 hier stehen und mit dem übereinstimmen, den der
-             Dienst beim Start meldet, sonst beendet das System ihn sofort. -->
+             Dienst beim Start meldet, sonst beendet das System ihn sofort.
+
+             dataSync und nicht connectedDevice: Letzteres verlangt seit
+             Android 14 zusätzlich eine Erlaubnis aus einer festen Liste
+             (Bluetooth, NFC, CHANGE_NETWORK_STATE, USB …). Keine davon
+             beschreibt, was hier passiert — eine davon nur zum Freischalten des
+             Typs zu erklären wäre ein Feigenblatt. Übertragen wird
+             fortlaufend Bild und Eingabe über das Netz, und genau dafür ist
+             dataSync da. -->
         <service
             android:name=".SessionService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice" />
+            android:foregroundServiceType="dataSync" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -51,7 +59,7 @@
          reicht seit Android 14 nicht mehr allein — der Typ braucht seine eigene
          Erlaubnis. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- QR-Kopplung. Wird erst beim ersten Scan erfragt, nicht beim Start. -->

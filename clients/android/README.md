@@ -93,7 +93,13 @@ dort liest `cap sync` sie und hängt die Gradle-Module ein.
   stören, wäre der ABI-Split der erste Griff.
 - **iOS ist bewusst außen vor** (`docs/PLAN-V2.md`, Abschnitt 1): 99 $/Jahr, kein
   Sideload, alle sieben Tage neu signieren.
-- **Kein Play Store.** Der Typ `connectedDevice` eines Vordergrunddienstes wäre
-  dort begründungspflichtig; beim Sideload ist er es nicht.
+- **Der Vordergrunddienst ist vom Typ `dataSync`.** `connectedDevice` verlangt
+  seit Android 14 zusätzlich eine Erlaubnis aus einer festen Liste (Bluetooth,
+  NFC, `CHANGE_NETWORK_STATE`, USB …); ohne sie wirft `startForeground` und
+  nimmt die App mit. Übertragen wird hier fortlaufend Bild und Eingabe über das
+  Netz — dafür ist `dataSync` gedacht. Ab Android 15 gilt dafür eine Grenze von
+  sechs Stunden pro Tag; für Fernsteuerungs-Sitzungen reicht das.
+- **Kein Play Store.** Ein Vordergrunddienst wäre dort begründungspflichtig;
+  beim Sideload ist er es nicht.
 - **Signiert wird nicht.** Es gibt nur `assembleDebug`; ein Release-Keystore
   gehört zu Phase 14 (Updates über GitHub).

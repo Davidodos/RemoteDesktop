@@ -53,13 +53,28 @@ public class SessionServicePlugin extends Plugin {
     }
 
     private void startService(PluginCall call) {
-        SessionService.start(getContext(), call.getString("device"));
-        call.resolve();
+        try {
+            SessionService.start(getContext(), call.getString("device"));
+            call.resolve();
+        } catch (Exception failure) {
+            // startForegroundService() selbst wirft schon, wenn Android den Start
+            // aus dem Hintergrund verbietet. Die Sitzung ist deshalb nicht
+            // verloren — sie überlebt nur das Wegwischen nicht, und genau das
+            // sagt die App dann im Fehlerband. Ein Absturz wäre die weitaus
+            // schlechtere Antwort auf eine Bequemlichkeit.
+            call.reject("Der Vordergrunddienst ließ sich nicht starten: " + failure.getMessage());
+        }
     }
 
     @PluginMethod
     public void stop(PluginCall call) {
-        SessionService.stop(getContext());
-        call.resolve();
+        try {
+            SessionService.stop(getContext());
+            call.resolve();
+        } catch (Exception failure) {
+            // Beim Beenden ist ohnehin nichts mehr zu retten; die App verwirft
+            // diesen Fehler (siehe App.tsx).
+            call.reject("Der Vordergrunddienst ließ sich nicht beenden: " + failure.getMessage());
+        }
     }
 }

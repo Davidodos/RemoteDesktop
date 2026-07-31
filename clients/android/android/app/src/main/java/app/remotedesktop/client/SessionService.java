@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
+import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
@@ -28,6 +29,7 @@ public class SessionService extends Service {
     /** Name des Rechners, mit dem gerade verbunden ist. */
     public static final String EXTRA_DEVICE = "device";
 
+    private static final String TAG = "SessionService";
     private static final String CHANNEL_ID = "session";
     private static final int NOTIFICATION_ID = 1;
 
@@ -43,13 +45,28 @@ public class SessionService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String device = intent == null ? null : intent.getStringExtra(EXTRA_DEVICE);
 
-        createChannel();
-        ServiceCompat.startForeground(
-            this,
-            NOTIFICATION_ID,
-            buildNotification(device),
-            foregroundType()
-        );
+        try {
+            createChannel();
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(device),
+                foregroundType()
+            );
+        } catch (Exception failure) {
+            // Android verweigert Vordergrunddienste aus Gründen, die sich von
+            // Fassung zu Fassung ändern — fehlende Vorbedingung für den Typ,
+            // Start aus dem Hintergrund, Energiesparmodus. Keiner davon ist ein
+            // Grund, die Sitzung abzubrechen: sie läuft weiter, sie überlebt nur
+            // das Wegwischen nicht.
+            //
+            // Ungefangen nähme diese Ausnahme die ganze App mit, und zwar bei
+            // jedem Verbindungsversuch aufs Neue. Genau das ist am 31.07.2026
+            // passiert.
+            Log.e(TAG, "Vordergrunddienst nicht gestartet.", failure);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
 
         // NOT_STICKY: startet Android den Dienst nach einem Abschuss neu, gibt es
         // keine Sitzung mehr, die er offenhalten könnte. Eine Benachrichtigung
@@ -61,8 +78,11 @@ public class SessionService extends Service {
         // Ab Android 14 muss jeder Vordergrunddienst seinen Typ nennen, sonst
         // beendet das System ihn beim Start mit einer Ausnahme. Darunter gibt es
         // die Typen noch nicht.
+        //
+        // DATA_SYNC muss mit dem Manifest übereinstimmen — siehe die Begründung
+        // dort, warum es nicht CONNECTED_DEVICE ist.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+            return ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
         }
 
         return 0;
@@ -86,7 +106,7 @@ public class SessionService extends Service {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.session_notification_title))
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setContentIntent(tap)
             .setOngoing(true)
             // Ohne LOW klingelt bei jedem Verbindungsaufbau das Telefon.
