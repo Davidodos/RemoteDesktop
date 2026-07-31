@@ -12,6 +12,11 @@ Toolchain im Container: `~/.bashrc` setzt `PATH` auf `~/.dotnet` und
 `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` (libicu fehlt, kein root).
 `cd app && npm test` · `cd agent.Tests && dotnet test`.
 
+Android baut hier ebenfalls — JDK 21 in `~/.jdk`, SDK in `~/android-sdk`
+(seit 31.07.2026). `export JAVA_HOME=~/.jdk/jdk-21.0.12+8 PATH="$JAVA_HOME/bin:$PATH"
+ANDROID_HOME=~/android-sdk`, dann `cd clients/android && npm run apk`.
+Ausführen lässt sich die APK hier nicht — nur bauen und ihren Inhalt prüfen.
+
 ## Aufbau
 
 | Ordner | Stack | Läuft auf |

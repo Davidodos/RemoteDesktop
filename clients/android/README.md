@@ -21,9 +21,6 @@ WebView, und der Videoweg ist derselbe (WebRTC, H.264 über MediaCodec).
 
 ## Bauen
 
-Voraussetzung ist ein Android-SDK samt JDK 21 — im Entwicklungscontainer gibt es
-beides nicht, gebaut wird auf einem Rechner mit Android Studio.
-
 ```bash
 cd clients/android
 npm install
@@ -32,6 +29,37 @@ npm run apk     # ergibt android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 `npm run open` öffnet dasselbe Projekt in Android Studio.
+
+Das geht auch im Entwicklungscontainer — das Android-SDK ist reines Java und
+braucht weder Windows noch ein angeschlossenes Gerät. Nötig sind einmalig:
+
+```bash
+# JDK 21 (AGP 8.13 verlangt mindestens 17)
+mkdir -p ~/.jdk && cd ~/.jdk
+curl -sL -o jdk.tar.gz "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse"
+tar xzf jdk.tar.gz && rm jdk.tar.gz
+
+# Android-Command-line-Tools
+mkdir -p ~/android-sdk/cmdline-tools && cd ~/android-sdk/cmdline-tools
+curl -sL -o clt.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+python3 -c "import zipfile; zipfile.ZipFile('clt.zip').extractall('.')"
+mv cmdline-tools latest && rm clt.zip && chmod +x latest/bin/*
+
+export JAVA_HOME=~/.jdk/jdk-21.0.12+8
+export PATH="$JAVA_HOME/bin:$PATH"
+export ANDROID_HOME=~/android-sdk
+
+yes | sdkmanager --sdk_root=$ANDROID_HOME --licenses
+sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+echo "sdk.dir=$HOME/android-sdk" > android/local.properties
+```
+
+Der erste Lauf dauert rund sechs Minuten, weil Gradle sich selbst und die
+Abhängigkeiten holt; danach sind es Sekunden. `local.properties` steht in
+`.gitignore` — der SDK-Pfad ist rechnerspezifisch.
+
+Was der Container **nicht** kann: die APK ausführen. Für alles, was ein Gerät
+braucht (Gesten, Kamera, Verhalten beim Wegwischen), bleibt es beim Handy.
 
 **`npm run sync` nach jeder Änderung an `app/`.** Die Oberfläche ist kein Teil
 des Gradle-Builds; ohne den Lauf steckt in der APK die vorige Fassung.
@@ -57,6 +85,12 @@ dort liest `cap sync` sie und hängt die Gradle-Module ein.
 
 ## Grenzen
 
+- **`minSdk` ist 26** (Android 8, 2017) und nicht die 24 der Capacitor-Vorlage.
+  Der QR-Scanner bringt `io.ionic.libs:ionbarcode-android` mit, das 26 verlangt;
+  darunter bricht der Manifest-Merger den Build ab.
+- **Die APK ist rund 34 MB.** Den Löwenanteil stellen MLKit-Barcode und CameraX
+  aus dem Scanner-Plugin. Beim Sideload ist das gleichgültig; sollte es je
+  stören, wäre der ABI-Split der erste Griff.
 - **iOS ist bewusst außen vor** (`docs/PLAN-V2.md`, Abschnitt 1): 99 $/Jahr, kein
   Sideload, alle sieben Tage neu signieren.
 - **Kein Play Store.** Der Typ `connectedDevice` eines Vordergrunddienstes wäre

@@ -1,5 +1,9 @@
 ext {
-    minSdkVersion = 24
+    // 26 statt der 24 aus der Capacitor-Vorlage: der QR-Scanner
+    // (io.ionic.libs:ionbarcode-android) verlangt mindestens 26, und der
+    // Manifest-Merger bricht den Build sonst ab. Android 8 ist von 2017 —
+    // Geräte darunter kommen für eine Fernsteuerung ohnehin nicht in Frage.
+    minSdkVersion = 26
     compileSdkVersion = 36
     targetSdkVersion = 36
     androidxActivityVersion = '1.11.0'

@@ -13,7 +13,6 @@ import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
-import androidx.core.content.ContextCompat;
 
 /**
  * Hält die laufende Sitzung am Leben, solange die App im Hintergrund ist.
@@ -96,10 +95,6 @@ public class SessionService extends Service {
     }
 
     private void createChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return;
-        }
-
         NotificationChannel channel = new NotificationChannel(
             CHANNEL_ID,
             getString(R.string.session_channel_name),
@@ -119,9 +114,7 @@ public class SessionService extends Service {
     static void start(Context context, String device) {
         Intent intent = new Intent(context, SessionService.class);
         intent.putExtra(EXTRA_DEVICE, device);
-        // Über ContextCompat, weil startForegroundService erst ab Android 8
-        // existiert und minSdk hier 24 ist.
-        ContextCompat.startForegroundService(context, intent);
+        context.startForegroundService(intent);
     }
 
     static void stop(Context context) {

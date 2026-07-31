@@ -55,9 +55,9 @@ zu beginnen.
 | App-Tests | `cd app && npm test` — Stand 31.07.2026: **249 grün** |
 | Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **254 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
-| Android-Client | `cd clients/android && npx cap sync android` — mehr geht ohne SDK nicht |
+| Android-Client | `cd clients/android && npm run apk` — baut eine echte APK; Toolchain-Einrichtung in `clients/android/README.md` |
 | Typprüfung | `cd app && npx tsc -b` |
-| Nicht vorhanden | Android SDK / Gradle, Windows, echte Hardware |
+| Nicht vorhanden | Windows, echte Hardware. Android-SDK und JDK 21 wurden am 31.07.2026 nach `~/android-sdk` bzw. `~/.jdk` nachinstalliert |
 
 Das .NET-SDK wurde am 30.07.2026 nach `~/.dotnet` nachinstalliert; `~/.bashrc`
 setzt `PATH` und `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1`. Ohne das Zweite
@@ -324,8 +324,13 @@ Widerruf und Rechten. Grundlage für alles Weitere.
       tatsächlich — ohne das `.catch` in `persist()` endet `npm test` mit 1
 - [x] `cd agent.Tests && dotnet test` weiterhin 199 grün (nichts am Agent
       angefasst)
-- [ ] `offen: Hardware` — APK bauen, auf dem Handy gegen die PWA vergleichen:
-      Gesten, Tastatur, H.264-Latenz, Verhalten beim Wegwischen
+- [x] APK bauen — **erledigt am 31.07.2026 im Container**, nicht am Windows-
+      Rechner. `npm run apk` ergibt eine 34-MB-Debug-APK. Geprüft am Ergebnis:
+      `minSdkVersion=26`, `targetSdkVersion=36`, `SessionService` mit
+      `foregroundServiceType=0x10` (= `CONNECTED_DEVICE`), alle drei eigenen
+      Klassen im DEX, debug-signiert und damit installierbar
+- [ ] `offen: Hardware` — auf dem Handy gegen die PWA vergleichen: Gesten,
+      Tastatur, H.264-Latenz, Verhalten beim Wegwischen
 
 ### Notizen
 
@@ -371,6 +376,13 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 - **Zwei leere Vorlagendateien entfernt:** `ExampleUnitTest.java` und
   `ExampleInstrumentedTest.java` aus `com.getcapacitor.myapp`. Sie kamen aus der
   Vorlage und nennen ein Paket, das es hier nicht gibt.
+- **Nachtrag 31.07.2026: `minSdk` von 24 auf 26 angehoben.** Der erste echte
+  Gradle-Lauf brach ab — der QR-Scanner bringt `io.ionic.libs:ionbarcode-android`
+  mit, das mindestens 26 verlangt, und der Manifest-Merger lässt das nicht durch.
+  Das war ohne SDK nicht zu sehen. Android 8 ist von 2017; Geräte darunter kommen
+  für eine Fernsteuerung ohnehin nicht in Frage. Zwei dadurch tot gewordene
+  Zweige in `SessionService.java` sind entfallen (Kanal-Anlage und
+  `ContextCompat.startForegroundService` waren beide nur für < 26 nötig).
 - **Aufgefallen, nicht gebaut (spätere Phasen):** Der Service Worker der PWA
   landet mit in der APK (`sw.js` unter den Assets). Nach einem Update kann er
   kurz die alte Oberfläche ausliefern — dieselbe Sache, die schon in Phase 11
@@ -578,11 +590,11 @@ Was hier nicht prüfbar war und am echten Gerät nachgeholt werden muss:
 - **Phase 11:** Kopplungsfenster gegen den laufenden Agent: Code anzeigen,
   Geräte auflisten, widerrufen. Die Loopback-Beschränkung des Agents lässt sich
   hier nicht nachstellen.
-- **Phase 12:** Die APK bauen (`npm run apk` auf einem Rechner mit Android-SDK)
-  und auf dem Handy gegen die PWA halten: Gesten, Bildschirmtastatur,
-  H.264-Latenz. Ausdrücklich dazu: einmal wegwischen und prüfen, ob die
-  Benachrichtigung stehen bleibt und die Verbindung danach noch lebt — das ist
-  der ganze Grund für den Vordergrunddienst.
+- **Phase 12:** Die gebaute APK auf dem Handy gegen die PWA halten: Gesten,
+  Bildschirmtastatur, H.264-Latenz. Ausdrücklich dazu: einmal wegwischen und
+  prüfen, ob die Benachrichtigung stehen bleibt und die Verbindung danach noch
+  lebt — das ist der ganze Grund für den Vordergrunddienst. (Das *Bauen* ist
+  seit dem 31.07.2026 erledigt, siehe Phase 12.)
 - **Phase 12:** Der QR-Scanner am lebenden Objekt. Er lässt sich erst prüfen,
   wenn der Aufräumpunkt oben erledigt ist und ein Rechner tatsächlich einen Code
   anzeigt. Dazu gehört die Kamera-Erlaubnis beim ersten Scan und der Abbruch
