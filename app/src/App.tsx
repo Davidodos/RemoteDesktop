@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
 import { collectDevices, hubDeviceSource, localDeviceSource } from './lib/deviceSources.ts'
+import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
 import { HubClient, HubError } from './lib/hubClient.ts'
 import { InputChannel } from './lib/inputChannel.ts'
+import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
+import { getPlatform } from './platform/index.ts'
 import { storage } from './lib/storage.ts'
 import type { ConnectionState, Device } from './lib/types.ts'
 import { DeviceListView } from './views/DeviceListView.tsx'
@@ -81,6 +84,76 @@ export function App(): React.JSX.Element {
     [selected],
   )
 
+  /**
+   * Ein Gerät wählen — erst nachfragen, wen man da vor sich hat.
+   *
+   * Die Auskunft kostet eine Anfrage, verhindert aber, dass ein Rechner sich
+   * selbst fernsteuert. Danach wäre er nur noch von außen zu bändigen.
+   */
+  const select = useCallback(async (device: Device): Promise<void> => {
+    const own = getPlatform().machineName
+
+    if (own !== undefined) {
+      try {
+        const info = await new AgentClient(device).getInfo()
+
+        if (isSelfConnection(info.hostname, own)) {
+          setError(selfConnectionMessage(info.hostname))
+          return
+        }
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : String(failure))
+        return
+      }
+    }
+
+    storage.setLastDevice(device.id)
+    setSelected(device)
+  }, [])
+
+  // Echte Tastatur durchreichen, sobald die Umgebung eine hat. Am Handy tut
+  // das niemand — dort bleibt es bei der Bildschirmtastatur.
+  useEffect(() => {
+    const input = inputRef.current
+
+    if (selected === undefined || input === undefined || !getPlatform().capabilities.physicalKeyboard) {
+      return
+    }
+
+    const forward = (event: KeyboardEvent, down: boolean): void => {
+      if (!belongsToRemote(event.target)) {
+        return
+      }
+
+      const key = toAgentKey(event.code)
+
+      if (key === undefined) {
+        return
+      }
+
+      // Sonst löst der Browser seine eigenen Kürzel aus — Strg+W schlösse das
+      // Fenster, statt am Zielrechner einen Tab zu schließen.
+      event.preventDefault()
+
+      if (down) {
+        input.keyDown(key)
+      } else {
+        input.keyUp(key)
+      }
+    }
+
+    const onDown = (event: KeyboardEvent): void => forward(event, true)
+    const onUp = (event: KeyboardEvent): void => forward(event, false)
+
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+    }
+  }, [selected])
+
   if (pairing) {
     return (
       <PairingView
@@ -88,6 +161,14 @@ export function App(): React.JSX.Element {
         onPaired={(all, paired) => {
           setDevices(all)
           setPairing(false)
+
+          // Der Name kommt aus `/api/info` des frisch gekoppelten Agents —
+          // eine zweite Anfrage braucht es hier nicht.
+          if (isSelfConnection(paired.name, getPlatform().machineName)) {
+            setError(selfConnectionMessage(paired.name))
+            return
+          }
+
           storage.setLastDevice(paired.id)
           setSelected(paired)
         }}
@@ -121,10 +202,7 @@ export function App(): React.JSX.Element {
           devices={devices}
           onError={setError}
           onPair={() => setPairing(true)}
-          onSelect={(device) => {
-            storage.setLastDevice(device.id)
-            setSelected(device)
-          }}
+          onSelect={(device) => void select(device)}
         />
       </>
     )
@@ -187,9 +265,7 @@ export function App(): React.JSX.Element {
           current={selected}
           page={page}
           onDevice={(device) => {
-            storage.setLastDevice(device.id)
-            setSelected(device)
-            setPage('screen')
+            void select(device).then(() => setPage('screen'))
           }}
           onPage={setPage}
           onClose={() => setMenuOpen(false)}

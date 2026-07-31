@@ -76,6 +76,11 @@ const webCapabilities: Capabilities = {
   // Die PWA erneuert sich über ihren Service Worker; ein eigener Update-Knopf
   // wäre ein zweiter, widersprüchlicher Weg.
   selfUpdate: false,
+
+  // Am Handy liefert `keydown` keine verlässlichen `code`-Werte, und die
+  // Systemtastatur verdeckt die halbe Oberfläche. Die eigene
+  // Bildschirmtastatur bleibt hier der Weg.
+  physicalKeyboard: false,
 }
 
 const webClipboard: ClipboardAccess = {
@@ -118,6 +123,8 @@ const webQr: QrScanner = {
 
 export const webPlatform: Platform = {
   name: 'web',
+  // Der Browser verrät den Rechnernamen nicht — und soll es auch nicht.
+  machineName: undefined,
   storage: webStore,
   keystore: webKeystore,
   capabilities: webCapabilities,

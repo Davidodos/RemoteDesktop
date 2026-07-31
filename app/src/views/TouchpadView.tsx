@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { InputChannel } from '../lib/inputChannel.ts'
+import { getPlatform } from '../platform/index.ts'
 import type { MouseButton } from '../lib/types.ts'
 
 /** Ab dieser Distanz gilt eine Berührung als Bewegung, nicht als Tippen. */
@@ -26,12 +27,45 @@ interface Props {
  */
 export function TouchpadView({ input }: Props): React.JSX.Element {
   const [held, setHeld] = useState<MouseButton | undefined>(undefined)
+  const [locked, setLocked] = useState(false)
+
+  const surface = useRef<HTMLDivElement | null>(null)
+  const canLock = getPlatform().capabilities.pointerLock
 
   const lastPoint = useRef<{ x: number; y: number } | undefined>(undefined)
   const startPoint = useRef<{ x: number; y: number } | undefined>(undefined)
   const scrollRest = useRef(0)
   const longPressTimer = useRef<number | undefined>(undefined)
   const gestureHandled = useRef(false)
+
+  /**
+   * Am Desktop wird der echte Zeiger eingefangen und seine Bewegung
+   * weitergereicht. Das ist genauer als jede nachgeführte Position — und es
+   * erspart der App, sich zu merken, wo der Zeiger drüben gerade steht.
+   */
+  useEffect(() => {
+    if (!canLock) {
+      return
+    }
+
+    const onChange = (): void => setLocked(document.pointerLockElement === surface.current)
+
+    const onMove = (event: MouseEvent): void => {
+      if (document.pointerLockElement !== surface.current) {
+        return
+      }
+
+      input.moveBy(event.movementX, event.movementY)
+    }
+
+    document.addEventListener('pointerlockchange', onChange)
+    document.addEventListener('mousemove', onMove)
+
+    return () => {
+      document.removeEventListener('pointerlockchange', onChange)
+      document.removeEventListener('mousemove', onMove)
+    }
+  }, [canLock, input])
 
   const cancelLongPress = (): void => {
     if (longPressTimer.current !== undefined) {
@@ -139,14 +173,24 @@ export function TouchpadView({ input }: Props): React.JSX.Element {
   return (
     <div className="touchpad-view">
       <div
+        ref={surface}
         className="touchpad-surface"
         onTouchStart={handleStart}
         onTouchMove={handleMove}
         onTouchEnd={handleEnd}
         onTouchCancel={handleEnd}
+        onClick={() => {
+          if (canLock && !locked) {
+            void surface.current?.requestPointerLock()
+          }
+        }}
       >
         <span className="touchpad-hint">
-          Wischen bewegt · Tippen klickt · Halten = Rechtsklick · zwei Finger scrollen
+          {!canLock
+            ? 'Wischen bewegt · Tippen klickt · Halten = Rechtsklick · zwei Finger scrollen'
+            : locked
+              ? 'Maus eingefangen — Esc gibt sie wieder frei'
+              : 'Klicken fängt die Maus ein'}
         </span>
       </div>
 

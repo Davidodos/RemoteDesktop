@@ -48,6 +48,14 @@ export interface Capabilities {
   backgroundSession: boolean
   /** Die App kann sich selbst aktualisieren. */
   selfUpdate: boolean
+  /**
+   * Es gibt eine echte Tastatur, deren Anschläge die App abgreifen darf.
+   *
+   * Am Handy liefert `keydown` keine brauchbaren `code`-Werte und die
+   * Systemtastatur schiebt sich über die Oberfläche — dort bleibt die eigene
+   * Bildschirmtastatur der einzige Weg. Am Desktop ist es umgekehrt.
+   */
+  physicalKeyboard: boolean
 }
 
 /** Eine bereitstehende neue Fassung der App. */
@@ -75,6 +83,14 @@ export interface QrScanner {
 
 export interface Platform {
   readonly name: 'web' | 'capacitor' | 'webview2'
+  /**
+   * Wie der Rechner heißt, auf dem dieser Client läuft — `undefined`, wenn die
+   * Umgebung das nicht verrät (im Browser tut sie es nie).
+   *
+   * Gebraucht wird das nur für einen Zweck: einen Rechner davon abzuhalten,
+   * sich selbst fernzusteuern. Siehe `lib/selfConnection.ts`.
+   */
+  readonly machineName: string | undefined
   readonly storage: KeyValueStore
   readonly keystore: SecretStore
   readonly capabilities: Capabilities

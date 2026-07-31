@@ -47,8 +47,9 @@ zu beginnen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 31.07.2026: **170 grün** |
+| App-Tests | `cd app && npm test` — Stand 31.07.2026: **205 grün** |
 | Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **199 grün** |
+| Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Typprüfung | `cd app && npx tsc -b` |
 | Nicht vorhanden | Android SDK / Gradle, Windows, echte Hardware |
 
@@ -226,7 +227,7 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 
 ## Phase 11 — Windows-Client
 
-**Status:** offen
+**Status:** erledigt (31.07.2026)
 **Tor:** nein
 **Aufwand:** 4–5 Tage
 
@@ -242,14 +243,49 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 
 ### Abnahme
 
-- [ ] `dotnet build` für `desktop/` läuft durch
-- [ ] `cd app && npm test` grün
-- [ ] Selbstverbindungssperre hat einen Test
+- [x] `dotnet build` für `desktop/` läuft durch — **0 Warnungen, 0 Fehler**
+- [x] `cd app && npm test` grün — **205 statt 170**, kein bestehender Test
+      geändert (`git diff HEAD --stat -- "*.test.*"` leer)
+- [x] Selbstverbindungssperre hat einen Test — `lib/selfConnection.test.ts`,
+      11 Tests: gleicher Name greift, Groß-/Kleinschreibung und
+      Domänen-Suffix egal, ähnlicher Name greift nicht, ohne eigenen
+      Rechnernamen wird nichts gesperrt
 - [ ] `offen: Hardware` — tatsächlicher Start unter Windows, Tray, Pointer Lock
 
 ### Notizen
 
-_(leer)_
+- **`desktop/` referenziert `agent/` nicht**, anders als in `PLAN-V2.md`,
+  Abschnitt 2 skizziert. Der Agent ist `Sdk.Web` mit `RuntimeIdentifier`
+  `win-x64` und `SelfContained`; ein Verweis darauf zöge SIPSorcery, Vortice
+  (Direct3D) und System.Drawing in eine reine Fensterhülle und brächte die
+  RID-Einstellungen durcheinander. Gebraucht wird von dort nichts — die einzige
+  Berührung ist HTTP über die Loopback-Adresse.
+- **Die Oberfläche ist kein Teil des .NET-Builds.** `app/dist` wird per
+  `Content Include` mitkopiert; wer `npm run build` vergisst, bekommt beim
+  Öffnen des Fensters einen Satz statt einer leeren Fläche.
+- **Ausgeliefert wird unter einer erfundenen https-Adresse**
+  (`app.remotedesktop.invalid` per `SetVirtualHostNameToFolderMapping`), nicht
+  über `file://`. Unter `file://` hat Chromium eine eigene, sehr enge Herkunft —
+  localStorage und die Anfragen an den Agent würden dort scheitern.
+- **Die echte Tastatur hängt an `KeyboardEvent.code`, nicht an `key`.** Sonst
+  wäre aus Strg+Alt+Q auf einer deutschen Tastatur ein `@` geworden. Anschläge
+  in Eingabefeldern der App bleiben dort (`belongsToRemote`), sonst ließe sich
+  kein Kopplungscode mehr eintippen.
+- **Kein C#-Testprojekt für `desktop/`.** Das Projekt ist eine WinForms-Hülle;
+  ein Testprojekt, das es referenziert, ließe sich hier nicht *ausführen*, weil
+  zum Laden der Assembly die WinForms-Laufzeit nötig ist. Die Logik, die
+  Prüfung verdient, liegt deshalb in der App und ist dort getestet.
+  `WebAppLocator` und `WebView2Runtime` bleiben ungeprüft — beide sind
+  Pfad- bzw. API-Abfragen, die ohne Windows nichts aussagen.
+- **`MSB3277` ist auf „Meldung" gesetzt.** Das WebView2-Paket bringt neben der
+  WinForms- auch eine WPF-Hülle mit, die eine andere `WindowsBase`-Fassung
+  verlangt. Geladen wird sie nie; ohne die Herabstufung rauscht bei jedem Build
+  ein zwölfzeiliger Warnblock durch.
+- **Aufgefallen, nicht gebaut (spätere Phasen):** Die PWA registriert im
+  Fenster ihren Service Worker. Nach einem Update der Oberfläche kann er kurz
+  die alte Fassung ausliefern — das gehört zu Phase 14 (Updates), nicht hierher.
+  Ebenso: ein eigenes Tray-Symbol statt `SystemIcons.Application`, und die
+  DPAPI als echter Schlüsselspeicher statt localStorage.
 
 ---
 
@@ -401,6 +437,15 @@ Was hier nicht prüfbar war und am echten Gerät nachgeholt werden muss:
   anfordern, ihn im Handy eintippen, danach Bild und Eingabe prüfen. Ebenso:
   dass `/api/pair/code` von einem anderen Gerät im Tailnet tatsächlich 403
   liefert (die Loopback-Erkennung ist hier nicht prüfbar).
+- **Phase 11:** Den Client unter Windows tatsächlich starten: Tray-Symbol,
+  Fenster öffnen und verstecken, Pointer Lock im Touchpad, echte Tastatur, und
+  ob die Meldung bei fehlender WebView2-Runtime wirklich kommt.
+- **Phase 11:** Die Selbstverbindungssperre am lebenden Objekt — den Client auf
+  demselben Rechner starten, auf dem der Agent läuft, und prüfen, dass die
+  Auswahl mit einer Meldung endet statt mit einem Bild im Bild.
+- **Phase 11:** Kopplungsfenster gegen den laufenden Agent: Code anzeigen,
+  Geräte auflisten, widerrufen. Die Loopback-Beschränkung des Agents lässt sich
+  hier nicht nachstellen.
 - **Phase 10:** `agentkey.txt` enthält den privaten Schlüssel im Klartext. Er
   muss unter `C:\ProgramData\RemoteDesktopAgent\` liegen und dieselben ACLs
   bekommen wie `cert.key` (Schritt 3 der `agent/README.md`). Bisher legt der

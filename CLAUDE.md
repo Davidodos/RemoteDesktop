@@ -17,6 +17,7 @@ Toolchain im Container: `~/.bashrc` setzt `PATH` auf `~/.dotnet` und
 | Ordner | Stack | Läuft auf |
 |---|---|---|
 | `agent/` | C# / .NET 8, Windows-Dienst | PC + Laptop, Port 8443 |
+| `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop, zeigt `app/dist` |
 | `hub/` | Node/TS + Express, Docker | NAS, Port 3080 |
 | `app/` | React + Vite, PWA | Handy (Browser/Homescreen) |
 
