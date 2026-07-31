@@ -107,15 +107,21 @@ function toDevice(entry: unknown): Device[] {
     return []
   }
 
-  const { id, name, host, port, token, canWake } = entry as Record<string, unknown>
+  const { id, name, host, port, token, clientId, fingerprint, canWake } = entry as Record<
+    string,
+    unknown
+  >
 
   if (typeof id !== 'string' || id.length === 0 || typeof host !== 'string' || host.length === 0) {
     return []
   }
 
-  // Ohne Token käme die App bis zur ersten Anfrage und stünde dann vor einem
-  // 401, das wie ein Fehler des Agents aussieht.
-  if (typeof token !== 'string' || token.length === 0) {
+  const paired = typeof clientId === 'string' && clientId.length > 0
+  const shared = typeof token === 'string' && token.length > 0
+
+  // Ohne einen der beiden Ausweise käme die App bis zur ersten Anfrage und
+  // stünde dann vor einem 401, das wie ein Fehler des Agents aussieht.
+  if (!paired && !shared) {
     return []
   }
 
@@ -129,8 +135,35 @@ function toDevice(entry: unknown): Device[] {
       name: typeof name === 'string' && name.length > 0 ? name : id,
       host,
       port: port as number,
-      token,
+      ...(shared ? { token: token as string } : {}),
+      ...(paired ? { clientId: clientId as string } : {}),
+      ...(typeof fingerprint === 'string' && fingerprint.length > 0 ? { fingerprint } : {}),
       canWake: canWake === true,
     },
   ]
+}
+
+/**
+ * Nimmt ein frisch gekoppeltes Gerät in die lokale Liste auf.
+ *
+ * Ein zweiter Eintrag für denselben Rechner wird ersetzt, nicht angehängt: die
+ * Kennung ist der Fingerabdruck des Agents, und nach einer erneuten Kopplung
+ * gelten nur noch die neuen Zugangsdaten.
+ */
+export function saveLocalDevice(device: Device): Device[] {
+  const existing = parseDevices(storage.getDevices())
+  const devices = [...existing.filter((entry) => entry.id !== device.id), device]
+
+  storage.setDevices(JSON.stringify(devices))
+
+  return devices
+}
+
+/** Entfernt ein selbst gekoppeltes Gerät aus der lokalen Liste. */
+export function forgetLocalDevice(id: string): Device[] {
+  const devices = parseDevices(storage.getDevices()).filter((entry) => entry.id !== id)
+
+  storage.setDevices(JSON.stringify(devices))
+
+  return devices
 }

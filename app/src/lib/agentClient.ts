@@ -76,7 +76,13 @@ export class AgentClient {
     }
 
     if (cause.status === 401) {
-      return `${this.device.name} hat das Token abgelehnt — stimmt es in devices.json?`
+      return this.device.clientId === undefined
+        ? `${this.device.name} hat das Token abgelehnt — stimmt es in devices.json?`
+        : `${this.device.name} kennt dieses Gerät nicht mehr. Bitte neu koppeln.`
+    }
+
+    if (cause.status === 403) {
+      return cause.serverMessage ?? `${this.device.name} verweigert diese Aktion.`
     }
 
     return cause.serverMessage ?? `${this.device.name} antwortete mit HTTP ${cause.status}.`

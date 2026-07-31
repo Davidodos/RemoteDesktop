@@ -2,6 +2,7 @@ import { getPlatform } from '../platform/index.ts'
 
 const TOKEN_KEY = 'remotedesktop.hubToken'
 const DEVICES_KEY = 'remotedesktop.devices'
+const CLIENT_KEY = 'remotedesktop.clientKey'
 const LAST_DEVICE_KEY = 'remotedesktop.lastDevice'
 const TRANSPORT_KEY = 'remotedesktop.transport'
 const SHORTCUTS_KEY = 'remotedesktop.shortcuts'
@@ -56,6 +57,16 @@ export const storage = {
    */
   getDevices: (): string | undefined => readSecret(DEVICES_KEY),
   setDevices: (json: string | undefined): void => writeSecret(DEVICES_KEY, json),
+
+  /**
+   * Das eigene Schlüsselpaar als JSON — ausgewertet in `pairing.ts`.
+   *
+   * Ein Paar für alle Rechner: gekoppelt wird bei jedem einzeln, aber die
+   * Identität dieses Handys ist überall dieselbe. Geht es verloren, muss neu
+   * gekoppelt werden; das ist der Preis dafür, dass es nirgends hochgeladen wird.
+   */
+  getClientKey: (): string | undefined => readSecret(CLIENT_KEY),
+  setClientKey: (json: string | undefined): void => writeSecret(CLIENT_KEY, json),
 
   getLastDevice: (): string | undefined => read(LAST_DEVICE_KEY),
   setLastDevice: (deviceId: string | undefined): void => write(LAST_DEVICE_KEY, deviceId),

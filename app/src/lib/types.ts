@@ -1,12 +1,26 @@
-/** Ein Gerät, wie der Hub es ausliefert. */
+/**
+ * Ein Gerät, das die App steuern kann — gekoppelt oder aus dem Hub.
+ *
+ * Es gibt genau zwei Arten, sich auszuweisen, und jedes Gerät hat eine davon:
+ * die Kopplung aus Phase 10 (`clientId`, dazu der eigene Schlüssel im
+ * Schlüsselspeicher) oder das alte geteilte `token`. Der alte Weg bleibt bis
+ * Phase 12 — sonst sperrt man sich vom eigenen PC aus.
+ */
 export interface Device {
   id: string
   name: string
   /** MagicDNS-Name des Rechners. */
   host: string
   port: number
-  /** Pre-Shared-Token des Agents — die App verbindet direkt dorthin. */
-  token: string
+  /** Pre-Shared-Token des Agents, solange das Gerät nicht gekoppelt ist. */
+  token?: string
+  /** Kennung, die der Agent bei der Kopplung vergeben hat. */
+  clientId?: string
+  /**
+   * Fingerabdruck des Agent-Schlüssels aus der Kopplung. Bleibt gleich, auch
+   * wenn der Rechner umbenannt wird — daran erkennt die App ihn wieder.
+   */
+  fingerprint?: string
   /** Ob eine MAC hinterlegt ist und der Hub das Gerät wecken kann. */
   canWake: boolean
 }

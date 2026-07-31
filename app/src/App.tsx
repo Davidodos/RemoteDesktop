@@ -8,6 +8,7 @@ import type { ConnectionState, Device } from './lib/types.ts'
 import { DeviceListView } from './views/DeviceListView.tsx'
 import { KeyboardView } from './views/KeyboardView.tsx'
 import { MediaView } from './views/MediaView.tsx'
+import { PairingView } from './views/PairingView.tsx'
 import { PowerView } from './views/PowerView.tsx'
 import { ScreenView } from './views/ScreenView.tsx'
 import { ShortcutsView } from './views/ShortcutsView.tsx'
@@ -19,6 +20,7 @@ export function App(): React.JSX.Element {
   const [hubToken, setHubToken] = useState(storage.getHubToken())
   const [devices, setDevices] = useState<Device[]>([])
   const [selected, setSelected] = useState<Device | undefined>(undefined)
+  const [pairing, setPairing] = useState(false)
   const [page, setPage] = useState<Page>('screen')
   const [menuOpen, setMenuOpen] = useState(false)
   const [connection, setConnection] = useState<ConnectionState>('disconnected')
@@ -31,14 +33,13 @@ export function App(): React.JSX.Element {
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
 
-  // Geräteliste laden, sobald ein Token vorliegt. Der Hub ist dabei nur eine
-  // Quelle unter mehreren — selbst gekoppelte Geräte stehen vor ihm.
+  // Geräteliste laden. Der Hub ist dabei nur eine Quelle unter mehreren und
+  // seit der Kopplung nicht einmal mehr nötig — selbst gekoppelte Geräte stehen
+  // vor ihm und funktionieren auch ohne ihn.
   useEffect(() => {
-    if (hub === undefined) {
-      return
-    }
+    const sources = hub === undefined ? [localDeviceSource()] : [localDeviceSource(), hubDeviceSource(hub)]
 
-    void collectDevices([localDeviceSource(), hubDeviceSource(hub)]).then(
+    void collectDevices(sources).then(
       ({ devices: found, failures }) => {
         setDevices(found)
 
@@ -80,12 +81,35 @@ export function App(): React.JSX.Element {
     [selected],
   )
 
-  if (hubToken === undefined || hub === undefined) {
-    return <TokenPrompt onSubmit={(token) => {
-      storage.setHubToken(token)
-      setHubToken(token)
-      setError(undefined)
-    }} error={error} />
+  if (pairing) {
+    return (
+      <PairingView
+        onCancel={() => setPairing(false)}
+        onPaired={(all, paired) => {
+          setDevices(all)
+          setPairing(false)
+          storage.setLastDevice(paired.id)
+          setSelected(paired)
+        }}
+      />
+    )
+  }
+
+  // Ohne Hub-Token und ohne gekoppeltes Gerät gibt es nichts zu zeigen. Sobald
+  // eines gekoppelt ist, ist der Hub verzichtbar — deshalb hängt der Einstieg
+  // nicht mehr allein am Token.
+  if (hubToken === undefined && devices.length === 0) {
+    return (
+      <TokenPrompt
+        onSubmit={(token) => {
+          storage.setHubToken(token)
+          setHubToken(token)
+          setError(undefined)
+        }}
+        onPair={() => setPairing(true)}
+        error={error}
+      />
+    )
   }
 
   if (selected === undefined) {
@@ -96,6 +120,7 @@ export function App(): React.JSX.Element {
           hub={hub}
           devices={devices}
           onError={setError}
+          onPair={() => setPairing(true)}
           onSelect={(device) => {
             storage.setLastDevice(device.id)
             setSelected(device)
@@ -201,9 +226,11 @@ function ErrorBanner({
 
 function TokenPrompt({
   onSubmit,
+  onPair,
   error,
 }: {
   onSubmit: (token: string) => void
+  onPair: () => void
   error: string | undefined
 }): React.JSX.Element {
   const [value, setValue] = useState('')
@@ -234,6 +261,12 @@ function TokenPrompt({
         spellCheck={false}
       />
       <button type="submit">Anmelden</button>
+
+      {/* Der Weg ohne Hub: direkt am Rechner koppeln. Er löst den oberen ab,
+          sobald alle Geräte gekoppelt sind (Phase 12). */}
+      <button type="button" className="secondary" onClick={onPair}>
+        Gerät koppeln
+      </button>
     </form>
   )
 }

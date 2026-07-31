@@ -100,6 +100,8 @@ describe('webPlatform: was der Browser nicht hergibt', () => {
   })
 
   it('wirft, wenn jemand trotzdem installieren will', async () => {
-    await expect(webPlatform.update.install()).rejects.toBeInstanceOf(PlatformError)
+    await expect(
+      webPlatform.update.install({ version: '2.0.0', url: 'https://example.invalid/app' }),
+    ).rejects.toBeInstanceOf(PlatformError)
   })
 })

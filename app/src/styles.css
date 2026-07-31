@@ -248,7 +248,14 @@ input[type='password'] {
 }
 
 .wake-button,
-.refresh-button {
+.refresh-button,
+.pair-button {
+  background: var(--surface);
+}
+
+/* Der zweite Knopf einer Ansicht — er soll nicht mit dem ersten um die
+   Aufmerksamkeit streiten. */
+.secondary {
   background: var(--surface);
 }
 

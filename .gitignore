@@ -2,6 +2,10 @@
 .env
 .env.local
 devices.json
+# Gekoppelte Clients und der private Schlüssel des Agents. Ersteres enthält
+# zwar nur öffentliche Schlüssel, aber auch die Namen der eigenen Geräte.
+clients.json
+agentkey.txt
 *.crt
 *.key
 *.pfx

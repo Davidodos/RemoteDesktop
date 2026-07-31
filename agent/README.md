@@ -58,8 +58,10 @@ icacls C:\ProgramData\RemoteDesktopAgent\cert.key /grant "${env:USERNAME}:(R)"
 
 ## 4. Token erzeugen
 
-Ein eigenes Token pro Rechner. **Ausgabe notieren** — sie wird später auf der
-NAS gebraucht.
+Seit Phase 10 ist das **freiwillig**: gekoppelte Clients (siehe „Kopplung"
+unten) brauchen es nicht. Solange noch ein Gerät über die NAS-Geräteliste
+angebunden ist, muss es aber gesetzt sein — sonst sperrst du dich von dem
+Rechner aus, an dem du gerade nicht sitzt. **Ausgabe notieren.**
 
 ```powershell
 $token = -join ((1..48) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
@@ -160,15 +162,61 @@ Danach den Agent neu starten, damit er das neue Zertifikat lädt.
 | Klicks landen daneben | Bekannte Baustelle bei Display-Skalierung, bitte melden |
 | Eingaben kommen in einem Programm nicht an | Läuft es als Administrator? Dann braucht der Agent dieselbe Rechtestufe (UIPI) |
 
+## Kopplung
+
+Statt ein Token abzutippen, meldet sich jedes Gerät einmal mit einem eigenen
+Schlüsselpaar an. Der Agent merkt sich nur den öffentlichen Teil in
+`clients.json` — dort steht kein Geheimnis, und ein verlorenes Handy lässt sich
+einzeln widerrufen, ohne die anderen Geräte anzufassen.
+
+Ablauf:
+
+1. **Am Rechner** einen Code anfordern. Er gilt fünf Minuten, lässt sich einmal
+   verwenden und wird nach fünf Fehlversuchen verworfen:
+
+   ```powershell
+   Invoke-RestMethod -Method Post https://localhost:8443/api/pair/code
+   ```
+
+   Der Code steht auch im Log des Agents. `/api/pair/code` und `/api/clients`
+   sind **nur vom Rechner selbst** erreichbar — über das Netz antworten sie mit
+   403. Ab Phase 11 macht das ein Knopf im Tray-Fenster.
+
+2. **Auf dem Handy** in der App „Gerät koppeln" wählen, Rechnernamen und Code
+   eintippen. Fertig — ab dann weist sich die App mit einer Unterschrift aus.
+
+Verwalten (ebenfalls nur lokal):
+
+```powershell
+Invoke-RestMethod https://localhost:8443/api/clients
+Invoke-RestMethod -Method Delete https://localhost:8443/api/clients/<id>
+```
+
+Ein Widerruf wirkt sofort: die laufende Sitzung des Geräts wird mitgeschlossen.
+
+### Rechte
+
+Jeder gekoppelte Client bekommt eine Teilmenge von `screen`, `input`, `media`,
+`power`, `actions`, `wake`. Fehlt eines, antwortet der Agent mit 403 statt die
+Aktion auszuführen. Das alte Sammel-Token kennt diese Trennung nicht und darf
+alles — auch deshalb wird es abgelöst.
+
 ## API
 
-Alles außer `/health` verlangt das Token — als Header
-`Authorization: Bearer <token>` oder bei WebSockets als `?token=<token>`
-(Browser können bei WebSockets keine Header setzen).
+Alles außer `/health` und den Kopplungs-Endpunkten verlangt einen Ausweis — als
+Header `Authorization: Bearer <token>` oder bei WebSockets als `?token=<token>`
+(Browser können bei WebSockets keine Header setzen). Das ist entweder das
+Sitzungstoken aus `/api/session` oder das alte Sammel-Token.
 
 | Endpoint | Zweck |
 |---|---|
 | `GET /health` | Erreichbarkeit, ohne Auth |
+| `POST /api/pair/code` | Kopplungscode anzeigen — **nur lokal** |
+| `POST /api/pair` | Koppeln: `{"code","label","publicKey"}`, ohne Auth |
+| `POST /api/session/challenge` | Challenge holen: `{"clientId"}`, ohne Auth |
+| `POST /api/session` | Anmelden: `{"clientId","nonce","signature"}`, ohne Auth |
+| `GET /api/clients` | Gekoppelte Geräte — **nur lokal** |
+| `DELETE /api/clients/{id}` | Widerrufen — **nur lokal** |
 | `GET /api/info` | Hostname, Monitorliste, virtueller Desktop |
 | `POST /api/power` | `{"action":"sleep\|shutdown\|restart\|lock"}` |
 | `POST /api/media` | `{"action":"playpause\|next\|prev\|stop\|volup\|voldown\|mute","repeat":1}` |

@@ -1,4 +1,11 @@
+import { storage } from '../lib/storage.ts'
 import type { Device } from '../lib/types.ts'
+import {
+  pairedCredentials,
+  staticCredentials,
+  type Credentials,
+  type SessionExchange,
+} from './credentials.ts'
 import {
   TransportError,
   type Channel,
@@ -13,12 +20,30 @@ import {
  * Direktverbindung zum Rechner statt über die NAS — deshalb braucht der Agent
  * ein eigenes Tailscale-Zertifikat (siehe agent/README.md).
  */
-export function directTransport(device: Device): Transport {
-  return new DirectTransport(device)
+export function directTransport(device: Device, credentials = credentialsFor(device)): Transport {
+  return new DirectTransport(device, credentials)
+}
+
+/**
+ * Wählt den Ausweis anhand dessen, was am Gerät hinterlegt ist. Gekoppelt
+ * gewinnt: steht beides da, ist das Token nur ein Überbleibsel aus der Zeit
+ * vor der Kopplung.
+ */
+export function credentialsFor(device: Device): Credentials {
+  const key = readClientKey()
+
+  if (device.clientId !== undefined && key !== undefined) {
+    return pairedCredentials(device.clientId, key, sessionExchange(device))
+  }
+
+  return staticCredentials(device.token ?? '')
 }
 
 class DirectTransport implements Transport {
-  constructor(private readonly device: Device) {}
+  constructor(
+    private readonly device: Device,
+    private readonly credentials: Credentials,
+  ) {}
 
   private get baseUrl(): string {
     return `https://${this.device.host}:${this.device.port}`
@@ -29,6 +54,25 @@ class DirectTransport implements Transport {
   }
 
   async control<T>(request: ControlRequest): Promise<T> {
+    const token = this.credentials.peek() ?? (await this.credentials.obtain())
+
+    try {
+      return await this.send<T>(request, token)
+    } catch (failure) {
+      // Genau ein zweiter Anlauf: nach zwölf Stunden ist die Sitzung abgelaufen,
+      // und das darf der Nutzer nicht als Fehler zu sehen bekommen. Bei einem
+      // dauerhaft abgelehnten Ausweis würde eine Schleife daraus.
+      if (!(failure instanceof TransportError) || failure.status !== 401) {
+        throw failure
+      }
+
+      this.credentials.invalidate()
+
+      return await this.send<T>(request, await this.credentials.obtain())
+    }
+  }
+
+  private async send<T>(request: ControlRequest, token: string): Promise<T> {
     const { path, method = 'GET', body } = request
 
     let response: Response
@@ -37,7 +81,7 @@ class DirectTransport implements Transport {
       response = await fetch(`${this.baseUrl}${path}`, {
         method,
         headers: {
-          Authorization: `Bearer ${this.device.token}`,
+          Authorization: `Bearer ${token}`,
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -56,24 +100,120 @@ class DirectTransport implements Transport {
     return (await readBody(response)) as T
   }
 
+  /**
+   * Ein `<img>` kann nicht warten, bis eine Anmeldung durch ist — die Adresse
+   * muss sofort dastehen. Das geht, weil vor jedem solchen Bild bereits eine
+   * gewöhnliche Anfrage gelaufen ist (die Liste, zu der das Bild gehört) und
+   * das Sitzungstoken damit vorliegt.
+   */
   resourceUrl(path: string, query: Record<string, string> = {}): string {
-    return withToken(this.baseUrl + path, query, this.device.token)
+    return withToken(this.baseUrl + path, query, this.credentials.peek() ?? '')
   }
 
   inputChannel(handlers: ChannelHandlers): Channel {
-    const url = withToken(this.socketUrl + '/ws/input', {}, this.device.token)
-
-    return new SocketChannel(url, handlers, false)
+    return this.openChannel('/ws/input', {}, handlers, false)
   }
 
   screenStream(monitor: number, handlers: ChannelHandlers): Channel {
-    const url = withToken(
-      this.socketUrl + '/ws/screen',
-      { monitor: String(monitor) },
-      this.device.token,
+    return this.openChannel('/ws/screen', { monitor: String(monitor) }, handlers, true)
+  }
+
+  /**
+   * Öffnet sofort, wenn der Ausweis schon vorliegt, und sonst nach der
+   * Anmeldung. Bis dahin ist der Kanal geschlossen und verwirft, was gesendet
+   * wird — dasselbe Verhalten wie in den ersten Millisekunden jeder
+   * WebSocket-Verbindung.
+   */
+  private openChannel(
+    path: string,
+    query: Record<string, string>,
+    handlers: ChannelHandlers,
+    binary: boolean,
+  ): Channel {
+    const channel = new SocketChannel(handlers, binary)
+    const address = (token: string): string => withToken(this.socketUrl + path, query, token)
+    const token = this.credentials.peek()
+
+    if (token !== undefined) {
+      channel.attach(address(token))
+      return channel
+    }
+
+    this.credentials.obtain().then(
+      (fresh) => channel.attach(address(fresh)),
+      () => handlers.onError?.(),
     )
 
-    return new SocketChannel(url, handlers, true)
+    return channel
+  }
+}
+
+/** Die beiden Anmelde-Endpunkte des Agents. Sie brauchen selbst keinen Ausweis. */
+function sessionExchange(device: Device): SessionExchange {
+  const base = `https://${device.host}:${device.port}`
+
+  return {
+    challenge: async (clientId) => {
+      const { nonce } = await postJson<{ nonce: string }>(`${base}/api/session/challenge`, {
+        clientId,
+      })
+
+      return nonce
+    },
+
+    open: async (clientId, nonce, signature) => {
+      const { token } = await postJson<{ token: string }>(`${base}/api/session`, {
+        clientId,
+        nonce,
+        signature,
+      })
+
+      return token
+    },
+  }
+}
+
+/**
+ * Meldet einen gekoppelten Client an einem Agent an, der ihn noch gar nicht
+ * kennt — deshalb ohne Ausweis und ohne den Transport, der ja einen bräuchte.
+ */
+export async function postJson<T>(url: string, body: unknown): Promise<T> {
+  let response: Response
+
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (cause) {
+    throw new TransportError('Verbindung zum Agent nicht zustande gekommen.', { cause })
+  }
+
+  if (!response.ok) {
+    throw new TransportError(`HTTP ${response.status}`, {
+      status: response.status,
+      serverMessage: await readServerError(response),
+    })
+  }
+
+  return (await readBody(response)) as T
+}
+
+/** Das gespeicherte Schlüsselpaar, sofern es eins gibt. */
+function readClientKey(): string | undefined {
+  const raw = storage.getClientKey()
+
+  if (raw === undefined) {
+    return undefined
+  }
+
+  try {
+    const { privateKey } = JSON.parse(raw) as { privateKey?: unknown }
+
+    return typeof privateKey === 'string' && privateKey.length > 0 ? privateKey : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -95,35 +235,51 @@ function withToken(url: string, query: Record<string, string>, token: string): s
 
 /** Hülle um einen WebSocket, die nur das nach außen gibt, was ein Kanal kann. */
 class SocketChannel implements Channel {
-  private readonly socket: WebSocket
+  private socket: WebSocket | undefined
+  private closed = false
 
-  constructor(url: string, handlers: ChannelHandlers, binary: boolean) {
+  constructor(
+    private readonly handlers: ChannelHandlers,
+    private readonly binary: boolean,
+  ) {}
+
+  /** Baut die Verbindung auf, sobald die Adresse samt Ausweis feststeht. */
+  attach(url: string): void {
+    // Wer zwischen Anmeldung und Verbindung schon wieder weggewischt hat, soll
+    // keinen Socket bekommen, der niemand mehr zuhört.
+    if (this.closed) {
+      return
+    }
+
     const socket = new WebSocket(url)
 
-    if (binary) {
+    if (this.binary) {
       socket.binaryType = 'arraybuffer'
     }
 
     this.socket = socket
 
-    socket.addEventListener('open', () => handlers.onOpen?.())
-    socket.addEventListener('close', () => handlers.onClose?.())
-    socket.addEventListener('error', () => handlers.onError?.())
+    socket.addEventListener('open', () => this.handlers.onOpen?.())
+    socket.addEventListener('close', () => this.handlers.onClose?.())
+    socket.addEventListener('error', () => this.handlers.onError?.())
 
     socket.addEventListener('message', (event) => {
       const data: unknown = event.data
 
       if (typeof data === 'string') {
-        handlers.onText?.(data)
+        this.handlers.onText?.(data)
         return
       }
 
-      handlers.onBinary?.(data as ArrayBuffer)
+      this.handlers.onBinary?.(data as ArrayBuffer)
     })
   }
 
   get isOpen(): boolean {
-    return this.socket.readyState === WebSocket.OPEN
+    // Die Prüfung auf den Socket steht ausdrücklich davor: solange die
+    // Anmeldung läuft, gibt es keinen, und ein Vergleich gegen `undefined`
+    // soll nicht zufällig zutreffen können.
+    return this.socket !== undefined && this.socket.readyState === WebSocket.OPEN
   }
 
   send(payload: string): void {
@@ -131,11 +287,12 @@ class SocketChannel implements Channel {
       return
     }
 
-    this.socket.send(payload)
+    this.socket?.send(payload)
   }
 
   close(): void {
-    this.socket.close()
+    this.closed = true
+    this.socket?.close()
   }
 }
 

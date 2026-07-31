@@ -10,17 +10,29 @@ const WAKE_POLL_DURATION_MS = 90_000
 const IDLE_POLL_INTERVAL_MS = 15_000
 
 interface Props {
-  hub: HubClient
+  /** Fehlt, solange nur selbst gekoppelte Geräte da sind. */
+  hub: HubClient | undefined
   devices: Device[]
   onSelect: (device: Device) => void
+  onPair: () => void
   onError: (message: string) => void
 }
 
-export function DeviceListView({ hub, devices, onSelect, onError }: Props): React.JSX.Element {
+export function DeviceListView({
+  hub,
+  devices,
+  onSelect,
+  onPair,
+  onError,
+}: Props): React.JSX.Element {
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
   const [waking, setWaking] = useState<string | undefined>(undefined)
 
   const refresh = useCallback(async (): Promise<void> => {
+    if (hub === undefined) {
+      return
+    }
+
     try {
       setStatuses(await hub.getStatuses())
     } catch (error) {
@@ -37,8 +49,13 @@ export function DeviceListView({ hub, devices, onSelect, onError }: Props): Reac
     return () => window.clearInterval(timer)
   }, [refresh, waking])
 
-  const isOnline = (id: string): boolean =>
-    statuses.find((status) => status.id === id)?.online ?? false
+  /**
+   * `undefined` heißt „nicht nachgesehen": ohne Hub fragt niemand nach dem
+   * Online-Zustand. Ein solches Gerät als offline darzustellen wäre eine
+   * Behauptung — und der Knopf wäre gesperrt, obwohl der Rechner läuft.
+   */
+  const isOnline = (id: string): boolean | undefined =>
+    hub === undefined ? undefined : (statuses.find((status) => status.id === id)?.online ?? false)
 
   /**
    * Kennt der Hub den Namen nicht, liegt es an seiner Namensauflösung und
@@ -49,12 +66,16 @@ export function DeviceListView({ hub, devices, onSelect, onError }: Props): Reac
 
   // Sobald das geweckte Gerät antwortet, zurück auf den ruhigen Takt.
   useEffect(() => {
-    if (waking !== undefined && isOnline(waking)) {
+    if (waking !== undefined && isOnline(waking) === true) {
       setWaking(undefined)
     }
   })
 
   const wake = async (device: Device): Promise<void> => {
+    if (hub === undefined) {
+      return
+    }
+
     try {
       await hub.wake(device.id)
       setWaking(device.id)
@@ -78,19 +99,21 @@ export function DeviceListView({ hub, devices, onSelect, onError }: Props): Reac
             <button
               type="button"
               className="device-main"
-              disabled={!online}
+              disabled={online === false}
               onClick={() => onSelect(device)}
             >
-              <span className={online ? 'status-dot online' : 'status-dot'} />
+              <span className={online === true ? 'status-dot online' : 'status-dot'} />
               <span className="device-name">{device.name}</span>
               <span className="device-state">
-                {online
-                  ? 'online'
-                  : waking === device.id
-                    ? 'startet…'
-                    : hasNameProblem(device.id)
-                      ? 'Name unbekannt'
-                      : 'offline'}
+                {online === undefined
+                  ? 'gekoppelt'
+                  : online
+                    ? 'online'
+                    : waking === device.id
+                      ? 'startet…'
+                      : hasNameProblem(device.id)
+                        ? 'Name unbekannt'
+                        : 'offline'}
               </span>
             </button>
 
@@ -101,7 +124,7 @@ export function DeviceListView({ hub, devices, onSelect, onError }: Props): Reac
               </p>
             )}
 
-            {!online && device.canWake && (
+            {online === false && device.canWake && (
               <button
                 type="button"
                 className="wake-button"
@@ -115,9 +138,15 @@ export function DeviceListView({ hub, devices, onSelect, onError }: Props): Reac
         )
       })}
 
-      <button type="button" className="refresh-button" onClick={() => void refresh()}>
-        Aktualisieren
+      <button type="button" className="pair-button" onClick={onPair}>
+        Gerät koppeln
       </button>
+
+      {hub !== undefined && (
+        <button type="button" className="refresh-button" onClick={() => void refresh()}>
+          Aktualisieren
+        </button>
+      )}
     </div>
   )
 }

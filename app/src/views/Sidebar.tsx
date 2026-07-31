@@ -26,7 +26,9 @@ const PAGES: { id: Page; label: string; icon: IconComponent }[] = [
 ]
 
 interface Props {
-  hub: HubClient
+  /** Fehlt, solange nur selbst gekoppelte Geräte da sind — dann gibt es keinen
+   *  Online-Zustand abzufragen. */
+  hub: HubClient | undefined
   devices: Device[]
   current: Device
   page: Page
@@ -55,7 +57,7 @@ export function Sidebar({
 
   const refresh = useCallback((): void => {
     hub
-      .getStatuses()
+      ?.getStatuses()
       .then(setStatuses)
       // Ein fehlgeschlagener Online-Check ist kein Grund für eine Meldung —
       // die Geräteliste selbst steht ja da.

@@ -1,4 +1,5 @@
 using RemoteDesktopAgent.Api;
+using RemoteDesktopAgent.Auth;
 using RemoteDesktopAgent.Capture.H264;
 using RemoteDesktopAgent.Native;
 using RemoteDesktopAgent.Services;
@@ -41,7 +42,17 @@ builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy => policy
     .AllowAnyHeader()
     .AllowAnyMethod()));
 
-builder.Services.AddSingleton(new TokenAuth(settings.Token));
+// ---- Kopplung und Zugangsprüfung -----------------------------------------
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(AgentIdentity.LoadOrCreate(settings.IdentityPath));
+builder.Services.AddSingleton(new ClientStore(settings.ClientsPath));
+builder.Services.AddSingleton<PairingCodes>();
+builder.Services.AddSingleton<ChallengeStore>();
+builder.Services.AddSingleton<SessionStore>();
+builder.Services.AddSingleton<PairingService>();
+builder.Services.AddSingleton(provider =>
+    new ClientAuth(provider.GetRequiredService<SessionStore>(), settings.Token));
+
 builder.Services.AddSingleton<InputSender>();
 builder.Services.AddSingleton<MonitorEnumerator>();
 builder.Services.AddSingleton<InputExecutor>();
@@ -67,9 +78,11 @@ var app = builder.Build();
 
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 app.UseCors();
-app.UseTokenAuth();
+app.UseClientAuth();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+app.MapPairingEndpoints();
 
 // Hostname und Monitor-Layout — die App baut daraus ihre Monitor-Tabs.
 app.MapGet("/api/info", (InputExecutor executor) =>
@@ -276,6 +289,11 @@ app.MapDelete("/api/webrtc/{id}", async (string id, WebRtcRegistry registry) =>
 app.Logger.LogInformation(
     "RemoteDesktop-Agent lauscht auf Port {Port} als {Host}", settings.Port, Environment.MachineName);
 
+app.Logger.LogInformation(
+    "Gekoppelte Clients: {Count}. Altes Sammel-Token: {Legacy}.",
+    app.Services.GetRequiredService<ClientStore>().List().Count,
+    settings.Token is null ? "abgeschaltet" : "noch gültig");
+
 app.Run();
 
 /// <summary>Verbindungsangebot der App für den H.264-Stream.</summary>
@@ -289,16 +307,26 @@ internal sealed record PowerRequest(string Action);
 internal sealed record MediaRequest(string Action, int? Repeat, string? Session);
 
 /// <summary>Konfiguration des Agents, validiert beim Start statt beim ersten Zugriff.</summary>
+/// <param name="Token">
+/// Das alte geteilte Token. Seit Phase 10 freiwillig: fehlt es, kommt man nur
+/// noch über eine Kopplung herein. Es bleibt bis Phase 12 unterstützt, damit
+/// sich niemand vom eigenen Rechner aussperrt.
+/// </param>
+/// <param name="ClientsPath">Liste der gekoppelten Clients.</param>
+/// <param name="IdentityPath">Privater Schlüssel des Agents selbst.</param>
 internal sealed record AgentSettings(
-    string Token, int Port, string CertificatePath, string KeyPath, string FfmpegPath)
+    string? Token,
+    int Port,
+    string CertificatePath,
+    string KeyPath,
+    string FfmpegPath,
+    string ClientsPath,
+    string IdentityPath)
 {
     public static AgentSettings Load(IConfiguration configuration)
     {
         var token = configuration["Agent:Token"]
-                    ?? Environment.GetEnvironmentVariable("REMOTEDESKTOP_TOKEN")
-                    ?? throw new InvalidOperationException(
-                        "Kein Token konfiguriert. Setze Agent:Token in appsettings.json " +
-                        "oder die Umgebungsvariable REMOTEDESKTOP_TOKEN.");
+                    ?? Environment.GetEnvironmentVariable("REMOTEDESKTOP_TOKEN");
 
         var port = configuration.GetValue("Agent:Port", 8443);
 
@@ -313,6 +341,15 @@ internal sealed record AgentSettings(
         // eben mit dem JPEG-Stream. Deshalb hier kein Abbruch.
         var ffmpegPath = configuration["Agent:FfmpegPath"] ?? "ffmpeg";
 
-        return new AgentSettings(token, port, certificatePath, keyPath, ffmpegPath);
+        // Beide liegen neben der appsettings.json, also im Verzeichnis der .exe.
+        // Ein absoluter Pfad in der Konfiguration schlägt das aus.
+        var clientsPath = Resolve(configuration["Agent:ClientsPath"] ?? "clients.json");
+        var identityPath = Resolve(configuration["Agent:IdentityPath"] ?? "agentkey.txt");
+
+        return new AgentSettings(
+            token, port, certificatePath, keyPath, ffmpegPath, clientsPath, identityPath);
     }
+
+    private static string Resolve(string path) =>
+        Path.IsPathRooted(path) ? path : Path.Combine(AppContext.BaseDirectory, path);
 }

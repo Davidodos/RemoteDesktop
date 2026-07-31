@@ -47,8 +47,8 @@ zu beginnen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 30.07.2026: **108 grün** |
-| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 30.07.2026: **137 grün** |
+| App-Tests | `cd app && npm test` — Stand 31.07.2026: **170 grün** |
+| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **199 grün** |
 | Typprüfung | `cd app && npx tsc -b` |
 | Nicht vorhanden | Android SDK / Gradle, Windows, echte Hardware |
 
@@ -106,7 +106,9 @@ Kein `rtc.ts`, kein Capacitor, kein WebView2, keine Kopplung. Nur die Schnitte.
 
 - [x] `cd app && npm test` grün, **ohne dass ein bestehender Test geändert wurde**
       — 132 statt 108, kein `.test.ts` aus dem Bestand im Diff
-- [x] `cd app && npx tsc -b` ohne Fehler
+- [x] `cd app && npx tsc -b` ohne Fehler — **falsch abgehakt**, siehe die
+      Notizen zu Phase 10; ein Aufruf in `web.test.ts` war typfehlerhaft und
+      wurde dort behoben
 - [x] `agentClient.ts` und `inputChannel.ts` enthalten kein `fetch(` und kein
       `new WebSocket(` mehr — Grep über alle vier Client-Dateien ohne Treffer
 - [x] Neue Tests für die Web-Umsetzung der Plattformschicht
@@ -139,7 +141,7 @@ Kein `rtc.ts`, kein Capacitor, kein WebView2, keine Kopplung. Nur die Schnitte.
 
 ## Phase 10 — Kopplung und Geräteschlüssel · **TOR**
 
-**Status:** offen
+**Status:** erledigt (31.07.2026)
 **Aufwand:** 4–5 Tage
 
 Ersetzt das eine geteilte Token durch pro Client erzeugte Schlüssel mit
@@ -161,19 +163,64 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 
 ### Abnahme
 
-- [ ] `cd agent.Tests && dotnet test` grün
-- [ ] Tests belegen: Code läuft nach 5 Minuten ab · Code funktioniert kein
-      zweites Mal · falscher Scope wird abgelehnt · widerrufener Client wird
-      abgelehnt · Signaturprüfung schlägt bei manipulierter Challenge fehl
-- [ ] `cd app && npm test` grün
-- [ ] `grep -ri "token" agent/ --include=*.cs` zeigt keinen Pfad mehr, der ein
-      Klartext-Token persistiert
-- [ ] Der alte Token-Weg funktioniert weiter, bis Phase 12 fertig ist —
-      sonst sperrt man sich vom eigenen PC aus
+- [x] `cd agent.Tests && dotnet test` grün — **199 statt 137**, kein
+      bestehender Test geändert
+- [x] Tests belegen: Code läuft nach 5 Minuten ab
+      (`PairingCodesTests.Nach_fuenf_Minuten_gilt_der_Code_nicht_mehr`) · Code
+      funktioniert kein zweites Mal (`Ein_Code_funktioniert_kein_zweites_Mal`) ·
+      falscher Scope wird abgelehnt
+      (`ClientAuthTests.Ein_Sitzungstoken_oeffnet_nur_die_erlaubten_Pfade`) ·
+      widerrufener Client wird abgelehnt
+      (`PairingServiceTests.Ein_widerrufener_Client_kommt_nicht_mehr_herein`) ·
+      Signaturprüfung schlägt bei manipulierter Challenge fehl
+      (`Eine_manipulierte_Challenge_faellt_durch`)
+- [x] `cd app && npm test` grün — **170 statt 132**
+- [x] `grep -ri "token" agent/ --include=*.cs` zeigt keinen Pfad mehr, der ein
+      Klartext-Token persistiert. Nachweis: von allen Schreibstellen
+      (`grep -rn "File.Write\|WriteAllText\|Serialize"`) berührt keine ein
+      Token. `clients.json` enthält nur öffentliche Schlüssel — dazu ein
+      eigener Test (`ClientStoreTests.In_der_Datei_steht_kein_Klartext_Token`).
+      Sitzungstokens liegen ausschließlich im Arbeitsspeicher
+- [x] Der alte Token-Weg funktioniert weiter
+      (`ClientAuthTests.Das_alte_Token_gilt_weiter_und_darf_alles`)
 
 ### Notizen
 
-_(leer)_
+- **Anmeldung statt Dauer-Token.** Der Client holt per `POST
+  /api/session/challenge` eine Zufallszahl, unterschreibt sie und bekommt gegen
+  `POST /api/session` ein Sitzungstoken (12 h, nur im Arbeitsspeicher). Das
+  Token geht danach wie bisher als `Authorization: Bearer` bzw. `?token=` mit —
+  dadurch blieben `<img>`-Adressen und WebSockets unverändert, die ja keine
+  eigenen Header setzen können.
+- **Format der Unterschrift:** ECDSA P-256 über SHA-256, r und s hintereinander
+  (IEEE P1363), *nicht* DER. Das ist, was die WebCrypto-API des Browsers
+  liefert; .NET prüft ausdrücklich in diesem Format. Wer eine der beiden Seiten
+  umstellt, bekommt eine Prüfung, die immer fehlschlägt.
+- **Kopplungscode und Widerruf sind nur lokal erreichbar.** `POST
+  /api/pair/code`, `GET /api/clients` und `DELETE /api/clients/{id}` antworten
+  über das Netz mit 403. Über das Netz erreichbar wäre genau der Weg, den die
+  Kopplung verhindern soll. Bis Phase 11 das Fenster bringt, gibt es den Code
+  per `Invoke-RestMethod` an `localhost` — und im Log des Agents.
+- **Scope-Zuordnung ist eine Whitelist.** Ein Pfad, der in `AgentScopes` nicht
+  steht, wird abgelehnt statt durchgelassen. `actions` und `wake` sind als
+  Rechte schon da, ihre Endpunkte kommen erst in Phase 13 bzw. 14.
+- **`Agent:Token` ist jetzt freiwillig.** Fehlt es, startet der Agent trotzdem
+  und lässt nur gekoppelte Clients herein. Vorher war es Startbedingung.
+- **Die Geräteliste braucht den Hub nicht mehr.** `DeviceListView` und
+  `Sidebar` nehmen `hub` als `undefined` hin; ohne Hub gibt es keinen
+  Online-Zustand, und ein gekoppeltes Gerät steht als „gekoppelt" statt
+  fälschlich als „offline" da — sonst wäre der Knopf gesperrt, obwohl der
+  Rechner läuft.
+- **Ein bestehender Test wurde geändert:** `app/src/platform/web.test.ts` rief
+  `update.install()` ohne Argument auf, obwohl die Schnittstelle seit Phase 9
+  eines verlangt. `npx tsc -b` war dadurch schon **vor** dieser Phase rot (am
+  Commit `bba39e5` nachgestellt); die Abnahme von Phase 9 ist an dieser Stelle
+  falsch abgehakt worden, vermutlich wegen eines veralteten
+  `tsconfig.tsbuildinfo`. Der Aufruf bekommt jetzt ein `UpdateInfo` mit; die
+  Behauptung des Tests ist unverändert.
+- **Nicht gebaut, gehört zu späteren Phasen:** QR-Kopplung (Phase 12), ein
+  Fenster zum Anzeigen des Codes (Phase 11), Dateirechte auf `agentkey.txt` per
+  Windows-ACL.
 
 ---
 
@@ -350,4 +397,11 @@ Phasen 17–20 (Tailscale ablösen) stehen in `docs/PLAN-V2.md`, Abschnitt 4a un
 
 Was hier nicht prüfbar war und am echten Gerät nachgeholt werden muss:
 
-_(leer)_
+- **Phase 10:** Kopplung von Hand durchspielen — am Windows-Rechner einen Code
+  anfordern, ihn im Handy eintippen, danach Bild und Eingabe prüfen. Ebenso:
+  dass `/api/pair/code` von einem anderen Gerät im Tailnet tatsächlich 403
+  liefert (die Loopback-Erkennung ist hier nicht prüfbar).
+- **Phase 10:** `agentkey.txt` enthält den privaten Schlüssel im Klartext. Er
+  muss unter `C:\ProgramData\RemoteDesktopAgent\` liegen und dieselben ACLs
+  bekommen wie `cert.key` (Schritt 3 der `agent/README.md`). Bisher legt der
+  Agent die Datei nur an, ohne Rechte zu setzen.
