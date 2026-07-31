@@ -73,9 +73,28 @@ export function App(): React.JSX.Element {
     inputRef.current = channel
     channel.connect()
 
+    // Am Handy hält ein Vordergrunddienst die Sitzung offen, sobald die App in
+    // den Hintergrund geht; im Browser und im Windows-Fenster passiert hier
+    // nichts. Scheitert er, läuft die Sitzung trotzdem — sie stirbt nur beim
+    // Wegwischen, und genau das soll der Nutzer wissen.
+    const platform = getPlatform()
+
+    void platform.session.begin(selected.name).catch((failure: unknown) => {
+      setError(
+        `Die Sitzung bleibt im Hintergrund nicht offen: ${
+          failure instanceof Error ? failure.message : String(failure)
+        }`,
+      )
+    })
+
     return () => {
       channel.disconnect()
       inputRef.current = undefined
+
+      // Beim Beenden gibt es nichts zu melden: die Verbindung ist ohnehin weg,
+      // und ein Dienst, der sich nicht stoppen lässt, verschwindet spätestens
+      // mit der App.
+      void platform.session.end().catch(() => undefined)
     }
   }, [selected])
 

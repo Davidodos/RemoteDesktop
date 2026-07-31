@@ -14,7 +14,12 @@ Kleinkram, der in einer Phase liegengeblieben ist und zu keiner neuen gehört.
 Raster, weil die zugehörige Phase schon `erledigt` ist. Erledigtes hier
 löschen, nicht abhaken.
 
-_(nichts offen)_
+- **Den QR-Code im Windows-Fenster anzeigen.** Phase 12 hat die Leseseite
+  gebaut (`app/src/lib/pairingUri.ts`), aber niemand erzeugt den Code. Bis dahin
+  bleibt am Handy nur das Abtippen. Das Fenster stammt aus Phase 11, deshalb
+  steht es hier und nicht dort: `desktop/` braucht einen QR-Erzeuger (kein
+  NuGet-Paket im Projekt) und muss `buildPairingUri` nachbilden — Format und
+  Prüfungen stehen in `pairingUri.ts` samt Tests.
 
 ## Ablauf je Phase
 
@@ -47,9 +52,10 @@ zu beginnen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 31.07.2026: **205 grün** |
+| App-Tests | `cd app && npm test` — Stand 31.07.2026: **244 grün** |
 | Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **199 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
+| Android-Client | `cd clients/android && npx cap sync android` — mehr geht ohne SDK nicht |
 | Typprüfung | `cd app && npx tsc -b` |
 | Nicht vorhanden | Android SDK / Gradle, Windows, echte Hardware |
 
@@ -291,7 +297,7 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 
 ## Phase 12 — Android-APK
 
-**Status:** offen
+**Status:** erledigt (31.07.2026)
 **Tor:** nein
 **Aufwand:** 3–4 Tage plus Gerätetests
 
@@ -304,14 +310,75 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 
 ### Abnahme
 
-- [ ] `cd app && npm test` grün
-- [ ] Capacitor-Konfiguration vorhanden und in sich stimmig
+- [x] `cd app && npm test` grün — **244 statt 205**, kein bestehender Test
+      geändert (`git diff HEAD --stat -- "*.test.*"` leer). `npx tsc -b --force`
+      ohne Fehler, `npm run build` läuft durch
+- [x] Capacitor-Konfiguration vorhanden und in sich stimmig — `npx cap sync
+      android` findet die drei Plugins und kopiert `app/dist`; `appId`,
+      Java-Paket, `namespace` und `applicationId` lauten alle
+      `app.remotedesktop.client`; die vier Namen in `registerPlugin<…>()` decken
+      sich mit `capacitor.plugins.json` bzw. mit `@CapacitorPlugin(name =
+      "SessionService")`
+- [x] Neue Tests: `platform/capacitor.test.ts` (27) und `lib/pairingUri.test.ts`
+      (12). Der Test „bleibt stumm, wenn das Schreiben scheitert" greift
+      tatsächlich — ohne das `.catch` in `persist()` endet `npm test` mit 1
+- [x] `cd agent.Tests && dotnet test` weiterhin 199 grün (nichts am Agent
+      angefasst)
 - [ ] `offen: Hardware` — APK bauen, auf dem Handy gegen die PWA vergleichen:
       Gesten, Tastatur, H.264-Latenz, Verhalten beim Wegwischen
 
 ### Notizen
 
-_(leer)_
+- **Der Speicher ist synchron, die Brücke nicht.** `KeyValueStore.get()` gibt
+  seit Phase 9 direkt einen Wert zurück, die Preferences antworten mit einer
+  Zusage. Aufgelöst über einen Abzug im Arbeitsspeicher: `main.tsx` liest vor
+  dem ersten Rendern alle Schlüssel ein, danach wird synchron daraus geantwortet
+  und nebenher geschrieben. Die Schnittstelle asynchron zu machen wäre der
+  ehrlichere, aber teurere Weg gewesen — er hätte jede Ansicht angesteckt, die
+  `storage.getDevices()` liest, und dafür bestehende Tests gekostet.
+- **`main.tsx` startet React jetzt erst nach `await`.** Ohne das stünde beim
+  ersten Rendern ein leerer Speicher da und die App fragte nach dem Hub-Token,
+  obwohl Geräte gekoppelt sind.
+- **Die App spricht die Plugins über ihren Namen an, nicht über deren
+  TypeScript-Aufsätze.** `app/` bekommt dadurch nur `@capacitor/core` als
+  Abhängigkeit — und die wird dynamisch geladen, sodass sie im PWA-Bündel als
+  eigener 7,7-kB-Brocken liegt, den der Browser nie holt. Über die Aufsätze wäre
+  der Web-Ersatz des QR-Scanners samt `html5-qrcode` mitgekommen. Preis dafür:
+  die Optionen des Scanners stehen in `SCAN_OPTIONS` ausgeschrieben, weil sonst
+  der JS-Aufsatz sie ergänzt hätte.
+- **Java statt Kotlin für den Dienst.** Kotlin verlangte das Gradle-Plugin und
+  eine Version, die zur AGP-Fassung passt — beides hier nicht kompilierbar und
+  damit nicht prüfbar. Der Vordergrunddienst ist reines Boilerplate; die
+  Vorlage von `cap add android` ist Java. Der Kotlin-Anteil steht in der Abnahme
+  von Phase 15, dort wird die Toolchain mit dem Widget zusammen eingezogen.
+- **Vordergrunddienst-Fehler werden gemeldet, nicht geschluckt.** Startet er
+  nicht, läuft die Sitzung trotzdem — sie stirbt nur beim Wegwischen. Genau das
+  steht dann im Fehlerbanner. Beim Beenden wird der Fehler verworfen: dort ist
+  nichts mehr zu retten.
+- **Der Schlüsselspeicher ist dieselbe Ablage wie der gewöhnliche Speicher.**
+  Android hätte `EncryptedSharedPreferences`, das wäre ein weiteres Plugin und
+  eine zweite Ablage, aus der beim Wechsel des Sperrbildschirms Schlüssel
+  verschwinden können. Die Preferences sind app-privat und ohne Root für andere
+  Apps unlesbar — mehr als der localStorage eines Browsers, weniger als der
+  Keystore. Wenn das nicht reicht, ist es eine eigene Entscheidung, keine
+  Nebensache von Phase 12.
+- **Der QR-Scan füllt nur die Felder aus und koppelt nicht von selbst.** Der
+  Name, unter dem das Handy am Rechner erscheint, steht danach noch zur
+  Änderung, und ein falsch erwischter Code fällt vor dem Absenden auf.
+- **`SessionKeepAlive` steht in `platform/session.ts`,** nicht in `index.ts` —
+  wie `PlatformError` in `errors.ts`, damit die Umsetzungen den Vorgabewert
+  `noSessionKeepAlive` benutzen können, ohne einen Ringschluss zu bauen.
+- **Zwei leere Vorlagendateien entfernt:** `ExampleUnitTest.java` und
+  `ExampleInstrumentedTest.java` aus `com.getcapacitor.myapp`. Sie kamen aus der
+  Vorlage und nennen ein Paket, das es hier nicht gibt.
+- **Aufgefallen, nicht gebaut (spätere Phasen):** Der Service Worker der PWA
+  landet mit in der APK (`sw.js` unter den Assets). Nach einem Update kann er
+  kurz die alte Oberfläche ausliefern — dieselbe Sache, die schon in Phase 11
+  fürs Windows-Fenster notiert ist, und sie gehört zu Phase 14. Ebenso:
+  `selfUpdate` steht auf `false`, bis der `PackageInstaller` da ist, und ohne
+  Release-Keystore gibt es nur `assembleDebug`.
+- **Nicht gebaut, gehört zu keiner Phase:** die Anzeige des QR-Codes im
+  Windows-Fenster. Steht oben unter „Offene Aufräumarbeiten".
 
 ---
 
@@ -446,6 +513,17 @@ Was hier nicht prüfbar war und am echten Gerät nachgeholt werden muss:
 - **Phase 11:** Kopplungsfenster gegen den laufenden Agent: Code anzeigen,
   Geräte auflisten, widerrufen. Die Loopback-Beschränkung des Agents lässt sich
   hier nicht nachstellen.
+- **Phase 12:** Die APK bauen (`npm run apk` auf einem Rechner mit Android-SDK)
+  und auf dem Handy gegen die PWA halten: Gesten, Bildschirmtastatur,
+  H.264-Latenz. Ausdrücklich dazu: einmal wegwischen und prüfen, ob die
+  Benachrichtigung stehen bleibt und die Verbindung danach noch lebt — das ist
+  der ganze Grund für den Vordergrunddienst.
+- **Phase 12:** Der QR-Scanner am lebenden Objekt. Er lässt sich erst prüfen,
+  wenn der Aufräumpunkt oben erledigt ist und ein Rechner tatsächlich einen Code
+  anzeigt. Dazu gehört die Kamera-Erlaubnis beim ersten Scan und der Abbruch
+  über die Zurück-Taste.
+- **Phase 12:** Die Benachrichtigungserlaubnis ab Android 13 — ablehnen und
+  prüfen, dass die Sitzung trotzdem startet, statt an der Rückfrage zu hängen.
 - **Phase 10:** `agentkey.txt` enthält den privaten Schlüssel im Klartext. Er
   muss unter `C:\ProgramData\RemoteDesktopAgent\` liegen und dieselben ACLs
   bekommen wie `cert.key` (Schritt 3 der `agent/README.md`). Bisher legt der

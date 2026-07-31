@@ -9,8 +9,8 @@
  * zwischen `index.ts` und den Umsetzungen ein Ringschluss entsteht.
  */
 export class PlatformError extends Error {
-  constructor(message: string) {
-    super(message)
+  constructor(message: string, options: { cause?: unknown } = {}) {
+    super(message, options)
     this.name = 'PlatformError'
   }
 }

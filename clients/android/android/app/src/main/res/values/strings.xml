@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RemoteDesktop</string>
+    <string name="title_activity_main">RemoteDesktop</string>
+    <string name="package_name">app.remotedesktop.client</string>
+    <string name="custom_url_scheme">app.remotedesktop.client</string>
+
+    <string name="session_channel_name">Laufende Sitzung</string>
+    <string name="session_channel_description">Zeigt an, dass eine Verbindung zu einem Rechner offen ist.</string>
+    <string name="session_notification_title">RemoteDesktop</string>
+    <string name="session_notification_text">Verbunden mit %1$s</string>
+    <string name="session_notification_text_unknown">Verbunden</string>
+</resources>

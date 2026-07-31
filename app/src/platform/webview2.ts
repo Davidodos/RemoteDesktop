@@ -1,4 +1,5 @@
 import { PlatformError } from './errors.ts'
+import { noSessionKeepAlive } from './session.ts'
 import type {
   Capabilities,
   ClipboardAccess,
@@ -150,5 +151,7 @@ export function webview2Platform(host: WebView2Host): Platform {
     update,
     clipboard,
     qr,
+    // Das Fenster wird nicht gedrosselt — es gibt nichts offenzuhalten.
+    session: noSessionKeepAlive,
   }
 }

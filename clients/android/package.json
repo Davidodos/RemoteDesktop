@@ -1,0 +1,23 @@
+{
+  "name": "remotedesktop-android",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Capacitor-Hülle, die die React-App aus app/ als APK ausliefert",
+  "scripts": {
+    "sync": "npm --prefix ../../app run build && cap sync android",
+    "open": "cap open android",
+    "apk": "npm run sync && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.4.2",
+    "@capacitor/barcode-scanner": "^3.1.0",
+    "@capacitor/clipboard": "^8.0.1",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/preferences": "^8.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.2",
+    "typescript": "^5.9.3"
+  }
+}

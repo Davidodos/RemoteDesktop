@@ -1,11 +1,9 @@
 import { useState } from 'react'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
 import { pairWithAgent } from '../lib/pairing.ts'
+import { DEFAULT_AGENT_PORT, parsePairingUri } from '../lib/pairingUri.ts'
 import { getPlatform } from '../platform/index.ts'
 import type { Device } from '../lib/types.ts'
-
-/** Vorgabe, die praktisch nie ein anderer ist (siehe agent/README.md). */
-const DEFAULT_PORT = 8443
 
 interface Props {
   onPaired: (devices: Device[], paired: Device) => void
@@ -14,18 +12,21 @@ interface Props {
 
 /**
  * Ein Gerät koppeln: Rechnernamen und den Code eintippen, den der Rechner
- * anzeigt.
+ * anzeigt — oder den QR-Code scannen, der dasselbe enthält.
  *
- * Der QR-Scanner käme hier hin, sobald es eine Kamera gibt (Phase 12) — bis
- * dahin sagt die Ansicht ausdrücklich, warum sie keinen anbietet, statt einen
- * Knopf zu zeigen, der nur eine Fehlermeldung erzeugt.
+ * Der Scanner erscheint nur dort, wo es eine Kamera gibt (die APK aus Phase 12).
+ * Im Browser und im Windows-Fenster bleibt es beim Abtippen; ein Knopf, der nur
+ * eine Fehlermeldung erzeugt, wäre schlimmer als keiner.
  */
 export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
   const [host, setHost] = useState('')
+  const [port, setPort] = useState(DEFAULT_AGENT_PORT)
   const [code, setCode] = useState('')
   const [label, setLabel] = useState(defaultLabel())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
+
+  const platform = getPlatform()
 
   const submit = async (): Promise<void> => {
     setBusy(true)
@@ -34,7 +35,7 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
     try {
       const device = await pairWithAgent({
         host: host.trim(),
-        port: DEFAULT_PORT,
+        port,
         code: code.trim(),
         label: label.trim(),
       })
@@ -44,6 +45,26 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
       setError(failure instanceof Error ? failure.message : String(failure))
     } finally {
       setBusy(false)
+    }
+  }
+
+  /**
+   * Der Scan füllt nur die Felder aus und koppelt nicht von selbst. Der Name,
+   * unter dem dieses Gerät am Rechner erscheint, steht danach noch zur
+   * Änderung — und wer versehentlich den falschen Code erwischt hat, sieht es,
+   * bevor etwas passiert.
+   */
+  const scan = async (): Promise<void> => {
+    setError(undefined)
+
+    try {
+      const target = parsePairingUri(await platform.qr.scan())
+
+      setHost(target.host)
+      setPort(target.port)
+      setCode(target.code)
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure))
     }
   }
 
@@ -67,6 +88,12 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
       </p>
 
       {error !== undefined && <p className="error-text">{error}</p>}
+
+      {platform.capabilities.camera && (
+        <button type="button" className="secondary" onClick={() => void scan()} disabled={busy}>
+          QR-Code scannen
+        </button>
+      )}
 
       <input
         value={host}

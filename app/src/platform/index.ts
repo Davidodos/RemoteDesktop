@@ -1,4 +1,5 @@
 import { webPlatform } from './web.ts'
+import type { SessionKeepAlive } from './session.ts'
 
 /**
  * Was die App von ihrer Umgebung braucht.
@@ -81,6 +82,7 @@ export interface QrScanner {
   scan(): Promise<string>
 }
 
+
 export interface Platform {
   readonly name: 'web' | 'capacitor' | 'webview2'
   /**
@@ -97,9 +99,11 @@ export interface Platform {
   readonly update: UpdateService
   readonly clipboard: ClipboardAccess
   readonly qr: QrScanner
+  readonly session: SessionKeepAlive
 }
 
 export { PlatformError } from './errors.ts'
+export { noSessionKeepAlive, type SessionKeepAlive } from './session.ts'
 
 let current: Platform = webPlatform
 

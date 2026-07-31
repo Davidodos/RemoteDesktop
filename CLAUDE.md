@@ -20,6 +20,7 @@ Toolchain im Container: `~/.bashrc` setzt `PATH` auf `~/.dotnet` und
 | `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop, zeigt `app/dist` |
 | `hub/` | Node/TS + Express, Docker | NAS, Port 3080 |
 | `app/` | React + Vite, PWA | Handy (Browser/Homescreen) |
+| `clients/android/` | Capacitor + Java, APK | Handy, zeigt `app/dist` |
 
 ## Konventionen
 
