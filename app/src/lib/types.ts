@@ -106,3 +106,23 @@ export interface MediaSession {
   /** Wie alt die Positionsangabe beim Abrufen schon war. */
   positionAgeSeconds: number
 }
+
+/**
+ * Eine Aktion, die der Zielrechner anbietet — so, wie `GET /api/actions` sie
+ * meldet.
+ *
+ * Was dahintersteckt, steht ausschließlich in der `actions.json` auf jenem
+ * Rechner. Hier ist absichtlich weder ein Pfad noch ein Argument dabei: wer
+ * einen Knopf bauen will, braucht das nicht, und wer die Liste abfragen darf,
+ * muss nicht auch erfahren, welche Software dort liegt und wo.
+ */
+export interface AgentActionSummary {
+  id: string
+  label: string
+  /** Name eines Symbols, oder `undefined` für die Vorgabe. */
+  icon?: string
+  /** `process`, `script`, `keys`, `url` oder `sequence`. */
+  type: string
+  /** Verlangt eine Rückfrage, bevor ausgelöst wird. */
+  confirm: boolean
+}

@@ -1,3 +1,4 @@
+using RemoteDesktopAgent.Actions;
 using RemoteDesktopAgent.Api;
 using RemoteDesktopAgent.Auth;
 using RemoteDesktopAgent.Capture.H264;
@@ -53,6 +54,15 @@ builder.Services.AddSingleton<PairingService>();
 builder.Services.AddSingleton(provider =>
     new ClientAuth(provider.GetRequiredService<SessionStore>(), settings.Token));
 
+// Die Aktionen werden hier und nicht erst beim Auslösen geprüft: ein
+// Tippfehler im Pfad soll auffallen, solange jemand am Rechner sitzt. Wirft
+// Load(), startet der Agent gar nicht erst — mit einer Meldung, die sagt,
+// welcher Eintrag falsch ist.
+builder.Services.AddSingleton(ActionCatalog.Load(settings.ActionsPath));
+builder.Services.AddSingleton<IActionHost, WindowsActionHost>();
+builder.Services.AddSingleton(provider =>
+    new ActionRunner(provider.GetRequiredService<IActionHost>()));
+
 builder.Services.AddSingleton<InputSender>();
 builder.Services.AddSingleton<MonitorEnumerator>();
 builder.Services.AddSingleton<InputExecutor>();
@@ -83,6 +93,7 @@ app.UseClientAuth();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapPairingEndpoints(settings.Port);
+app.MapActionEndpoints();
 
 // Hostname und Monitor-Layout — die App baut daraus ihre Monitor-Tabs.
 app.MapGet("/api/info", (InputExecutor executor) =>
@@ -314,6 +325,10 @@ internal sealed record MediaRequest(string Action, int? Repeat, string? Session)
 /// </param>
 /// <param name="ClientsPath">Liste der gekoppelten Clients.</param>
 /// <param name="IdentityPath">Privater Schlüssel des Agents selbst.</param>
+/// <param name="ActionsPath">
+/// Was dieser Rechner auf Zuruf tun darf. Fehlt die Datei, gibt es eben keine
+/// Aktionen — das ist der Normalfall auf einem frisch eingerichteten Rechner.
+/// </param>
 internal sealed record AgentSettings(
     string? Token,
     int Port,
@@ -321,7 +336,8 @@ internal sealed record AgentSettings(
     string KeyPath,
     string FfmpegPath,
     string ClientsPath,
-    string IdentityPath)
+    string IdentityPath,
+    string ActionsPath)
 {
     public static AgentSettings Load(IConfiguration configuration)
     {
@@ -345,9 +361,11 @@ internal sealed record AgentSettings(
         // Ein absoluter Pfad in der Konfiguration schlägt das aus.
         var clientsPath = Resolve(configuration["Agent:ClientsPath"] ?? "clients.json");
         var identityPath = Resolve(configuration["Agent:IdentityPath"] ?? "agentkey.txt");
+        var actionsPath = Resolve(configuration["Agent:ActionsPath"] ?? "actions.json");
 
         return new AgentSettings(
-            token, port, certificatePath, keyPath, ffmpegPath, clientsPath, identityPath);
+            token, port, certificatePath, keyPath, ffmpegPath, clientsPath, identityPath,
+            actionsPath);
     }
 
     private static string Resolve(string path) =>

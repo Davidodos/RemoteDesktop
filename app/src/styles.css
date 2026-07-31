@@ -933,3 +933,45 @@ button.danger:active:not(:disabled) {
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
 }
+
+/* Aktionen des Zielrechners (Phase 13). Bewusst dieselbe Optik wie die
+   lokalen Shortcuts — für den Daumen ist es derselbe Knopf, der Unterschied
+   liegt darin, wo er herkommt. */
+.actions {
+  padding: 1rem;
+}
+
+.action-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.action-list button {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.action-type {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+/* Die Rückfrage liegt über der Liste und nicht daneben: sie soll den Daumen
+   aufhalten, der gerade danebengegriffen hat. */
+.action-confirm {
+  position: fixed;
+  inset: auto 1rem 1rem 1rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: #1b2028;
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.5);
+  display: grid;
+  gap: 0.6rem;
+}

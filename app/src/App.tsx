@@ -14,6 +14,7 @@ import { MediaView } from './views/MediaView.tsx'
 import { PairingView } from './views/PairingView.tsx'
 import { PowerView } from './views/PowerView.tsx'
 import { ScreenView } from './views/ScreenView.tsx'
+import { ActionsView } from './views/ActionsView.tsx'
 import { ShortcutsView } from './views/ShortcutsView.tsx'
 import { Sidebar, type Page } from './views/Sidebar.tsx'
 import { TouchpadView } from './views/TouchpadView.tsx'
@@ -272,6 +273,8 @@ export function App(): React.JSX.Element {
           <MediaView agent={agent} deviceName={selected.name} onError={setError} />
         ) : page === 'power' ? (
           <PowerView agent={agent} deviceName={selected.name} onError={setError} />
+        ) : page === 'actions' ? (
+          <ActionsView agent={agent} deviceName={selected.name} onError={setError} />
         ) : page === 'shortcuts' ? (
           <ShortcutsView />
         ) : null}

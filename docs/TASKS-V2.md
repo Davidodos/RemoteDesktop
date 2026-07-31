@@ -14,7 +14,12 @@ Kleinkram, der in einer Phase liegengeblieben ist und zu keiner neuen gehört.
 Raster, weil die zugehörige Phase schon `erledigt` ist. Erledigtes hier
 löschen, nicht abhaken.
 
-_(nichts offen)_
+- **Editor für `actions.json` im Windows-Fenster.** Phase 13 hat den
+  Schreibweg über das Netz bewusst nicht gebaut — bearbeitet wird die Datei
+  heute mit einem Texteditor. Ein Editor im Fenster aus Phase 11 wäre bequemer
+  und bliebe lokal. Dazu gehört die Frage, ob der Agent die Datei danach neu
+  einliest oder ob ein Neustart bleibt (heute: Neustart, weil die Prüfung sonst
+  auf einen Zeitpunkt rutscht, an dem niemand hinsieht).
 
 ## Ablauf je Phase
 
@@ -47,8 +52,8 @@ zu beginnen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 31.07.2026: **244 grün** |
-| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **212 grün** |
+| App-Tests | `cd app && npm test` — Stand 31.07.2026: **249 grün** |
+| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **254 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Android-Client | `cd clients/android && npx cap sync android` — mehr geht ohne SDK nicht |
 | Typprüfung | `cd app && npx tsc -b` |
@@ -379,7 +384,7 @@ Widerruf und Rechten. Grundlage für alles Weitere.
 
 ## Phase 13 — Aktionen am Agent · **TOR**
 
-**Status:** offen
+**Status:** erledigt (31.07.2026)
 **Aufwand:** 4 Tage
 
 **Die eine Regel: deklariert wird am Agent, aufgerufen wird per ID.** Der Client
@@ -398,16 +403,81 @@ schickt nie eine Kommandozeile. Details in `docs/PLAN-V2.md`, Abschnitt 5.
 
 ### Abnahme
 
-- [ ] `cd agent.Tests && dotnet test` grün
-- [ ] Tests belegen: `args` wird als Array übergeben, **nie** über eine Shell ·
+- [x] `cd agent.Tests && dotnet test` grün — **254 statt 212**, kein bestehender
+      Test geändert. `cd app && npm test` **249 statt 244**, `npx tsc -b` sauber
+- [x] Tests belegen: `args` wird als Array übergeben, **nie** über eine Shell ·
       `script` startet nur hinterlegte Dateien · unbekannte ID → 404, nicht 500 ·
-      Sequenzen halten ihre Verzögerungen ein
-- [ ] `grep -rn "UseShellExecute = true" agent/` findet nichts
-- [ ] Kein Endpoint, der `actions.json` über das Netz beschreibt
+      Sequenzen halten ihre Verzögerungen ein — `ActionCatalogTests` (24),
+      `ActionRunnerTests` (13), `ActionEndpointTests` (5). Der Test „Argumente
+      gehen einzeln hinaus" prüft ausdrücklich, dass
+      `ProcessStartInfo.Arguments` **leer** bleibt und `& calc.exe` als *ein*
+      Argument ankommt statt als zweiter Befehl
+- [x] `grep -rn "UseShellExecute = true" agent/` findet nichts — Rückgabewert 1.
+      Alle fünf Fundstellen von `UseShellExecute` stehen auf `false`, die sechste
+      ist der Kommentar in `ActionRunner.cs`, der erklärt warum
+- [x] Kein Endpoint, der `actions.json` über das Netz beschreibt — in
+      `ActionEndpoints.cs` gibt es genau ein `MapPost`, und das endet auf
+      `/invoke`. `grep -rn "WriteAllText\|File.Create\|OpenWrite" agent/` trifft
+      nur `SelfUpdater`, `AgentIdentity` und `ClientStore`. Zusätzlich fährt
+      `ActionEndpointTests` PUT, POST und DELETE gegen `/api/actions` und
+      `/api/actions/backup` und verlangt 404 oder 405 — damit fällt auch ein
+      später versehentlich ergänzter Schreibweg auf
+- [x] Nicht gefordert, aber gebaut: die App-Seite (`ActionsView.tsx`,
+      `agentClient.getActions/invokeAction`, Eintrag in der Sidebar). Ohne sie
+      hätte Phase 15 nichts, worauf sie ihr Widget setzen könnte, und der
+      `confirm`-Merker hätte keinen Abnehmer
 
 ### Notizen
 
-_(leer)_
+- **Zwei Abweichungen vom Beispiel im Plan, beide bewusst:**
+  - `type: "url"` läuft über `explorer.exe <adresse>` und **nicht** über
+    `UseShellExecute = true`. Letzteres wäre der bequeme Weg zum
+    Standardbrowser und zugleich die einzige Stelle im ganzen Agent, an der
+    Windows entscheidet, was eine Zeichenkette bedeutet. Die Abnahme verlangt
+    ausdrücklich, dass es diese Stelle nicht gibt. Der Katalog lässt dafür nur
+    `http` und `https` durch — `file:`, `ms-settings:` und `javascript:` wären
+    sonst ein zweiter Weg, Beliebiges zu starten.
+  - `"chord": ["LWin", "P"]` aus dem Plan wurde von `VirtualKeys` abgelehnt: dort
+    stand nur `win` und `meta`. `lwin` als Alias ergänzt — dieselbe Taste, und
+    in einer von Hand geschriebenen `actions.json` schreibt man sie so, wie
+    Windows sie nennt. Bestehende `VirtualKeysTests` unverändert grün.
+- **Zusätzliche Prüfungen, die der Umfang nicht nannte,** aber ohne die der
+  Rest wenig wert wäre: Kennungen müssen `^[a-z0-9][a-z0-9-]*$` erfüllen (sie
+  stehen im Pfad von `/invoke`), dürfen nicht doppelt vorkommen, `script`
+  verlangt eine `.ps1`-Endung (sonst wäre der Typ ein zweiter Weg zu einer
+  beliebigen `.exe`), Sequenzen dürfen keinen Kreis bilden (sonst liefen sie
+  endlos), und Pausen liegen zwischen 0 und 60000 ms.
+- **`GET /api/actions` gibt keine Pfade heraus** (`ActionSummary` statt
+  `AgentAction`). Wer die Liste abfragen darf, muss nicht auch erfahren, welche
+  Software auf dem Rechner liegt und wo. Ein Test prüft das am serialisierten
+  JSON.
+- **Fehler beim Auslösen gehen ins Log, nicht in die Antwort.** Die Rohmeldung
+  nennt Pfade; die Antwort sagt nur, dass es nicht ging.
+- **`ActionCatalog` und `ActionRunner` sind getrennt.** Der Katalog prüft beim
+  Start, der Läufer entscheidet nichts mehr. Die Prüfungen bekommen
+  `fileExists` bzw. das Warten hereingereicht — anders ließe sich hier ohne
+  Windows weder eine fehlende Datei noch eine eingehaltene Pause belegen.
+- **`IActionHost`** kapselt `Process.Start` und die Tastenausgabe. Nur dadurch
+  lässt sich prüfen, *wie* gestartet wird; ohne diese Naht wäre die wichtigste
+  Zusage der Phase behauptet statt belegt.
+- **Neue Testabhängigkeit `Microsoft.AspNetCore.TestHost` (8.0.11).** Der
+  404-Punkt der Abnahme steht am Endpunkt und nicht am Katalog — ohne
+  Testserver wäre er nur behauptet gewesen. Der Server läuft ohne Zertifikat
+  und ohne Windows, weil `ActionEndpoints` nur den Katalog und den Läufer
+  braucht. Nebeneffekt: die Zusage „keine Pfade über das Netz" wird jetzt am
+  echten JSON der Antwort geprüft, nicht am serialisierten Objekt.
+- **Nicht gebaut, gehört zu keiner Phase:** ein Editor für `actions.json` im
+  Windows-Fenster. Der Umfang nennt ihn („Bearbeitet wird nur lokal im Fenster
+  aus Phase 11"), die Abnahme verlangt nur, dass es keinen Schreibweg über das
+  Netz gibt — und den gibt es nicht. Bearbeitet wird die Datei heute mit einem
+  Texteditor, was ebenfalls lokal ist. Steht oben unter „Offene
+  Aufräumarbeiten".
+- **Aufgefallen, nicht gebaut (spätere Phasen):** Die `actions.json` wird beim
+  Start gelesen. Wer sie ändert, muss den Agent neu starten. Ein Nachladen zur
+  Laufzeit wäre bequem, verschiebt aber die Prüfung wieder auf einen Zeitpunkt,
+  an dem niemand hinsieht — das gehört zusammen mit dem Editor entschieden.
+- **`elevated: true` gibt es nicht,** wie im Plan festgelegt: es öffnete ein
+  UAC-Fenster auf dem Sperrdesktop, das aus der Ferne niemand bestätigen kann.
 
 ---
 
@@ -519,6 +589,15 @@ Was hier nicht prüfbar war und am echten Gerät nachgeholt werden muss:
   über die Zurück-Taste.
 - **Phase 12:** Die Benachrichtigungserlaubnis ab Android 13 — ablehnen und
   prüfen, dass die Sitzung trotzdem startet, statt an der Rückfrage zu hängen.
+- **Phase 13:** Jede Art einmal am laufenden Windows-Rechner auslösen —
+  `process` mit Argumenten, `script`, `keys`, `url`, `sequence`. Besonders
+  `keys`: ob `LWin+P` wirklich die Projektionsleiste öffnet, hängt daran, dass
+  die 30 ms Haltezeit reichen und die Eingabe auf dem richtigen Desktop landet.
+- **Phase 13:** Den Abbruch beim Start provozieren — eine `actions.json` mit
+  einem falschen Pfad hinlegen und prüfen, dass der Dienst sich mit der Meldung
+  im Klartext beendet und nicht still weiterläuft.
+- **Phase 13:** `explorer.exe <adresse>` statt `UseShellExecute` — ob damit
+  tatsächlich der Standardbrowser aufgeht. Hier ist das nicht nachstellbar.
 - **Phase 10:** `agentkey.txt` enthält den privaten Schlüssel im Klartext. Er
   muss unter `C:\ProgramData\RemoteDesktopAgent\` liegen und dieselben ACLs
   bekommen wie `cert.key` (Schritt 3 der `agent/README.md`). Bisher legt der

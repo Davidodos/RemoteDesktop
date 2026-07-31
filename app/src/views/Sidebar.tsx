@@ -14,7 +14,7 @@ import {
 /** Solange die Leiste offen ist, den Online-Zustand frisch halten. */
 const POLL_INTERVAL_MS = 10_000
 
-export type Page = 'screen' | 'mouse' | 'keyboard' | 'media' | 'power' | 'shortcuts'
+export type Page = 'screen' | 'mouse' | 'keyboard' | 'media' | 'power' | 'actions' | 'shortcuts'
 
 const PAGES: { id: Page; label: string; icon: IconComponent }[] = [
   { id: 'screen', label: 'Bildschirm', icon: ScreenIcon },
@@ -22,6 +22,9 @@ const PAGES: { id: Page; label: string; icon: IconComponent }[] = [
   { id: 'keyboard', label: 'Tastatur', icon: KeyboardIcon },
   { id: 'power', label: 'Power', icon: PowerIcon },
   { id: 'media', label: 'Medien', icon: MediaIcon },
+  // Vom Zielrechner, nicht aus dem Speicher dieses Handys — deshalb über den
+  // Shortcuts, die nur lokal gelten.
+  { id: 'actions', label: 'Aktionen', icon: ShortcutIcon },
   { id: 'shortcuts', label: 'Shortcuts', icon: ShortcutIcon },
 ]
 

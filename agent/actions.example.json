@@ -1,0 +1,45 @@
+// Vorlage. Zum Verwenden neben die appsettings.json legen und in
+// actions.json umbenennen — die echte Datei steht in .gitignore, weil sie
+// Pfade dieses Rechners enthält.
+//
+// Geprüft wird beim Start des Agents: ein unbekannter Typ, eine fehlende
+// Datei oder "args" als Zeichenkette statt als Array beenden ihn mit einer
+// Meldung im Klartext. Ein Tippfehler soll auffallen, solange jemand am
+// Rechner sitzt.
+[
+  {
+    "id": "obs-aufnahme",
+    "label": "OBS aufnehmen",
+    "icon": "record",
+    "type": "process",
+    "file": "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
+    "args": ["--startrecording"],
+    "workingDirectory": "C:\\Program Files\\obs-studio\\bin\\64bit"
+  },
+  {
+    "id": "backup",
+    "label": "Backup",
+    "icon": "archive",
+    "type": "script",
+    "file": "C:\\Scripts\\backup.ps1",
+    "confirm": true
+  },
+  {
+    "id": "monitor-2",
+    "label": "Nur Monitor 2",
+    "type": "keys",
+    "chord": ["LWin", "p"]
+  },
+  {
+    "id": "jira",
+    "label": "Jira öffnen",
+    "type": "url",
+    "url": "https://example.invalid/jira"
+  },
+  {
+    "id": "abendmodus",
+    "label": "Abendmodus",
+    "type": "sequence",
+    "steps": [{ "action": "monitor-2" }, { "delayMs": 500 }, { "action": "obs-aufnahme" }]
+  }
+]

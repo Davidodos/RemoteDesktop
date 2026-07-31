@@ -52,6 +52,12 @@ public static class VirtualKeys
             ["win"] = VK_LWIN,
             ["meta"] = VK_LWIN,
 
+            // Die Aktionen aus Phase 13 werden von Hand in actions.json
+            // geschrieben, und dort schreibt man die Taste so, wie Windows sie
+            // nennt. Ein abgelehntes "LWin" wäre ein Stolperstein ohne Grund —
+            // gemeint ist ohnehin dieselbe Taste wie "win".
+            ["lwin"] = VK_LWIN,
+
             // Steuerung
             ["escape"] = 0x1B,
             ["esc"] = 0x1B,

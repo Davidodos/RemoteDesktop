@@ -1,6 +1,13 @@
 import { directTransport } from '../transport/direct.ts'
 import { TransportError, type Transport } from '../transport/index.ts'
-import type { AgentInfo, Device, MediaAction, MediaSession, PowerAction } from './types.ts'
+import type {
+  AgentActionSummary,
+  AgentInfo,
+  Device,
+  MediaAction,
+  MediaSession,
+  PowerAction,
+} from './types.ts'
 
 /**
  * Zugriff auf den Agent eines Geräts.
@@ -31,6 +38,22 @@ export class AgentClient {
    */
   async media(action: MediaAction, repeat = 1, session?: string): Promise<void> {
     await this.request('/api/media', { method: 'POST', body: { action, repeat, session } })
+  }
+
+  /**
+   * Was dieser Rechner auf Zuruf tun darf.
+   *
+   * Die Liste kommt vom Zielgerät und nicht aus dem Speicher des Handys: was
+   * eine Aktion bedeutet, steht ausschließlich dort. Der Client schickt beim
+   * Auslösen nur die Kennung — nie eine Kommandozeile.
+   */
+  async getActions(): Promise<AgentActionSummary[]> {
+    const { actions } = await this.request<{ actions: AgentActionSummary[] }>('/api/actions')
+    return actions
+  }
+
+  async invokeAction(id: string): Promise<void> {
+    await this.request(`/api/actions/${encodeURIComponent(id)}/invoke`, { method: 'POST' })
   }
 
   /** Was auf dem Rechner gerade läuft. Leere Liste heißt: nichts. */

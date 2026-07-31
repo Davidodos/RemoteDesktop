@@ -220,6 +220,8 @@ Sitzungstoken aus `/api/session` oder das alte Sammel-Token.
 | `GET /api/info` | Hostname, Monitorliste, virtueller Desktop |
 | `POST /api/power` | `{"action":"sleep\|shutdown\|restart\|lock"}` |
 | `POST /api/media` | `{"action":"playpause\|next\|prev\|stop\|volup\|voldown\|mute","repeat":1}` |
+| `GET /api/actions` | Was dieser Rechner auf Zuruf tut — ohne Pfade und Argumente |
+| `POST /api/actions/{id}/invoke` | Eine Aktion auslösen. Unbekannte Kennung → 404 |
 | `WS /ws/input` | Eingabe-Stream |
 | `GET /api/media/sessions` | Was gerade läuft: Titel, Interpret, App, Status |
 | `GET /api/media/thumbnail` | Titelbild einer Sitzung, `?session=<id>` |
@@ -303,6 +305,46 @@ taucht mit Titel, Interpret und Wiedergabestatus auf.
 Befehl direkt an diese App; sonst wird die Medien-Taste gedrückt, die immer bei
 der Anwendung landet, die Windows gerade für die vorderste hält. Lautstärke
 läuft grundsätzlich über die Taste — die Sitzungs-Schnittstelle kennt sie nicht.
+
+## Aktionen
+
+Was dieser Rechner auf Zuruf tun darf, steht in `actions.json` neben der
+`appsettings.json`. Vorlage: `actions.example.json` — umbenennen und anpassen.
+Fehlt die Datei, gibt es eben keine Aktionen; der Agent startet trotzdem.
+
+**Die eine Regel: deklariert wird hier, aufgerufen wird per Kennung.** Der
+Client schickt nie eine Kommandozeile, sondern `POST /api/actions/backup/invoke`.
+Was „backup" bedeutet, weiß ausschließlich dieser Rechner. Alles andere wäre
+absichtlich gebaute Remote-Code-Execution.
+
+| `type` | Was passiert | Pflichtfelder |
+|---|---|---|
+| `process` | Programm starten, Argumente einzeln | `file`, optional `args`, `workingDirectory` |
+| `script` | `powershell -NoProfile -ExecutionPolicy Bypass -File <datei>` | `file` (muss auf `.ps1` enden) |
+| `keys` | Tastenkombination senden | `chord` (Namen wie in `Native/VirtualKeys.cs`) |
+| `url` | Adresse im Standardbrowser öffnen | `url` (nur `http`/`https`) |
+| `sequence` | Andere Aktionen der Reihe nach | `steps` mit `action` **oder** `delayMs` (0–60000) |
+
+`confirm: true` bittet den Client um eine Rückfrage. Der Agent führt trotzdem
+aus, wenn der Aufruf kommt — der Merker schützt vor dem verrutschten Daumen,
+nicht vor einem bösen Client. Davor schützt die Kopplung.
+
+### Geprüft wird beim Start, nicht beim Auslösen
+
+Ein unbekannter `type`, eine Datei, die es nicht gibt, `args` als Zeichenkette
+statt als Array, eine Sequenz, die sich im Kreis aufruft — alles das beendet den
+Agent beim Start mit einer Meldung im Klartext. Der Tippfehler soll auffallen,
+solange jemand am Rechner sitzt, und nicht Wochen später, wenn der Knopf am
+Handy nichts tut und niemand weiß, warum.
+
+### Bearbeiten geht nur hier
+
+Es gibt **keinen** Endpunkt, der `actions.json` über das Netz beschreibt. Ein
+solcher hieße „jeder gültige Ausweis darf beliebigen Code auf diesem Rechner
+hinterlegen" und machte die Regel oben wertlos. Neue Aktionen anlegen heißt: an
+diesen Rechner gehen (oder ihn fernsteuern — dann sieht ein Mensch, was
+passiert) und die Datei bearbeiten. Danach den Agent neu starten, denn gelesen
+wird sie beim Start.
 
 ## H.264 statt JPEG (optional, aber deutlich besser)
 
