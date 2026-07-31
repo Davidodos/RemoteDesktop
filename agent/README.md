@@ -9,13 +9,29 @@ HTTPS-Zertifikate sind im Tailscale-Adminpanel aktiviert.
 ## 1. Dateien kopieren
 
 Im Windows-Explorer `\\192.168.178.43\docker\remotedesktop\dist\` öffnen und
-beide Dateien nach `C:\RemoteDesktopAgent\` kopieren:
+nach `C:\RemoteDesktopAgent\` kopieren:
 
-- `RemoteDesktopAgent.exe`
-- `appsettings.json`
+| Datei | Pflicht? |
+|---|---|
+| `RemoteDesktopAgent.exe` | ja — self-contained, kein .NET auf dem Rechner nötig |
+| `appsettings.json` | ja |
+| `actions.example.json` | nein — Vorlage für die Aktionen, siehe unten |
+
+Der Ordner `client\` daneben gehört nicht hierher; das ist der Windows-Client
+(`desktop/README.md`), ein eigenes Programm.
+
+Diese drei Dateien legt der Agent **selbst** an — nicht kopieren, nicht anlegen:
+`agentkey.txt` (sein privater Schlüssel), `clients.json` (die gekoppelten
+Geräte) und gelegentlich `.update-attempt-*`.
 
 > Nicht nach `C:\Program Files\` — dort bräuchte jeder Schreibzugriff
 > Administratorrechte, und der Agent läuft bewusst im normalen Benutzerkontext.
+
+> `C:\RemoteDesktopAgent\` darf man jederzeit komplett leeren und neu befüllen.
+> Der Preis ist, dass `agentkey.txt` und `clients.json` mitgehen: **alle Geräte
+> müssen danach neu koppeln.** `C:\ProgramData\RemoteDesktopAgent\` dagegen
+> stehen lassen — dort liegt nur das Zertifikat, und es neu zu ziehen bringt
+> nichts, kostet aber ein Let's-Encrypt-Kontingent.
 
 Beim ersten Start warnt SmartScreen, weil die Datei nicht signiert ist:
 **Weitere Informationen → Trotzdem ausführen**.
@@ -412,8 +428,17 @@ export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 dotnet publish -c Release -r win-x64 --self-contained
 cp bin/Release/net8.0-windows10.0.19041.0/win-x64/publish/RemoteDesktopAgent.exe \
+   bin/Release/net8.0-windows10.0.19041.0/win-x64/publish/actions.example.json \
    /volume1/docker/remotedesktop/dist/
 ```
+
+Das `.pdb`, `web.config` und `aspnetcorev2_inprocess.dll` aus demselben Ordner
+bleiben liegen: die kommen vom Web-SDK für den Betrieb unter IIS und werden
+hier nie gelesen.
+
+Den Windows-Client baut man daneben (`desktop/README.md`, Abschnitt
+„Verteilen"). Er hat einen eigenen Ordner `dist/client/`, weil er ein eigenes
+Programm ist und nicht auf denselben Rechner muss.
 
 Ab dann holen sich beide Rechner die neue Fassung beim nächsten Start von
 selbst. Wer nicht warten will: Agent auf dem Rechner beenden und neu starten.

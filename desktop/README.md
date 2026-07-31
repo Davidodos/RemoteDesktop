@@ -21,6 +21,33 @@ cd ../desktop && dotnet build
 Ohne den ersten Schritt startet das Programm zwar, sagt aber beim Öffnen des
 Fensters, dass die Oberfläche fehlt.
 
+## Verteilen
+
+```bash
+cd app && npm run build
+cd ../desktop
+dotnet publish -c Release -r win-x64 --self-contained \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+rm -rf /volume1/docker/remotedesktop/dist/client
+mkdir -p /volume1/docker/remotedesktop/dist/client
+cp bin/Release/net8.0-windows/win-x64/publish/RemoteDesktopClient.exe \
+   /volume1/docker/remotedesktop/dist/client/
+cp -r bin/Release/net8.0-windows/win-x64/publish/app \
+   /volume1/docker/remotedesktop/dist/client/
+```
+
+Auf dem Windows-Rechner den ganzen Ordner `client\` irgendwohin kopieren, wo
+man schreiben darf. **Der Unterordner `app\` muss mit** — er ist die
+Oberfläche, und `WebAppLocator` sucht sie neben der `.exe`.
+
+Anders als der Agent braucht der Client **keinen** Scheduled Task. Er muss
+nicht erhöht laufen und schickt niemandem Eingaben; eine Verknüpfung in
+`shell:startup` genügt, wenn er beim Anmelden mitkommen soll.
+
+Die `.xml`-Dateien aus dem Publish-Ordner sind die IntelliSense-Doku von
+WebView2 und bleiben liegen.
+
 ## Was das Fenster mehr kann als die PWA
 
 | | Handy (PWA) | Windows-Fenster |
