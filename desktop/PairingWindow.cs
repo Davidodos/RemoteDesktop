@@ -26,7 +26,20 @@ public sealed class PairingWindow : Form
         Dock = DockStyle.Top,
         Height = 40,
         TextAlign = ContentAlignment.MiddleCenter,
-        Text = "Auf „Code anzeigen“ klicken, dann am Handy eintippen."
+        Text = "Auf „Code anzeigen“ klicken, dann am Handy scannen oder eintippen."
+    };
+
+    /// <summary>
+    /// Der QR-Code zum selben Kopplungscode. Er steht erst nach dem Klick da und
+    /// belegt vorher keinen Platz — ein leerer weißer Kasten sähe aus wie ein
+    /// Fehler.
+    /// </summary>
+    private readonly PictureBox _qr = new()
+    {
+        Dock = DockStyle.Top,
+        Height = 240,
+        SizeMode = PictureBoxSizeMode.CenterImage,
+        Visible = false
     };
 
     private readonly ListView _clients = new()
@@ -61,8 +74,11 @@ public sealed class PairingWindow : Form
         issue.Click += async (_, _) => await IssueCodeAsync();
         revoke.Click += async (_, _) => await RevokeSelectedAsync();
 
+        // Umgekehrte Reihenfolge: bei DockStyle.Top landet das zuletzt
+        // hinzugefügte Element ganz oben.
         Controls.Add(_clients);
         Controls.Add(buttons);
+        Controls.Add(_qr);
         Controls.Add(_hint);
         Controls.Add(_code);
     }
@@ -83,11 +99,55 @@ public sealed class PairingWindow : Form
             // niemand fehlerfrei vom Bildschirm ab.
             _code.Text = $"{issued.Code[..3]} {issued.Code[3..]}";
             _hint.Text = $"Gilt {issued.ExpiresInSeconds / 60} Minuten und nur ein einziges Mal.";
+
+            ShowQr(issued.PairingUri);
         }
         catch (Exception ex)
         {
             ShowFailure(ex);
         }
+    }
+
+    /// <summary>
+    /// Zeichnet den QR-Code, wenn der Agent einen Link mitgeschickt hat.
+    ///
+    /// Tut er das nicht — etwa weil auf diesem Rechner noch eine ältere Fassung
+    /// läuft —, bleibt es beim abgetippten Code. Das ist kein Fehler, sondern
+    /// der Weg, der vorher der einzige war.
+    /// </summary>
+    private void ShowQr(string? pairingUri)
+    {
+        _qr.Image?.Dispose();
+        _qr.Image = null;
+
+        if (string.IsNullOrWhiteSpace(pairingUri))
+        {
+            _qr.Visible = false;
+            return;
+        }
+
+        try
+        {
+            _qr.Image = QrImage.Render(pairingUri, _qr.Height - 20);
+            _qr.Visible = true;
+        }
+        catch (Exception ex)
+        {
+            // Ein Code, der sich nicht zeichnen lässt, darf die Kopplung nicht
+            // aufhalten — die sechs Ziffern darüber stehen ja da.
+            _qr.Visible = false;
+            _hint.Text = $"Der QR-Code ließ sich nicht erzeugen: {ex.Message}";
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _qr.Image?.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     private async Task RefreshClientsAsync()

@@ -14,12 +14,7 @@ Kleinkram, der in einer Phase liegengeblieben ist und zu keiner neuen gehört.
 Raster, weil die zugehörige Phase schon `erledigt` ist. Erledigtes hier
 löschen, nicht abhaken.
 
-- **Den QR-Code im Windows-Fenster anzeigen.** Phase 12 hat die Leseseite
-  gebaut (`app/src/lib/pairingUri.ts`), aber niemand erzeugt den Code. Bis dahin
-  bleibt am Handy nur das Abtippen. Das Fenster stammt aus Phase 11, deshalb
-  steht es hier und nicht dort: `desktop/` braucht einen QR-Erzeuger (kein
-  NuGet-Paket im Projekt) und muss `buildPairingUri` nachbilden — Format und
-  Prüfungen stehen in `pairingUri.ts` samt Tests.
+_(nichts offen)_
 
 ## Ablauf je Phase
 
@@ -53,7 +48,7 @@ zu beginnen.
 | | |
 |---|---|
 | App-Tests | `cd app && npm test` — Stand 31.07.2026: **244 grün** |
-| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **199 grün** |
+| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **212 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Android-Client | `cd clients/android && npx cap sync android` — mehr geht ohne SDK nicht |
 | Typprüfung | `cd app && npx tsc -b` |

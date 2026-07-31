@@ -12,7 +12,12 @@ public sealed record PairedClientInfo(
     DateTimeOffset LastSeenAt);
 
 /// <summary>Ein frisch erzeugter Kopplungscode.</summary>
-public sealed record PairingCodeInfo(string Code, int ExpiresInSeconds);
+/// <param name="PairingUri">
+/// Derselbe Code als Adresse, aus der das Fenster den QR-Code zeichnet. Erzeugt
+/// wird sie am Agent (<c>agent/Auth/PairingUri.cs</c>), weil dort Tests darauf
+/// liegen und weil nur er seinen eigenen Port sicher kennt.
+/// </param>
+public sealed record PairingCodeInfo(string Code, int ExpiresInSeconds, string? PairingUri);
 
 /// <summary>
 /// Spricht den Agent auf demselben Rechner an.

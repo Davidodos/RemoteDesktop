@@ -40,8 +40,24 @@ Das Programm sitzt im Tray, das Fenster geht nur auf Wunsch auf.
 | Menüpunkt | Was passiert |
 |---|---|
 | Fenster öffnen | Die Oberfläche; das Kreuz versteckt sie wieder, statt zu beenden |
-| Geräte koppeln… | Kopplungscode anzeigen, gekoppelte Geräte auflisten und widerrufen |
+| Geräte koppeln… | Kopplungscode und QR-Code anzeigen, gekoppelte Geräte auflisten und widerrufen |
 | Beenden | Wirklich beenden |
+
+## Der QR-Code
+
+„Code anzeigen“ zeigt dieselben sechs Ziffern zweimal: als Text zum Abtippen und
+als QR-Code, den die APK aus `clients/android/` scannt. Der Link darin
+(`remotedesktop://pair?host=…&port=…&code=…`) kommt fertig vom Agent —
+`agent/Auth/PairingUri.cs` erzeugt ihn, `app/src/lib/pairingUri.ts` liest ihn.
+Dieses Fenster zeichnet ihn nur.
+
+Das ist Absicht: nur der Agent kennt seinen eigenen Port verlässlich, und beide
+Seiten des Formats liegen damit an Stellen, auf denen Tests sitzen. Antwortet
+ein älterer Agent ohne Link, bleibt der Kasten leer und es geht wie bisher über
+die Ziffern.
+
+Ein Geheimnis wird der QR-Code dadurch nicht: er trägt denselben Code, der
+ohnehin auf dem Bildschirm steht — fünf Minuten gültig, einmal verwendbar.
 
 ## Selbstverbindung
 

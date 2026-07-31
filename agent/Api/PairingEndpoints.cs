@@ -10,7 +10,12 @@ namespace RemoteDesktopAgent.Api;
 /// </summary>
 public static class PairingEndpoints
 {
-    public static void MapPairingEndpoints(this WebApplication app)
+    /// <param name="port">
+    /// Der Port, auf dem dieser Agent lauscht. Er steht im QR-Code, damit die
+    /// Gegenseite ihn nicht raten muss — bei einem abweichenden Port liefe sie
+    /// sonst still in die Vorgabe 8443.
+    /// </param>
+    public static void MapPairingEndpoints(this WebApplication app, int port)
     {
         // Nur vom Rechner selbst erreichbar (siehe ClientAuthMiddleware). Ab
         // Phase 11 drückt darauf ein Knopf im Fenster; bis dahin ist es der Weg,
@@ -27,7 +32,12 @@ public static class PairingEndpoints
             return Results.Ok(new
             {
                 code,
-                expiresInSeconds = (int)PairingCodes.Lifetime.TotalSeconds
+                expiresInSeconds = (int)PairingCodes.Lifetime.TotalSeconds,
+
+                // Derselbe Code, nur als Adresse — daraus macht das Fenster den
+                // QR-Code. Er wird hier erzeugt und nicht dort, weil das Format
+                // damit an einer Stelle steht, die Tests hat.
+                pairingUri = PairingUri.Build(Environment.MachineName, port, code)
             });
         });
 

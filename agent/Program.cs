@@ -82,7 +82,7 @@ app.UseClientAuth();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapPairingEndpoints();
+app.MapPairingEndpoints(settings.Port);
 
 // Hostname und Monitor-Layout — die App baut daraus ihre Monitor-Tabs.
 app.MapGet("/api/info", (InputExecutor executor) =>
