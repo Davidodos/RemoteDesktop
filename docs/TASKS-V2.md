@@ -14,6 +14,21 @@ Kleinkram, der in einer Phase liegengeblieben ist und zu keiner neuen gehört.
 Raster, weil die zugehörige Phase schon `erledigt` ist. Erledigtes hier
 löschen, nicht abhaken.
 
+- **`%USERPROFILE%` und Konsorten werden in `args` nicht aufgelöst.** Am
+  31.07.2026 auf dem Gerät gesehen: `explorer.exe` mit
+  `["%USERPROFILE%\\Downloads"]` öffnete „Dokumente" statt „Downloads". Das ist
+  die richtige Folge davon, dass keine Shell im Spiel ist — nur hat man dann
+  keinen Weg, den eigenen Benutzerordner zu benennen. Denkbar: eine kurze,
+  fest verdrahtete Liste von Platzhaltern (`${USERPROFILE}`, `${DESKTOP}`, …),
+  die der Katalog **beim Start** auflöst. Keine allgemeine Expansion, sonst ist
+  die Regel wieder aufgeweicht.
+- **`VirtualKeys` kennt keine Satzzeichen.** `"chord": ["LWin", "."]` für den
+  Emoji-Picker wird abgelehnt („nennt die unbekannte Taste '.'"). Buchstaben und
+  Funktionstasten sind da, `OEM_PERIOD`, `OEM_COMMA` und Verwandte fehlen.
+- **Die App verbindet nach einem Neustart des Agents nicht von selbst wieder.**
+  Beobachtet am 31.07.2026: Agent neu gestartet → die App bleibt getrennt und
+  muss selbst neu gestartet werden. Für einen Dienst, der sich bei jedem
+  Update neu startet (Phase 14), ist das zu wenig.
 - **`hubClient.ts` benutzt relative Pfade** (`fetch('/api/devices')`). Das
   stimmt für die PWA, die vom Hub ausgeliefert wird — im WebView2-Fenster ist
   die Herkunft aber `https://app.remotedesktop.invalid`, und der Aufruf geht ins
@@ -395,6 +410,10 @@ Widerruf und Rechten. Grundlage für alles Weitere.
   übertragen wird fortlaufend Bild und Eingabe über das Netz, und dafür ist
   `dataSync` da. Der Umfang von Phase 12 nennt `connectedDevice`; das war unter
   Android 14 so nicht haltbar.
+- **Nachtrag 31.07.2026: Der Dienst geht mit, wenn die App weggewischt wird.**
+  Ohne `onTaskRemoved` blieb die Benachrichtigung stehen und behauptete eine
+  Verbindung, die es nicht mehr gab — die Aufräumroutine in `App.tsx` greift dort
+  nicht, weil es das JavaScript in diesem Augenblick nicht mehr gibt.
 - **Nachtrag 31.07.2026: Der Dienst kann die App nicht mehr mitreißen.** Start
   und Stopp sind jetzt in `SessionService.onStartCommand` und in
   `SessionServicePlugin` gekapselt; scheitert der Dienst, meldet die App es im

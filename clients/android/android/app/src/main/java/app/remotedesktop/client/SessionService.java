@@ -74,6 +74,23 @@ public class SessionService extends Service {
         return START_NOT_STICKY;
     }
 
+    /**
+     * Die App wurde aus den zuletzt verwendeten weggewischt.
+     *
+     * Damit ist die Sitzung beendet — die WebView ist fort, und mit ihr die
+     * offenen Verbindungen. Der Dienst muss dann mitgehen, sonst bliebe eine
+     * Benachrichtigung stehen, die eine Verbindung behauptet, die es nicht mehr
+     * gibt. Die Aufräumroutine der Oberfläche greift hier nicht: sie läuft im
+     * JavaScript, und das gibt es in diesem Augenblick nicht mehr.
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE);
+        stopSelf();
+
+        super.onTaskRemoved(rootIntent);
+    }
+
     private int foregroundType() {
         // Ab Android 14 muss jeder Vordergrunddienst seinen Typ nennen, sonst
         // beendet das System ihn beim Start mit einer Ausnahme. Darunter gibt es
