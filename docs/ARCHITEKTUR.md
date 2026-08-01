@@ -7,32 +7,39 @@ Ein einziges UI — kein Wechsel zwischen Apps.
 
 ```
         ┌─────────────────────────────┐
-        │  Handy (Android)            │
-        │  PWA "RemoteDesktop"        │
+        │  Handy (Android APK)        │
+        │  Capacitor + React          │
         └──────────┬──────────────────┘
                    │ Tailscale (LAN = direkt, unterwegs = DERP/direkt)
         ┌──────────┴──────────┬────────────────────┐
         │                     │                    │
   ┌─────▼──────┐     ┌────────▼───────┐   ┌────────▼────────┐
-  │ NAS: Hub   │     │ PC  (Agent)    │   │ Laptop (Agent)  │
+  │ NAS: Waker │     │ PC  (Agent)    │   │ Laptop (Agent)  │
   │ Docker     │     │ :8443 HTTPS    │   │ :8443 HTTPS     │
   │ :3080      │     │ 3 Monitore     │   │ 1 Monitor       │
   └────────────┘     └────────────────┘   └─────────────────┘
-   PWA ausliefern      Screen + Input       Screen + Input
-   Geräte-Registry     Power/Media          Power/Media
-   WOL (Magic Packet)
+   WOL + siteId        Screen + Input       Screen + Input
+   Kopplung            Power/Media/Aktionen Power/Media/Aktionen
+                       WOL + siteId         WOL + siteId
 ```
 
-**Warum ein Hub auf der NAS?** Wenn der PC ausgeschaltet ist, ist er im Tailnet
-offline — Wake-on-LAN muss von einem Gerät im selben LAN-Broadcast kommen.
-Die NAS läuft ohnehin 24/7. Der Hub liefert außerdem die PWA aus und hält die
-Geräteliste.
+**Warum ein Waker auf der NAS?** Wenn der PC ausgeschaltet ist, ist er im
+Tailnet offline — Wake-on-LAN muss von einem Gerät im selben LAN-Broadcast
+kommen. Die NAS läuft ohnehin 24/7. Seit Phase 14 kann das auch ein wacher
+Agent auf dem zweiten Rechner; der Waker ist der Fall „alles aus".
 
-**Warum trotzdem Direktverbindung für Video/Input?** Video über die NAS zu
-proxien kostet Latenz und CPU. Beide Agents holen sich per `tailscale cert` ein
-echtes Let's-Encrypt-Zertifikat für ihren `*.ts.net`-Namen → die PWA
-(HTTPS-Origin von der NAS) darf ohne Mixed-Content-Block direkt per WSS zum
-Agent verbinden. Im LAN routet Tailscale direkt, ohne Umweg über die Cloud.
+**Er führt dabei keine Geräteliste.** Bis Phase 13 hieß dieser Dienst *Hub*,
+lieferte die PWA aus und hielt eine `devices.json` mit den Agent-Tokens aller
+Rechner — ein Geheimnis, hinter dem alles lag. Beides ist weg: die App bringt
+ihre gekoppelten Geräte selbst mit, und die MAC des zu weckenden Rechners steht
+in der Anfrage. Wer wen wecken darf, ergibt sich aus der Standort-Kennung
+`siteId = sha256(gatewayMac)`, die jeder Knoten meldet.
+
+**Warum Direktverbindung für Video/Input?** Video über die NAS zu proxien
+kostet Latenz und CPU. Beide Agents holen sich per `tailscale cert` ein echtes
+Let's-Encrypt-Zertifikat für ihren `*.ts.net`-Namen → die App darf ohne
+Mixed-Content-Block direkt per WSS zum Agent verbinden. Im LAN routet Tailscale
+direkt, ohne Umweg über die Cloud.
 
 ## Netzwerk: LAN und unterwegs sind derselbe Code
 
@@ -70,15 +77,18 @@ Auth: Pre-Shared-Token pro Gerät im `Authorization`-Header. Tailscale-ACL ist
 die erste Schicht, das Token die zweite — ein kompromittiertes Gerät im Tailnet
 soll nicht automatisch den PC übernehmen können.
 
-### 2. Hub (`hub/`) — Node.js / TypeScript, Docker auf der NAS
+### 2. Waker (`waker/`) — Node.js / TypeScript, Docker auf der NAS
 
 Fügt sich in den bestehenden Dockhand-Stack ein
-(`/volume1/docker/dockhand/data/stacks/NAS/remotedesktop/`).
+(`/volume1/docker/dockhand/data/stacks/NAS/remotedesktop/`). Bis Phase 13 hieß
+er *Hub* und konnte deutlich mehr; siehe oben, warum das weg ist.
 
-- Liefert die gebaute PWA aus (statisch)
-- Geräte-Registry: Name, Tailscale-Hostname, MAC (für WOL), Token
-- `POST /api/wol/:device` → Magic Packet ins LAN (`network_mode: host` nötig)
-- `GET /api/devices/status` → Online-Check per Ping/TCP-Probe
+- `POST /api/wol` → Magic Packet ins LAN, MAC aus der Anfrage
+  (`network_mode: host` nötig)
+- `GET /api/info` → `siteId` und `canWake`; daran erkennt der Client, für
+  welches Netz er zuständig ist
+- Kopplung wie beim Agent: Code, öffentlicher Schlüssel, Challenge-Response
+- **Keine** Gerätekonfiguration, **keine** PWA-Auslieferung, **keine** Tokens
 
 ### 3. App (`app/`) — React + Vite, PWA
 
@@ -86,7 +96,7 @@ Auf dem Homescreen installierbar (`display: standalone` — die
 Android-Navigationsleiste bleibt sichtbar).
 
 **Aufbau:** Die Bildschirmansicht ist die Startseite. Navigiert wird über ein
-Burger-Menü oben links (Seitenleiste: verbundenes Gerät, alle Geräte des Hubs
+Burger-Menü oben links (Seitenleiste: verbundenes Gerät, alle bekannten Geräte
 mit Online-Punkt, dann die eigenständigen Seiten). Unter dem Bild sitzt eine
 schmale Leiste mit einfarbigen Symbolen, die Overlays über dem Bild ein- und
 ausblenden: Bildschirmtastatur, Texteingabe (Handy-Tastatur für längere Texte
@@ -186,10 +196,12 @@ Hardware-Encoder und wenn WebRTC keine Verbindung bekommt.
 - Kein Port-Forwarding, keine Exposition ins Internet. Zugang ausschließlich
   über das Tailnet.
 - Tailscale-ACL: nur das Handy darf Port 8443 auf PC/Laptop erreichen.
-- Pro-Gerät-Token, generiert bei der Agent-Installation, im Hub hinterlegt.
+- Kopplung pro Gerät (Phase 10): eigenes Schlüsselpaar je Client, der Agent
+  kennt nur den öffentlichen Teil. Kein geteiltes Token mehr.
+- Selbst-Update nur gegen ein Manifest mit gültiger ECDSA-Signatur (Phase 14).
 - Der Agent läuft mit den Rechten, die er braucht — Dienst im
   Benutzerkontext für Input-Injection, erhöhte Rechte nur für Power-Aktionen.
-- Tokens niemals im Repo. `.env` / Windows Credential Store.
+- Tokens und Schlüssel niemals im Repo. Ausführlich in `docs/SICHERHEIT.md`.
 
 ## Offene Punkte
 

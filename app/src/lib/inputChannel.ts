@@ -7,6 +7,17 @@ const RECONNECT_BASE_MS = 500
 const RECONNECT_MAX_MS = 8000
 
 /**
+ * So oft wird nachgefasst, bevor aufgegeben wird.
+ *
+ * Mit der Verdopplung oben deckt das gut eine Minute ab — genug für den
+ * Neustart nach einem Selbst-Update, das ist der Fall, für den das Ganze da
+ * ist. Endlos weiterzuversuchen wäre schlimmer als aufzugeben: die App stünde
+ * dann für immer auf „verbinde…", während der Rechner in Wahrheit
+ * heruntergefahren ist, und am Handy kostet das nebenbei den Akku.
+ */
+const MAX_RECONNECT_ATTEMPTS = 10
+
+/**
  * Der Eingabe-WebSocket zum Agent.
  *
  * Bewegungs-Events werden bis zum nächsten Frame gesammelt: ein Finger auf dem
@@ -19,6 +30,11 @@ export class InputChannel {
   private reconnectTimer: number | undefined
   private reconnectDelay = RECONNECT_BASE_MS
   private closedByUs = false
+
+  /** Wie oft seit der letzten stehenden Verbindung erfolglos versucht wurde. */
+  private attempts = 0
+  /** Ob der laufende Versuch je zustande kam. Siehe {@link open}. */
+  private opened = false
 
   private pendingMove: Record<string, unknown> | undefined
   private frameHandle: number | undefined
@@ -34,6 +50,7 @@ export class InputChannel {
 
   connect(): void {
     this.closedByUs = false
+    this.attempts = 0
     window.addEventListener('online', this.reconnectNow)
     this.open()
   }
@@ -50,6 +67,7 @@ export class InputChannel {
     }
 
     this.reconnectDelay = RECONNECT_BASE_MS
+    this.attempts = 0
     this.channel?.close()
     this.open()
   }
@@ -157,10 +175,13 @@ export class InputChannel {
 
   private open(): void {
     this.setState('connecting')
+    this.opened = false
 
     this.channel = this.transport.inputChannel({
       onOpen: () => {
         this.reconnectDelay = RECONNECT_BASE_MS
+        this.attempts = 0
+        this.opened = true
         this.setState('connected')
       },
 
@@ -169,9 +190,21 @@ export class InputChannel {
       onClose: () => {
         this.setState('disconnected')
 
-        if (!this.closedByUs) {
-          this.scheduleReconnect()
+        if (this.closedByUs) {
+          return
         }
+
+        // Ein Kanal, der nie zustande kam, deutet auf einen Ausweis, den die
+        // Gegenseite nicht mehr kennt: nach einem Neustart des Agents — und ein
+        // Selbst-Update ist genau das — sind alle Sitzungen weg, weil sie nur
+        // in seinem Arbeitsspeicher lagen. Ein WebSocket bekommt dafür keinen
+        // Statuscode, er wird einfach geschlossen. Also melden wir uns beim
+        // nächsten Versuch neu an, statt mit dem alten Token weiterzureden.
+        if (!this.opened) {
+          this.transport.reauthenticate?.()
+        }
+
+        this.scheduleReconnect()
       },
 
       onError: () => {
@@ -196,6 +229,19 @@ export class InputChannel {
 
   private scheduleReconnect(): void {
     if (this.reconnectTimer !== undefined) {
+      return
+    }
+
+    this.attempts += 1
+
+    if (this.attempts > MAX_RECONNECT_ATTEMPTS) {
+      // Aufgeben heißt hier nicht „für immer": ein Netzwechsel setzt den Zähler
+      // zurück, und wer das Gerät erneut auswählt, fängt von vorn an.
+      this.onError(
+        `${this.device.name} meldet sich nicht mehr. ` +
+          'Läuft der Rechner noch? Gerät erneut auswählen, um es noch einmal zu versuchen.',
+      )
+
       return
     }
 

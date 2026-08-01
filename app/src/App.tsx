@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
-import { collectDevices, hubDeviceSource, localDeviceSource } from './lib/deviceSources.ts'
+import { collectDevices, localDeviceSource, saveLocalDevice } from './lib/deviceSources.ts'
 import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
-import { HubClient, HubError } from './lib/hubClient.ts'
 import { InputChannel } from './lib/inputChannel.ts'
+import { protocolMismatch } from './lib/protocol.ts'
 import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
+import { rememberSite, siteChanged } from './lib/wake.ts'
 import { getPlatform } from './platform/index.ts'
 import { storage } from './lib/storage.ts'
 import type { ConnectionState, Device } from './lib/types.ts'
@@ -21,7 +22,6 @@ import { TouchpadView } from './views/TouchpadView.tsx'
 import { MenuIcon } from './views/icons.tsx'
 
 export function App(): React.JSX.Element {
-  const [hubToken, setHubToken] = useState(storage.getHubToken())
   const [devices, setDevices] = useState<Device[]>([])
   const [selected, setSelected] = useState<Device | undefined>(undefined)
   const [pairing, setPairing] = useState(false)
@@ -30,39 +30,22 @@ export function App(): React.JSX.Element {
   const [connection, setConnection] = useState<ConnectionState>('disconnected')
   const [error, setError] = useState<string | undefined>(undefined)
 
-  const hub = useMemo(
-    () => (hubToken === undefined ? undefined : new HubClient(hubToken)),
-    [hubToken],
-  )
-
   const inputRef = useRef<InputChannel | undefined>(undefined)
 
-  // Geräteliste laden. Der Hub ist dabei nur eine Quelle unter mehreren und
-  // seit der Kopplung nicht einmal mehr nötig — selbst gekoppelte Geräte stehen
-  // vor ihm und funktionieren auch ohne ihn.
+  // Geräteliste laden. Seit Phase 14 gibt es nur noch eine Quelle: was dieses
+  // Gerät selbst gekoppelt hat. Die Registry auf der NAS ist weg — sie lieferte
+  // die Agent-Tokens aller Rechner an jeden aus, der das Hub-Token kannte.
   useEffect(() => {
-    const sources = hub === undefined ? [localDeviceSource()] : [localDeviceSource(), hubDeviceSource(hub)]
+    void collectDevices([localDeviceSource()]).then(({ devices: found, failures }) => {
+      setDevices(found)
 
-    void collectDevices(sources).then(
-      ({ devices: found, failures }) => {
-        setDevices(found)
+      const failure = failures[0]
 
-        const failure = failures[0]
-
-        if (failure === undefined) {
-          return
-        }
-
-        if (failure instanceof HubError && failure.unauthorized) {
-          // Token ist falsch oder wurde gewechselt — zurück zur Eingabe.
-          storage.setHubToken(undefined)
-          setHubToken(undefined)
-        }
-
+      if (failure !== undefined) {
         setError(failure instanceof Error ? failure.message : String(failure))
-      },
-    )
-  }, [hub])
+      }
+    })
+  }, [])
 
   // Eingabe-Socket an das gewählte Gerät binden.
   useEffect(() => {
@@ -111,24 +94,37 @@ export function App(): React.JSX.Element {
    * selbst fernsteuert. Danach wäre er nur noch von außen zu bändigen.
    */
   const select = useCallback(async (device: Device): Promise<void> => {
-    const own = getPlatform().machineName
-
-    if (own !== undefined) {
-      try {
-        const info = await new AgentClient(device).getInfo()
-
-        if (isSelfConnection(info.hostname, own)) {
-          setError(selfConnectionMessage(info.hostname))
-          return
-        }
-      } catch (failure) {
-        setError(failure instanceof Error ? failure.message : String(failure))
-        return
-      }
+    if (device.waker === true) {
+      setError(`${device.name} kann nur wecken — fernsteuern lässt er sich nicht.`)
+      return
     }
 
-    storage.setLastDevice(device.id)
-    setSelected(device)
+    let info
+
+    try {
+      info = await new AgentClient(device).getInfo()
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure))
+      return
+    }
+
+    if (isSelfConnection(info.hostname, getPlatform().machineName)) {
+      setError(selfConnectionMessage(info.hostname))
+      return
+    }
+
+    // Solange der Rechner wach ist, ist das der einzige Zeitpunkt, an dem sich
+    // Standort und MAC erfahren lassen. Schläft er, sind sie die Grundlage
+    // dafür, dass ihn überhaupt jemand wecken kann.
+    const aktuell = rememberSite(device, info)
+
+    if (siteChanged(device, aktuell)) {
+      setDevices(saveLocalDevice(aktuell))
+    }
+
+    setError(protocolMismatch(info, device.name))
+    storage.setLastDevice(aktuell.id)
+    setSelected(aktuell)
   }, [])
 
   // Echte Tastatur durchreichen, sobald die Umgebung eine hat. Am Handy tut
@@ -196,21 +192,11 @@ export function App(): React.JSX.Element {
     )
   }
 
-  // Ohne Hub-Token und ohne gekoppeltes Gerät gibt es nichts zu zeigen. Sobald
-  // eines gekoppelt ist, ist der Hub verzichtbar — deshalb hängt der Einstieg
-  // nicht mehr allein am Token.
-  if (hubToken === undefined && devices.length === 0) {
-    return (
-      <TokenPrompt
-        onSubmit={(token) => {
-          storage.setHubToken(token)
-          setHubToken(token)
-          setError(undefined)
-        }}
-        onPair={() => setPairing(true)}
-        error={error}
-      />
-    )
+  // Ohne ein einziges gekoppeltes Gerät gibt es nichts zu zeigen. Bis Phase 13
+  // stand hier die Abfrage nach dem Hub-Token; mit der Registry auf der NAS ist
+  // sie weggefallen — der Weg hinein ist jetzt für jeden Rechner derselbe.
+  if (devices.length === 0) {
+    return <WelcomeView onPair={() => setPairing(true)} error={error} />
   }
 
   if (selected === undefined) {
@@ -218,7 +204,6 @@ export function App(): React.JSX.Element {
       <>
         <ErrorBanner message={error} onDismiss={() => setError(undefined)} />
         <DeviceListView
-          hub={hub}
           devices={devices}
           onError={setError}
           onPair={() => setPairing(true)}
@@ -282,7 +267,6 @@ export function App(): React.JSX.Element {
 
       {menuOpen && (
         <Sidebar
-          hub={hub}
           devices={devices}
           current={selected}
           page={page}
@@ -322,49 +306,33 @@ function ErrorBanner({
   )
 }
 
-function TokenPrompt({
-  onSubmit,
+/**
+ * Der Einstieg, solange nichts gekoppelt ist.
+ *
+ * Vorher stand hier die Abfrage nach dem Hub-Token. Sie ist mit der Registry
+ * auf der NAS weggefallen: es gibt kein Geheimnis mehr, das für alle Rechner
+ * zugleich gilt — gekoppelt wird bei jedem einzeln.
+ */
+function WelcomeView({
   onPair,
   error,
 }: {
-  onSubmit: (token: string) => void
   onPair: () => void
   error: string | undefined
 }): React.JSX.Element {
-  const [value, setValue] = useState('')
-
   return (
-    <form
-      className="token-prompt"
-      onSubmit={(event) => {
-        event.preventDefault()
-
-        if (value.trim().length > 0) {
-          onSubmit(value.trim())
-        }
-      }}
-    >
+    <div className="token-prompt">
       <h1>RemoteDesktop</h1>
-      <p>Hub-Token eingeben. Es steht in der <code>devices.json</code> auf der NAS.</p>
+      <p>
+        Noch kein Gerät gekoppelt. Am Rechner den Kopplungscode anzeigen lassen und hier
+        eintippen — oder den QR-Code scannen.
+      </p>
 
       {error !== undefined && <p className="error-text">{error}</p>}
 
-      <input
-        type="password"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        placeholder="Hub-Token"
-        autoCapitalize="off"
-        autoCorrect="off"
-        spellCheck={false}
-      />
-      <button type="submit">Anmelden</button>
-
-      {/* Der Weg ohne Hub: direkt am Rechner koppeln. Er löst den oberen ab,
-          sobald alle Geräte gekoppelt sind (Phase 12). */}
-      <button type="button" className="secondary" onClick={onPair}>
+      <button type="button" onClick={onPair}>
         Gerät koppeln
       </button>
-    </form>
+    </div>
   )
 }

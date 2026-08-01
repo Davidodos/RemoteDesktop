@@ -1,0 +1,37 @@
+# Dockhand-Stack "remotedesktop" auf der NAS.
+# Ablage: /volume1/docker/dockhand/data/stacks/NAS/remotedesktop/docker-compose.yml
+# (root-owned → Änderungen über die Dockhand-Web-UI)
+
+services:
+  remotedesktop-waker:
+    build:
+      context: /volume1/docker/remotedesktop
+      dockerfile: waker/Dockerfile
+    container_name: remotedesktop-waker
+    restart: unless-stopped
+
+    # Pflicht, und zwar aus zwei Gründen: ohne host-Netz landet das
+    # WOL-Magic-Packet im Docker-Netz statt im LAN, und die Standort-Kennung
+    # käme aus der ARP-Tabelle der Docker-Bridge statt aus der des LANs.
+    network_mode: host
+
+    environment:
+      - WAKER_PORT=3080
+      - CLIENTS_PATH=/config/clients.json
+      - BROADCAST_ADDRESS=192.168.178.255
+      # Aus "tailscale cert" auf der NAS. Ohne das ist der Waker nur im
+      # Klartext erreichbar, und die App (https) darf ihn nicht ansprechen.
+      - CERTIFICATE_PATH=/config/cert.crt
+      - KEY_PATH=/config/cert.key
+
+    volumes:
+      # Nur öffentliche Schlüssel gekoppelter Geräte. Beschreibbar, weil die
+      # Kopplung hineinschreibt — anders als die alte devices.json, die von
+      # Hand gepflegt wurde und die Agent-Tokens aller Rechner enthielt.
+      - /volume1/docker/remotedesktop/waker-config:/config
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

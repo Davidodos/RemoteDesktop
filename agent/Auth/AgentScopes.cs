@@ -35,6 +35,13 @@ public static class AgentScopes
         ("/ws/input", Input),
         ("/api/media", Media),
         ("/api/power", Power),
+
+        // Kein eigenes Recht: ein Update tauscht den Agent aus und startet ihn
+        // neu — das ist derselbe Eingriff, den 'power' ohnehin erlaubt, nur
+        // harmloser. Ein siebtes Recht hätte dagegen jedes bereits gekoppelte
+        // Gerät ausgesperrt, weil in dessen clients.json-Eintrag nur die sechs
+        // von damals stehen.
+        ("/api/update", Power),
         ("/api/actions", Actions),
         ("/api/wol", Wake)
     ];

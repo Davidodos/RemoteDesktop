@@ -1,0 +1,116 @@
+# Eine neue Fassung herausbringen ist ab hier ein `git tag v1.2.0 && git push --tags`.
+#
+# Das Release enthält alles, was zusammengehört:
+#   RemoteDesktopAgent.exe   — der Dienst für Windows
+#   manifest.json(.sig)      — was der Agent prüft, bevor er sich austauscht
+#   remotedesktop.apk        — die Android-App
+#
+# Der private Signaturschlüssel liegt ausschließlich als Repository-Secret.
+# Erzeugt wird das Paar einmal mit `node scripts/release-key.mjs`.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Fassung aus dem Tag lesen
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # ---- Oberfläche ----------------------------------------------------
+      # Sie steckt in beiden Clients: das Windows-Fenster kopiert app/dist
+      # mit, die APK bekommt sie über `cap sync`.
+      - name: Oberfläche bauen
+        run: |
+          npm --prefix app ci
+          npm --prefix app run build
+
+      # ---- Agent ---------------------------------------------------------
+      # Self-contained und als eine Datei: der Zielrechner soll kein .NET
+      # installiert haben müssen, und das Tausch-Skript kennt nur eine Datei.
+      - name: Agent bauen
+        run: |
+          dotnet publish agent/RemoteDesktopAgent.csproj \
+            -c Release -r win-x64 --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:Version=${{ steps.version.outputs.value }} \
+            -o publish/agent
+
+      - name: Manifest unterschreiben
+        env:
+          RELEASE_PRIVATE_KEY: ${{ secrets.RELEASE_PRIVATE_KEY }}
+        run: |
+          mkdir -p publish/release
+          cp publish/agent/RemoteDesktopAgent.exe publish/release/
+          node scripts/sign-manifest.mjs \
+            publish/release/RemoteDesktopAgent.exe \
+            "${{ steps.version.outputs.value }}" \
+            "$(grep -oP 'Protocol\s*=\s*\K\d+' agent/Services/AgentVersion.cs | head -1)" \
+            publish/release
+
+      # ---- Android -------------------------------------------------------
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Keystore auspacken
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        # Ohne Keystore gibt es nur eine Debug-APK, und die lässt sich nicht
+        # über eine installierte Release-Fassung drüberlegen. Deshalb wird das
+        # Fehlen hier laut, statt still eine unbrauchbare Datei anzuhängen.
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 fehlt." >&2
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > clients/android/android/release.keystore
+
+      - name: APK bauen
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          npm --prefix clients/android ci
+          npx --prefix clients/android cap sync android
+          cd clients/android/android
+          ./gradlew assembleRelease \
+            -PversionName="${{ steps.version.outputs.value }}" \
+            -PversionCode="$GITHUB_RUN_NUMBER" \
+            -Pandroid.injected.signing.store.file=$PWD/release.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          cp app/build/outputs/apk/release/app-release.apk \
+             "$GITHUB_WORKSPACE/publish/release/remotedesktop.apk"
+
+      - name: Release anlegen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            publish/release/RemoteDesktopAgent.exe
+            publish/release/manifest.json
+            publish/release/manifest.json.sig
+            publish/release/remotedesktop.apk

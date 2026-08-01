@@ -58,6 +58,22 @@ export interface Transport {
 
   /** Der Bildstrom des JPEG-Wegs. */
   screenStream(monitor: number, handlers: ChannelHandlers): Channel
+
+  /**
+   * Verwirft den gemerkten Ausweis, sodass der nächste Aufruf sich neu anmeldet.
+   *
+   * Gebraucht seit dem Selbst-Update: ein Neustart des Agents wirft alle
+   * Sitzungen weg, weil sie nur in seinem Arbeitsspeicher liegen. Der Client
+   * merkt davon nichts — er hat ein Token, das eben noch galt, und würde damit
+   * endlos weiterreden. Bei den REST-Aufrufen fängt das der 401-Anlauf in
+   * `direct.ts` ab; ein WebSocket bekommt keinen Statuscode, er wird einfach
+   * geschlossen. Deshalb muss die Ebene darüber sagen können: hol dir einen
+   * neuen.
+   *
+   * Freiwillig, weil nicht jeder Transport einen Ausweis hat, der ablaufen
+   * kann — ein Pre-Shared-Token wird nie ungültig.
+   */
+  reauthenticate?(): void
 }
 
 /**

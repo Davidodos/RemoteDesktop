@@ -1,6 +1,5 @@
 import { getPlatform } from '../platform/index.ts'
 
-const TOKEN_KEY = 'remotedesktop.hubToken'
 const DEVICES_KEY = 'remotedesktop.devices'
 const CLIENT_KEY = 'remotedesktop.clientKey'
 const LAST_DEVICE_KEY = 'remotedesktop.lastDevice'
@@ -13,8 +12,11 @@ const DEFAULT_MONITOR_PREFIX = 'remotedesktop.monitor.'
  *
  * Wo es tatsächlich landet, entscheidet die Plattformschicht: im Browser der
  * localStorage, unter Android die Preferences. Alles, was ein Geheimnis ist —
- * Tokens heute, Geräteschlüssel ab Phase 10 — geht in den Schlüsselspeicher,
- * weil die anderen Plattformen dafür etwas Eigenes anbieten.
+ * die Geräte samt Zugangsdaten und der eigene Schlüssel — geht in den
+ * Schlüsselspeicher, weil die anderen Plattformen dafür etwas Eigenes anbieten.
+ *
+ * Das Hub-Token ist mit Phase 14 entfallen: es gab kein einzelnes Geheimnis
+ * mehr, das für alle Rechner zugleich gilt.
  */
 function read(key: string): string | undefined {
   return getPlatform().storage.get(key)
@@ -47,9 +49,6 @@ function writeSecret(name: string, value: string | undefined): void {
 }
 
 export const storage = {
-  getHubToken: (): string | undefined => readSecret(TOKEN_KEY),
-  setHubToken: (token: string | undefined): void => writeSecret(TOKEN_KEY, token),
-
   /**
    * Die Geräte, die dieses Handy selbst kennt, als JSON — ausgewertet in
    * `deviceSources.ts`. Sie enthalten Zugangsdaten, deshalb der

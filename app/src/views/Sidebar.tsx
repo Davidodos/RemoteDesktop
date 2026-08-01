@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { HubClient } from '../lib/hubClient.ts'
+import { probeAll } from '../lib/reachability.ts'
 import type { Device, DeviceStatus } from '../lib/types.ts'
 import {
   type IconComponent,
@@ -29,9 +29,6 @@ const PAGES: { id: Page; label: string; icon: IconComponent }[] = [
 ]
 
 interface Props {
-  /** Fehlt, solange nur selbst gekoppelte Geräte da sind — dann gibt es keinen
-   *  Online-Zustand abzufragen. */
-  hub: HubClient | undefined
   devices: Device[]
   current: Device
   page: Page
@@ -41,14 +38,13 @@ interface Props {
 }
 
 /**
- * Die Seitenleiste hinter dem Burger-Menü: verbundenes Gerät, alle Geräte des
- * Hubs und die eigenständigen Seiten.
+ * Die Seitenleiste hinter dem Burger-Menü: verbundenes Gerät, alle bekannten
+ * Geräte und die eigenständigen Seiten.
  *
  * Der Online-Zustand wird hier selbst abgefragt statt in der App gehalten — die
  * Leiste ist meist zu, und dann muss auch nichts nachgesehen werden.
  */
 export function Sidebar({
-  hub,
   devices,
   current,
   page,
@@ -59,13 +55,10 @@ export function Sidebar({
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
 
   const refresh = useCallback((): void => {
-    hub
-      ?.getStatuses()
-      .then(setStatuses)
-      // Ein fehlgeschlagener Online-Check ist kein Grund für eine Meldung —
-      // die Geräteliste selbst steht ja da.
-      .catch(() => undefined)
-  }, [hub])
+    // Ein fehlgeschlagener Online-Check ist kein Grund für eine Meldung — die
+    // Geräteliste selbst steht ja da.
+    probeAll(devices).then(setStatuses, () => undefined)
+  }, [devices])
 
   useEffect(() => {
     refresh()

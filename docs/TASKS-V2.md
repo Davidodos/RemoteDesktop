@@ -50,8 +50,9 @@ zu beginnen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 31.07.2026: **249 grün** |
-| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **259 grün** |
+| App-Tests | `cd app && npm test` — Stand 01.08.2026: **290 grün** |
+| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 01.08.2026: **310 grün** |
+| Waker-Tests | `cd waker && npm test` — Stand 01.08.2026: **69 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Android-Client | `cd clients/android && npm run apk` — baut eine echte APK; Toolchain-Einrichtung in `clients/android/README.md` |
 | Typprüfung | `cd app && npx tsc -b` |
@@ -521,7 +522,7 @@ schickt nie eine Kommandozeile. Details in `docs/PLAN-V2.md`, Abschnitt 5.
 
 ## Phase 14 — Updates über GitHub, Hub zu `waker`
 
-**Status:** offen
+**Status:** erledigt (01.08.2026)
 **Tor:** nein
 **Aufwand:** 5 Tage
 
@@ -547,20 +548,121 @@ schickt nie eine Kommandozeile. Details in `docs/PLAN-V2.md`, Abschnitt 5.
 
 ### Abnahme
 
-- [ ] Beide Testläufe grün
-- [ ] Tests belegen: manipuliertes Manifest wird abgelehnt · gleiche `siteId`
-      wird gefunden, fremde nicht · kein Kandidat → Knopf aus, kein Fehler
-- [ ] Tests belegen: nach einem Abriss meldet sich der Client neu an, statt mit
-      dem alten Token weiterzureden · die Wiederholversuche geben irgendwann auf,
-      statt endlos zu laufen
-- [ ] `waker/` enthält keine Geräteliste mehr
+- [x] Beide Testläufe grün — Agent **310 statt 259**, App **290 statt 249**,
+      dazu der neue Waker mit **69**. `npx tsc -b --force` sauber,
+      `npm run build` läuft durch, `desktop/` baut mit 0 Warnungen. **Ein**
+      bestehender Test wurde geändert, siehe Notizen
+- [x] Tests belegen: manipuliertes Manifest wird abgelehnt
+      (`ManifestVerifierTests.Ein_manipuliertes_Manifest_faellt_durch`, dazu
+      fremder Schlüssel, fehlende Unterschrift und der Auslieferungszustand
+      ohne Schlüssel) · gleiche `siteId` wird gefunden, fremde nicht
+      (`wake.test.ts`: „ein Waker mit derselben Kennung wird gefunden" /
+      „ein Waker aus einem fremden Netz wird nicht gefunden") · kein Kandidat →
+      Knopf aus, kein Fehler („ohne Kandidat gibt es keinen Knopf und keinen
+      Fehler"; in `DeviceListView` ist der Knopf dann `disabled` mit der
+      Begründung aus `explainMissingCandidate`)
+- [x] Tests belegen: nach einem Abriss meldet sich der Client neu an
+      (`inputChannel.reconnect.test.ts`: „ein Versuch, der nie zustande kam,
+      führt zu einer neuen Anmeldung" — und die Gegenprobe „eine stehende
+      Verbindung wird nicht grundlos neu angemeldet") · die Wiederholversuche
+      geben auf („die Wiederholversuche geben irgendwann auf", „nach dem
+      Aufgeben wird nicht weiter versucht", „ein Netzwechsel setzt den Zähler
+      zurück")
+- [x] `waker/` enthält keine Geräteliste mehr — `grep -rn "devices" waker/src`
+      trifft nur Kommentare, einen Testnamen und die Zeile in `config.ts`, die
+      erklärt, dass es sie nicht mehr gibt. Die sieben Routen sind `/info`,
+      `/wol`, `/pair/code`, `/pair`, `/session/challenge`, `/session`,
+      `/clients/{id}`. `routes.test.ts` verlangt für `/api/devices`,
+      `/api/devices/status` und `/api/wol/pc` ausdrücklich 404 — damit fällt
+      auch eine später versehentlich ergänzte Liste auf
+- [x] Nicht gefordert, aber gebaut: die APK baut mit dem neuen
+      `AppUpdate`-Plugin durch (`npm run apk`, 35 MB);
+      `REQUEST_INSTALL_PACKAGES` steht im Manifest der fertigen Datei, und
+      `AppUpdatePlugin` wie `ApkInstaller` liegen im DEX
 - [ ] `offen: Hardware` — echter Weckvorgang, Selbst-Update auf dem PC, und der
       Agent-Neustart bei laufender App: die Sitzung muss von allein
       zurückkommen
 
 ### Notizen
 
-_(leer)_
+- **Der Release-Schlüssel ist absichtlich leer.** `ReleaseKeys.PublicKey` steht
+  im Repo auf `""`, und damit ist das Selbst-Update aus — der Agent sagt das
+  beim Start im Log. Anders geht es nicht: der öffentliche Schlüssel muss
+  einkompiliert sein, und den privaten dazu darf es hier nirgends geben. Wer
+  Releases baut, erzeugt das Paar einmal mit `node scripts/release-key.mjs`.
+- **Node unterschreibt, .NET prüft — das ist geprüft.**
+  `ManifestVerifierTests.Ein_Manifest_aus_dem_Signierskript_wird_angenommen`
+  hält Bytes und Unterschrift, die tatsächlich aus `scripts/sign-manifest.mjs`
+  stammen. Beide Seiten müssen IEEE P1363 benutzen (r und s hintereinander,
+  nicht DER); ohne diesen Test fiele eine Abweichung erst beim ersten echten
+  Release auf — und dort sähe sie aus wie ein Angriff. Dasselbe für die
+  Standort-Kennung: `SiteIdentityTests.Der_Agent_rechnet_dieselbe_Kennung_wie_der_Waker`
+  und `waker/src/site.test.ts` („rechnet genauso wie der Agent") halten
+  denselben festen Hashwert.
+- **`/api/update` bekam kein eigenes Recht, sondern `power`.** Ein Update
+  tauscht den Agent aus und startet ihn neu — derselbe Eingriff, den `power`
+  ohnehin erlaubt, nur harmloser. Ein siebtes Recht hätte jedes bereits
+  gekoppelte Gerät ausgesperrt, weil in dessen `clients.json`-Eintrag nur die
+  sechs von damals stehen.
+- **Der Neustart wird am geschlossenen Kanal erkannt, nicht an einem
+  Statuscode.** Ein WebSocket bekommt keinen — er wird einfach zugemacht.
+  `InputChannel` merkt sich deshalb, ob ein Versuch je zustande kam: nur wenn
+  nicht, wird der Ausweis verworfen und neu angemeldet. Bei jedem Abriss neu
+  anzumelden wäre eine unnötige Runde und bei jedem WLAN-Zucken spürbar.
+  Aufgegeben wird nach zehn Versuchen (mit Verdopplung gut eine Minute) —
+  endlos weiterzuversuchen hieße, für immer auf „verbinde…" zu stehen, während
+  der Rechner in Wahrheit aus ist.
+- **Der Waker hat die Kopplung des Agents komplett nachgebaut** — Code,
+  öffentlicher Schlüssel, Challenge-Response, Sitzungstoken, Widerruf, nur in
+  Node. Er musste identisch sein: die App unterschreibt mit demselben Schlüssel
+  und denselben Aufrufen, egal ob am anderen Ende ein PC oder die NAS steht.
+- **Der Waker braucht jetzt ein eigenes Zertifikat.** Das ist beim Umbau
+  aufgefallen und stand so nicht im Umfang: der Hub lieferte die PWA aus, also
+  war er dieselbe Herkunft. Die APK läuft unter `https://localhost`, das
+  Windows-Fenster unter `https://app.remotedesktop.invalid` — von dort lässt
+  kein Browser eine `http://`-Anfrage durch. Der Waker terminiert deshalb
+  selbst (`CERTIFICATE_PATH` / `KEY_PATH` aus `tailscale cert`) und setzt
+  CORS-Kopfzeilen wie der Agent. Ohne Zertifikat startet er trotzdem und sagt
+  es im Log.
+- **Mit dem Hub ist auch der Online-Zustand umgezogen.** Er kam aus
+  `GET /api/devices/status`; ohne Geräteliste gibt es das nicht mehr. Die App
+  fragt jetzt selbst `/health` an jedem Knoten (`lib/reachability.ts`) — der
+  einzige Endpunkt ohne Ausweis. Das ist ohnehin die ehrlichere Auskunft: dass
+  die NAS einen Rechner erreicht, heißt nicht, dass das Handy es auch tut.
+- **Die Hub-Token-Abfrage beim Start ist ersatzlos weg**, dazu `hubClient.ts`,
+  `hubDeviceSource` und `storage.getHubToken`. Der Einstieg ist jetzt für jeden
+  Rechner derselbe: koppeln. Damit erledigt sich der Punkt „`hubClient.ts`
+  benutzt relative Pfade" aus den Aufräumarbeiten am Dokumentende — die Datei
+  gibt es nicht mehr.
+- **Ein bestehender Test wurde geändert:** `capacitor.test.ts` hieß „Selbst-
+  Update steht **bis Phase 14** auf false" und prüfte genau den Zustand, den
+  diese Phase ablöst. Der Test hält jetzt fest, dass die APK es kann; die
+  Begründung im Testkörper ist neu (ein Knopf und ein Systemdialog). Sonst
+  wurde kein `.test.*` aus dem Bestand angefasst — die vier gelöschten
+  Testdateien im Waker (`config.test.ts`, `auth.test.ts`, `probe.test.ts`)
+  prüften Code, den diese Phase entfernt: Gerätekonfiguration, Hub-Token und
+  den Online-Check der Registry. `wol.test.ts` steht unverändert.
+- **Die Android-APK prüft keine eigene Signatur** — sie braucht keine. Android
+  lässt eine APK nur über eine installierte drüber, wenn sie mit demselben
+  Schlüssel unterschrieben ist, und zeigt außerhalb von Google Play immer einen
+  Bestätigungsdialog. Beides zusammen ist stärker als eine selbstgebaute
+  Prüfung. Verglichen wird deshalb nur die Fassung gegen den Release-Tag;
+  `versionName` und `versionCode` kommen im CI aus dem Tag statt aus der
+  `build.gradle`.
+- **`docs/SICHERHEIT.md` fortgeschrieben**, wie der Umfang es verlangt: die
+  Token-Bündelung des Hubs steht jetzt als behobener Befund mit Schwere *hoch*
+  darin, dazu die Signaturkette des Updates, die bewusst schwache Absicherung
+  des Weckens und was zu tun ist, wenn der Release-Schlüssel abhandenkommt.
+  `docs/ARCHITEKTUR.md` und `CLAUDE.md` nennen jetzt den Waker.
+- **Nicht gebaut, gehört zu keiner Phase:** ein Weg, einen Waker zu koppeln,
+  ohne dessen Kopplungscode auf der NAS von Hand zu holen. Steht oben unter
+  „Offene Aufräumarbeiten" nicht — es blockiert nichts und ist einmalig.
+- **Aufgefallen, nicht gebaut (spätere Phasen):** `screenChannel.ts` verbindet
+  nach einem Abriss nicht selbsttätig neu; nach einem Agent-Neustart kommt die
+  Eingabe zurück, das Bild braucht einen Wechsel der Ansicht. Das gehört zum
+  Bild-Weg und nicht zur Sitzungslogik dieser Phase. Ebenso: der Dockhand-Stack
+  auf der NAS zeigt noch auf `hub/Dockerfile` und muss beim nächsten Deploy auf
+  `waker/Dockerfile` umgestellt werden — das ist Hardware-Arbeit.
 
 ---
 
@@ -623,14 +725,6 @@ Bau nur zerfasern. Wer hier etwas erledigt, löscht die Zeile.
 - **`VirtualKeys` kennt keine Satzzeichen.** `"chord": ["LWin", "."]` für den
   Emoji-Picker wird abgelehnt („nennt die unbekannte Taste '.'"). Buchstaben und
   Funktionstasten sind da, `OEM_PERIOD`, `OEM_COMMA` und Verwandte fehlen.
-- **`hubClient.ts` benutzt relative Pfade** (`fetch('/api/devices')`). Das
-  stimmt für die PWA, die vom Hub ausgeliefert wird — im WebView2-Fenster ist
-  die Herkunft aber `https://app.remotedesktop.invalid`, und der Aufruf geht ins
-  Leere. Die App meldet dann „Hub nicht erreichbar. Läuft Tailscale?", obwohl
-  beides stimmt. Am 31.07.2026 auf echter Hardware aufgefallen. Phase 9 hat den
-  Transport eingezogen, `hubClient` aber als einzigen Netzzugriff daran vorbei
-  gelassen. Im Fenster koppelt man deshalb direkt statt über den Hub. **Prüfen,
-  ob Phase 14 das ohnehin erledigt hat** — dort schrumpft der Hub zum `waker`.
 - **Editor für `actions.json` im Windows-Fenster.** Phase 13 hat den
   Schreibweg über das Netz bewusst nicht gebaut — bearbeitet wird die Datei
   heute mit einem Texteditor. Ein Editor im Fenster aus Phase 11 wäre bequemer
@@ -694,5 +788,10 @@ Fehler gefunden, die keine Testsuite zeigen konnte — sie stehen bei den Phasen
   bekommen wie `cert.key` (Schritt 3 der `agent/README.md`). Bisher legt der
   Agent die Datei nur an, ohne Rechte zu setzen, und die Vorgabe zeigt neben die
   `.exe`. Siehe „Aufräumarbeiten zum Schluss".
-- **Phase 14:** echter Weckvorgang, Selbst-Update auf dem PC, und der
-  Agent-Neustart bei laufender App.
+- **Phase 14:** echter Weckvorgang (vom Laptop aus und von der NAS), das
+  Selbst-Update auf dem PC — dazu muss vorher einmal `scripts/release-key.mjs`
+  gelaufen und der öffentliche Schlüssel eingetragen sein —, und der
+  Agent-Neustart bei laufender App: die Sitzung muss von allein zurückkommen.
+  Ebenfalls offen: der Dockhand-Stack zeigt noch auf `hub/Dockerfile` und muss
+  beim nächsten Deploy auf `waker/Dockerfile` umgestellt werden, samt
+  `tailscale cert` für die NAS und einmaligem Koppeln des Wakers.

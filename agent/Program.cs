@@ -80,9 +80,22 @@ builder.Services.AddTransient<ScreenSocket>();
 // Zustand pro Thread, deshalb pro Stream eine eigene Instanz.
 builder.Services.AddTransient<DesktopBinder>();
 
-// Selbst-Update: läuft nur, wenn Agent:HubUrl und Agent:HubToken gesetzt sind.
+// Selbst-Update über GitHub-Releases. Läuft nur, wenn ein Release-Schlüssel
+// einkompiliert ist — ohne den wird nichts geprüft und nichts getauscht.
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton(new ManifestVerifier(ReleaseKeys.PublicKey));
+builder.Services.AddSingleton(provider => new AgentUpdater(
+    provider.GetRequiredService<IHttpClientFactory>(),
+    provider.GetRequiredService<ManifestVerifier>(),
+    settings.UpdateRepository,
+    provider.GetRequiredService<ILogger<AgentUpdater>>()));
 builder.Services.AddHostedService<SelfUpdater>();
+
+// Wecken als Netz-Fähigkeit: ein wacher Rechner weckt den schlafenden im
+// selben Netz. Wo „dasselbe Netz" ist, sagt die Standort-Kennung unten.
+builder.Services.AddSingleton<IMagicPacketSender>(
+    new BroadcastSender(settings.BroadcastAddress));
+builder.Services.AddSingleton<WakeService>();
 
 // Hält die WebRTC-Sitzungen samt ihrer ffmpeg-Prozesse — einer für alle.
 builder.Services.AddSingleton<WebRtcRegistry>();
@@ -97,6 +110,20 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapPairingEndpoints(CertificateLoader.DnsName(certificate), settings.Port);
 app.MapActionEndpoints();
+app.MapWakeEndpoints();
+app.MapUpdateEndpoints();
+
+// Wo dieser Rechner steht. Einmal beim Start ermittelt: die ARP-Abfrage kostet
+// im ungünstigen Fall eine Sekunde, und /api/info wird bei jedem Gerätewechsel
+// abgefragt. Wandert der Rechner in ein anderes Netz, stimmt der Wert bis zum
+// nächsten Start nicht mehr — geweckt wird ohnehin erst nach einem Neustart,
+// und der setzt ihn richtig.
+var site = SiteIdentity.Resolve(NetworkAdapters.List());
+
+app.Logger.LogInformation(
+    "Standort-Kennung {SiteId}, eigene MAC {Mac}.",
+    site.SiteId ?? "unbekannt",
+    site.Mac ?? "unbekannt");
 
 // Hostname und Monitor-Layout — die App baut daraus ihre Monitor-Tabs.
 app.MapGet("/api/info", (InputExecutor executor) =>
@@ -106,6 +133,21 @@ app.MapGet("/api/info", (InputExecutor executor) =>
     return Results.Ok(new
     {
         hostname = Environment.MachineName,
+
+        // Getrennt aktualisierbar heißt: die App trifft irgendwann auf einen
+        // älteren Agent. Bei ungleichem `protocol` sagt sie klar, welche Seite
+        // zu alt ist, statt an einer unbekannten Nachricht zu scheitern.
+        version = AgentVersion.Current,
+        protocol = AgentVersion.Protocol,
+
+        // Damit der Client diesen Rechner später wecken lassen kann: die MAC
+        // gehört ins Magic Packet, die Standort-Kennung sagt, wen er danach
+        // fragen muss. Beide merkt er sich, solange der Rechner wach ist.
+        siteId = site.SiteId,
+        mac = site.Mac,
+
+        // Dieser Rechner kann seinerseits Nachbarn wecken.
+        canWake = true,
         monitors = monitors.Select(m => new
         {
             index = m.Index,
@@ -332,6 +374,15 @@ internal sealed record MediaRequest(string Action, int? Repeat, string? Session)
 /// Was dieser Rechner auf Zuruf tun darf. Fehlt die Datei, gibt es eben keine
 /// Aktionen — das ist der Normalfall auf einem frisch eingerichteten Rechner.
 /// </param>
+/// <param name="BroadcastAddress">
+/// Wohin das Magic Packet geht. Die allgemeine Broadcast-Adresse trifft jedes
+/// Subnetz, das an derselben Leitung hängt; wer ein enges Netz hat, trägt die
+/// eigene ein (etwa <c>192.168.178.255</c>).
+/// </param>
+/// <param name="UpdateRepository">
+/// Wo die Releases liegen, als <c>owner/repo</c>. Konfigurierbar, damit ein
+/// Fork sich aus seinem eigenen Repo aktualisiert statt aus dem fremden.
+/// </param>
 internal sealed record AgentSettings(
     string? Token,
     int Port,
@@ -340,7 +391,9 @@ internal sealed record AgentSettings(
     string FfmpegPath,
     string ClientsPath,
     string IdentityPath,
-    string ActionsPath)
+    string ActionsPath,
+    string BroadcastAddress,
+    string UpdateRepository)
 {
     public static AgentSettings Load(IConfiguration configuration)
     {
@@ -366,9 +419,12 @@ internal sealed record AgentSettings(
         var identityPath = Resolve(configuration["Agent:IdentityPath"] ?? "agentkey.txt");
         var actionsPath = Resolve(configuration["Agent:ActionsPath"] ?? "actions.json");
 
+        var broadcastAddress = configuration["Agent:BroadcastAddress"] ?? "255.255.255.255";
+        var updateRepository = configuration["Agent:UpdateRepository"] ?? "Davidodos/RemoteDesktop";
+
         return new AgentSettings(
             token, port, certificatePath, keyPath, ffmpegPath, clientsPath, identityPath,
-            actionsPath);
+            actionsPath, broadcastAddress, updateRepository);
     }
 
     private static string Resolve(string path) =>

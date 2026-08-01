@@ -1,4 +1,3 @@
-import type { HubClient } from './hubClient.ts'
 import { storage } from './storage.ts'
 import type { Device } from './types.ts'
 
@@ -31,13 +30,6 @@ export function localDeviceSource(): DeviceSource {
   return {
     id: 'lokal',
     list: (): Promise<Device[]> => Promise.resolve(parseDevices(storage.getDevices())),
-  }
-}
-
-export function hubDeviceSource(hub: HubClient): DeviceSource {
-  return {
-    id: 'hub',
-    list: (): Promise<Device[]> => hub.getDevices(),
   }
 }
 
@@ -107,10 +99,8 @@ function toDevice(entry: unknown): Device[] {
     return []
   }
 
-  const { id, name, host, port, token, clientId, fingerprint, canWake } = entry as Record<
-    string,
-    unknown
-  >
+  const { id, name, host, port, token, clientId, fingerprint, canWake, mac, siteId, waker } =
+    entry as Record<string, unknown>
 
   if (typeof id !== 'string' || id.length === 0 || typeof host !== 'string' || host.length === 0) {
     return []
@@ -139,6 +129,11 @@ function toDevice(entry: unknown): Device[] {
       ...(paired ? { clientId: clientId as string } : {}),
       ...(typeof fingerprint === 'string' && fingerprint.length > 0 ? { fingerprint } : {}),
       canWake: canWake === true,
+      // Standort und MAC merkt sich die App, solange der Rechner wach ist —
+      // ohne sie kann ihn später niemand wecken (siehe `wake.ts`).
+      ...(typeof mac === 'string' && mac.length > 0 ? { mac } : {}),
+      ...(typeof siteId === 'string' && siteId.length > 0 ? { siteId } : {}),
+      ...(waker === true ? { waker: true } : {}),
     },
   ]
 }

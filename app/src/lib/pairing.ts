@@ -13,12 +13,22 @@ import type { Device } from './types.ts'
  * anderen — das ist der ganze Grund, warum es kein geteiltes Token mehr gibt.
  */
 
-/** Was der Agent nach erfolgreicher Kopplung zurückmeldet. */
+/**
+ * Was die Gegenseite nach erfolgreicher Kopplung zurückmeldet.
+ *
+ * Zwei Arten von Gegenstelle antworten hier: ein Agent nennt seinen Rechnernamen
+ * und den Fingerabdruck seines Schlüssels, ein Waker nur seine Rolle und den
+ * Standort. Deshalb ist außer `clientId` alles freiwillig.
+ */
 interface PairResponse {
   clientId: string
-  scopes: string[]
-  hostname: string
-  agentFingerprint: string
+  scopes?: string[]
+  hostname?: string
+  agentFingerprint?: string
+  /** `waker` bei einem Knoten, der nur wecken kann. */
+  role?: string
+  siteId?: string
+  canWake?: boolean
 }
 
 export interface PairTarget {
@@ -71,17 +81,27 @@ export async function pairWithAgent(target: PairTarget): Promise<Device> {
     throw new PairingError(describeFailure(cause, target.host), { cause })
   }
 
+  const waker = response.role === 'waker'
+
   return {
     // Der Fingerabdruck des Agent-Schlüssels als Kennung: er bleibt gleich,
     // auch wenn der Rechner umbenannt wird oder eine andere Adresse bekommt.
-    id: response.agentFingerprint,
-    name: response.hostname,
+    // Ein Waker hat keinen — dort tut es der Name, unter dem er erreichbar ist.
+    id: response.agentFingerprint ?? target.host,
+    // Ein Waker nennt keinen Rechnernamen; sein MagicDNS-Name ist das, was der
+    // Nutzer eingetippt hat und wiedererkennt.
+    name: response.hostname ?? target.host,
     host: target.host,
     port: target.port,
     clientId: response.clientId,
-    fingerprint: response.agentFingerprint,
-    // Wecken kann nur, wer die MAC kennt — das ist bis Phase 14 der Hub.
-    canWake: false,
+    ...(response.agentFingerprint === undefined
+      ? {}
+      : { fingerprint: response.agentFingerprint }),
+    ...(waker ? { waker: true } : {}),
+    ...(response.siteId === undefined ? {} : { siteId: response.siteId }),
+    // Jeder Agent kann seit Phase 14 Nachbarn wecken, ein Waker kann sonst
+    // nichts. Ältere Agents melden das Feld nicht — dann eben nicht.
+    canWake: response.canWake ?? false,
   }
 }
 

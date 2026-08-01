@@ -285,8 +285,10 @@ describe('was die APK kann und die PWA nicht', () => {
     expect(capabilities.physicalKeyboard).toBe(false)
   })
 
-  it('Selbst-Update steht bis Phase 14 auf false', () => {
-    expect(capacitorPlatform(attrappe().plugins, new Map()).capabilities.selfUpdate).toBe(false)
+  it('Selbst-Update kann sie seit Phase 14', () => {
+    // Ein Knopf und ein Systemdialog: stiller lässt Android es außerhalb von
+    // Google Play nicht zu.
+    expect(capacitorPlatform(attrappe().plugins, new Map()).capabilities.selfUpdate).toBe(true)
   })
 
   it('sie heißt capacitor und kennt keinen Rechnernamen', () => {

@@ -1,3 +1,4 @@
+import { findLatestApk, isDifferentVersion } from './appUpdate.ts'
 import { PlatformError } from './errors.ts'
 import type {
   Capabilities,
@@ -43,11 +44,23 @@ interface SessionServicePlugin {
   stop(): Promise<void>
 }
 
+/** Das zweite eigene Plugin: Fassung ablesen und eine APK installieren. */
+interface AppUpdatePlugin {
+  current(): Promise<{ version: string }>
+  install(options: { url: string }): Promise<void>
+}
+
 export interface CapacitorPlugins {
   preferences: PreferencesPlugin
   clipboard: ClipboardPlugin
   barcode: BarcodeScannerPlugin
   session: SessionServicePlugin
+  /**
+   * Freiwillig: eine APK, die noch ohne dieses Plugin gebaut wurde, soll
+   * weiterlaufen und dann eben sagen, dass sie sich nicht selbst aktualisieren
+   * kann — statt beim Start an einem fehlenden Plugin zu scheitern.
+   */
+  appUpdate?: AppUpdatePlugin
 }
 
 /**
@@ -128,8 +141,10 @@ const capabilities: Capabilities = {
   // Dafür gibt es den Vordergrunddienst — das ist der Grund für die APK.
   backgroundSession: true,
 
-  // Kommt mit `PackageInstaller` und den GitHub-Releases in Phase 14.
-  selfUpdate: false,
+  // Ein Knopf und ein Systemdialog: außerhalb von Google Play zeigt Android
+  // **immer** eine Rückfrage, bevor eine APK installiert wird. Stiller geht es
+  // nicht, und das ist auch gut so.
+  selfUpdate: true,
 
   // Am Handy meldet `keydown` nur 229, und die Systemtastatur verdeckt die
   // halbe Oberfläche. Es bleibt bei der eigenen Bildschirmtastatur.
@@ -149,16 +164,54 @@ function clipboardAccess(plugins: CapacitorPlugins): ClipboardAccess {
   }
 }
 
-const update: UpdateService = {
-  check(): Promise<UpdateInfo | undefined> {
-    return Promise.resolve(undefined)
-  },
+/**
+ * Selbst-Update der APK über dieselben GitHub-Releases wie der Agent.
+ *
+ * Es bleibt bei einem Knopf **und** einem Systemdialog — außerhalb von Google
+ * Play lässt Android nichts anderes zu, und die App braucht dafür
+ * `REQUEST_INSTALL_PACKAGES`. Was den Vorgang absichert, ist nicht eine eigene
+ * Prüfung, sondern die Signatur: Android lässt eine APK nur über eine
+ * installierte drüber, wenn sie mit demselben Schlüssel unterschrieben ist.
+ */
+function updateService(plugins: CapacitorPlugins): UpdateService {
+  return {
+    async check(): Promise<UpdateInfo | undefined> {
+      if (plugins.appUpdate === undefined) {
+        return undefined
+      }
 
-  install(): Promise<void> {
-    return Promise.reject(
-      new PlatformError('Die App holt sich Updates noch nicht selbst — Phase 14 bringt das.'),
-    )
-  },
+      const angebot = await findLatestApk(async (url) => {
+        const response = await fetch(url, { cache: 'no-store' })
+
+        if (!response.ok) {
+          throw new PlatformError(`GitHub antwortete mit HTTP ${response.status}.`)
+        }
+
+        return await response.json()
+      })
+
+      if (angebot === undefined) {
+        return undefined
+      }
+
+      const installiert = await plugins.appUpdate
+        .current()
+        .then(({ version }) => version)
+        // Ohne die eigene Fassung wird angeboten statt geschwiegen: eine
+        // angebotene Aktualisierung ist harmloser als eine verschwiegene.
+        .catch(() => undefined)
+
+      return isDifferentVersion(angebot.version, installiert) ? angebot : undefined
+    },
+
+    async install(update: UpdateInfo): Promise<void> {
+      if (plugins.appUpdate === undefined) {
+        throw new PlatformError('Diese Fassung der App kann sich nicht selbst aktualisieren.')
+      }
+
+      await plugins.appUpdate.install({ url: update.url })
+    },
+  }
 }
 
 /**
@@ -241,7 +294,7 @@ export function capacitorPlatform(
      */
     keystore: store,
     capabilities,
-    update,
+    update: updateService(plugins),
     clipboard: clipboardAccess(plugins),
     qr: qrScanner(plugins),
     session: sessionKeepAlive(plugins),
@@ -269,6 +322,7 @@ async function registerCapacitorPlugins(): Promise<CapacitorPlugins> {
     clipboard: registerPlugin<ClipboardPlugin>('Clipboard'),
     barcode: registerPlugin<BarcodeScannerPlugin>('CapacitorBarcodeScanner'),
     session: registerPlugin<SessionServicePlugin>('SessionService'),
+    appUpdate: registerPlugin<AppUpdatePlugin>('AppUpdate'),
   }
 }
 

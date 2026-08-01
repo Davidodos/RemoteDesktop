@@ -388,31 +388,88 @@ ersten, der wirklich Bilder liefert: `h264_nvenc` (NVIDIA), `h264_qsv` (Intel),
 `h264_amf` (AMD), `libx264` (CPU). Welcher es geworden ist, steht in der
 Statistik-Anzeige der App.
 
-## Selbst-Update (optional)
+## Selbst-Update über GitHub-Releases
 
-Ist der Hub eingetragen, prüft der Agent **15 Sekunden nach jedem Start**, ob
-auf der NAS eine neuere Datei liegt, lädt sie, vergleicht die SHA-256-Summe,
-tauscht sich selbst aus und startet neu — alles ohne Zutun. Danach wird nicht
-mehr geprüft: ein laufender Agent soll sich nicht mitten in einer Sitzung
-wegtauschen, und der Weg zu einer neuen Version ist ohnehin ein Neustart. Die
-Datei `RemoteDesktopAgent.exe.update` merkt sich die zuletzt versuchte Version
-und verhindert eine Neustartschleife, falls der Tausch scheitert.
+Der Agent prüft **15 Sekunden nach jedem Start**, ob im jüngsten Release des
+Repositorys eine andere Fassung liegt, lädt sie, und tauscht sich selbst aus.
+Danach wird nicht mehr von allein geprüft: ein laufender Agent soll sich nicht
+mitten in einer Sitzung wegtauschen, und der Weg zu einer neuen Fassung ist
+ohnehin ein Neustart. Wer nicht warten will, drückt in der App auf
+*Ein/Aus → Auf Updates prüfen* (`POST /api/update`).
 
-Ohne diese beiden Zeilen bleibt das Update aus:
+Die Datei `RemoteDesktopAgent.exe.update` merkt sich die zuletzt versuchte
+Fassung und verhindert eine Neustartschleife, falls der Tausch scheitert. Die
+alte Fassung bleibt als `RemoteDesktopAgent.exe.old` liegen — der Weg zurück
+ist ein Umbenennen.
+
+### Warum eine Signatur und nicht nur eine Prüfsumme
+
+Ein Hash aus derselben Quelle wie die Datei schützt gegen einen abgebrochenen
+Download, nicht gegen ein übernommenes GitHub-Konto: wer die Datei austauschen
+kann, kann auch die Prüfsumme daneben austauschen. Der Agent hat vollständige
+Kontrolle über den Rechner — das rechtfertigt eine echte Signatur.
+
+`manifest.json` ist deshalb mit ECDSA P-256 unterschrieben. Geprüft wird gegen
+einen öffentlichen Schlüssel, der **in den Agent kompiliert** ist; der private
+liegt ausschließlich als Repository-Secret.
+
+**Im Auslieferungszustand ist der Schlüssel leer, und damit ist das
+Selbst-Update aus.** Der Agent sagt das beim Start im Log. Einrichten:
+
+```bash
+node scripts/release-key.mjs
+```
+
+Der öffentliche Teil kommt nach `agent/Services/ReleaseManifest.cs` zu
+`ReleaseKeys.PublicKey`, der private als Repository-Secret
+`RELEASE_PRIVATE_KEY` — und wird danach gelöscht.
+
+### Wo die Releases herkommen
+
+Vorgabe ist das Repository dieses Projekts. Ein Fork trägt sein eigenes ein,
+damit er sich nicht aus dem fremden aktualisiert:
 
 ```jsonc
 {
   "Agent": {
-    "HubUrl": "http://nas:3080",
-    "HubToken": "<hubToken aus devices.json>"
+    "UpdateRepository": "<owner>/RemoteDesktop"
   }
 }
 ```
 
-Veröffentlicht wird, indem die neue `RemoteDesktopAgent.exe` auf der NAS unter
-`/volume1/docker/remotedesktop/dist/` abgelegt wird — der Hub reicht sie über
-`/api/agent/manifest` und `/api/agent/download` weiter, beides hinter dem
-Hub-Token.
+Veröffentlicht wird mit einem Tag: `git tag v1.2.0 && git push --tags`. Der
+Rest läuft in `.github/workflows/release.yml` — Agent bauen, Manifest
+unterschreiben, APK bauen, alles ans Release hängen.
+
+## Wecken und Standort
+
+Jeder Agent kann Nachbarn im selben Netz wecken (`POST /api/wol`, Recht
+`wake`). Ein schlafender Rechner führt keine Software aus, also braucht es
+immer ein waches Gerät im selben Netzsegment — ein Handy im Mobilfunknetz kann
+das grundsätzlich nicht.
+
+`/api/info` meldet dafür zwei Angaben:
+
+| Feld | Bedeutung |
+|---|---|
+| `mac` | die eigene MAC — sie gehört ins Magic Packet |
+| `siteId` | `sha256` der MAC des Standard-Gateways: in welchem Netz der Rechner steht |
+
+Die App merkt sich beides, solange der Rechner wach ist, und sucht beim Wecken
+einen Knoten mit **derselben** `siteId`. Wandert der Rechner an einen anderen
+Ort, meldet er beim nächsten Start eine neue Kennung — ab da wird automatisch
+der Waker dort gefragt. Steht in `siteId` nichts, ließ sich die Gateway-MAC
+nicht ermitteln; dann bleibt der Weckknopf aus.
+
+Broadcast-Ziel einstellen (Vorgabe `255.255.255.255`):
+
+```jsonc
+{
+  "Agent": {
+    "BroadcastAddress": "192.168.178.255"
+  }
+}
+```
 
 ## Neu bauen (nur bei Codeänderungen)
 

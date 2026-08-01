@@ -6,8 +6,8 @@ Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.
 
 **V2-Umbau zur echten App (läuft):** Begründungen in **`docs/PLAN-V2.md`**,
 Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:
-`/naechste-phase`. Stand 31.07.2026: Phasen 9–13 erledigt und am echten Gerät
-durchgeprüft, als Nächstes Phase 14. Liegengebliebenes steht in `TASKS-V2.md`
+`/naechste-phase`. Stand 01.08.2026: Phasen 9–14 erledigt, Phasen 9–13 am
+echten Gerät durchgeprüft; als Nächstes Phase 15. Liegengebliebenes steht in `TASKS-V2.md`
 unter „Aufräumarbeiten zum Schluss" — das wartet bis nach Phase 16 und
 blockiert nichts.
 
@@ -26,7 +26,7 @@ Ausführen lässt sich die APK hier nicht — nur bauen und ihren Inhalt prüfen
 |---|---|---|
 | `agent/` | C# / .NET 8, Windows-Dienst | PC + Laptop, Port 8443 |
 | `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop, zeigt `app/dist` |
-| `hub/` | Node/TS + Express, Docker | NAS, Port 3080 |
+| `waker/` | Node/TS + Express, Docker | NAS, Port 3080 |
 | `app/` | React + Vite, PWA | Handy (Browser/Homescreen) |
 | `clients/android/` | Capacitor + Java, APK | Handy, zeigt `app/dist` |
 
@@ -45,9 +45,12 @@ Ausführen lässt sich die APK hier nicht — nur bauen und ihren Inhalt prüfen
 
 ## NAS-Deployment
 
-Der Hub wird als Dockhand-Stack `remotedesktop` betrieben.
+Der Waker wird als Dockhand-Stack `remotedesktop` betrieben.
 Compose liegt unter `/volume1/docker/dockhand/data/stacks/NAS/remotedesktop/`
 (root-owned → Änderungen über die Dockhand-Web-UI), Build-Kontext zeigt auf
 `/volume1/docker/remotedesktop`.
-Der Container braucht `network_mode: host`, sonst erreicht das WOL-Magic-Packet
-den LAN-Broadcast nicht.
+Der Container braucht `network_mode: host` — sonst erreicht das WOL-Magic-Packet
+den LAN-Broadcast nicht, und die Standort-Kennung käme aus der ARP-Tabelle der
+Docker-Bridge statt aus der des LANs.
+Seit Phase 14 gibt es **keine `devices.json`** mehr: der Waker führt keine
+Geräteliste, liefert keine PWA aus und kennt keine Agent-Tokens.

@@ -110,6 +110,14 @@ class DirectTransport implements Transport {
     return withToken(this.baseUrl + path, query, this.credentials.peek() ?? '')
   }
 
+  /**
+   * Nach einem Neustart des Agents ist das Sitzungstoken weg — es lag nur in
+   * seinem Arbeitsspeicher. Wer das merkt, sagt es hier.
+   */
+  reauthenticate(): void {
+    this.credentials.invalidate()
+  }
+
   inputChannel(handlers: ChannelHandlers): Channel {
     return this.openChannel('/ws/input', {}, handlers, false)
   }

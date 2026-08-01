@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
         // allein — anders als die aus node_modules. Die Anmeldung muss vor
         // super.onCreate() stehen, weil die Brücke dort gebaut wird.
         registerPlugin(SessionServicePlugin.class);
+        registerPlugin(AppUpdatePlugin.class);
 
         super.onCreate(savedInstanceState);
     }

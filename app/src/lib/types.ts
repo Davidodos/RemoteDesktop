@@ -21,13 +21,30 @@ export interface Device {
    * wenn der Rechner umbenannt wird — daran erkennt die App ihn wieder.
    */
   fingerprint?: string
-  /** Ob eine MAC hinterlegt ist und der Hub das Gerät wecken kann. */
+  /**
+   * Ob dieser Knoten seinerseits andere wecken kann. Jeder Agent kann das, ein
+   * Waker kann sonst nichts. Nicht zu verwechseln mit „lässt sich wecken" —
+   * dafür braucht es {@link Device.mac} und {@link Device.siteId}.
+   */
   canWake: boolean
+  /**
+   * Die MAC dieses Rechners, gemerkt aus `/api/info`, solange er wach war.
+   * Sie gehört ins Magic Packet — ohne sie kann ihn niemand wecken.
+   */
+  mac?: string
+  /**
+   * In welchem Netz der Rechner zuletzt stand (`sha256` der Gateway-MAC).
+   * Geweckt werden kann er nur von einem Knoten mit derselben Kennung: ein
+   * Magic Packet kommt über keinen Router.
+   */
+  siteId?: string
+  /** Ein Knoten, der nur wecken kann — die NAS, ein Pi am zweiten Standort. */
+  waker?: boolean
 }
 
 /**
- * Warum ein Gerät nicht erreichbar ist. `dns` heißt: der Hub kennt den Namen
- * nicht — dann liegt es an der NAS und nicht am Rechner.
+ * Warum ein Gerät nicht erreichbar ist. `dns` heißt: der Name ließ sich nicht
+ * auflösen — dann fehlt das Tailscale-DNS und es liegt nicht am Rechner.
  */
 export type OfflineReason = 'dns' | 'unreachable'
 
@@ -51,7 +68,28 @@ export interface Monitor {
 export interface AgentInfo {
   hostname: string
   monitors: Monitor[]
+  /** Fassung des Agents, für die Anzeige. Fehlt bei Agents vor Phase 14. */
+  version?: string
+  /**
+   * Die Sprache, die der Agent spricht. Weicht sie von {@link CLIENT_PROTOCOL}
+   * ab, sagt die App klar, welche Seite zu alt ist — sonst scheitert sie später
+   * an einer Nachricht, die die Gegenseite nicht kennt, und das sieht nach
+   * einem kaputten Rechner aus.
+   */
+  protocol?: number
+  /** Standort-Kennung und MAC, damit dieser Rechner später geweckt werden kann. */
+  siteId?: string
+  mac?: string
+  /** Ob dieser Rechner seinerseits Nachbarn wecken kann. */
+  canWake?: boolean
 }
+
+/**
+ * Die Protokollfassung, die dieser Client spricht. Gegenstück zu
+ * `AgentVersion.Protocol` im Agent — beide werden zusammen erhöht, und nur
+ * dann, wenn eine Änderung die alte Seite nicht mehr versteht.
+ */
+export const CLIENT_PROTOCOL = 1
 
 export type PowerAction = 'sleep' | 'shutdown' | 'restart' | 'lock'
 

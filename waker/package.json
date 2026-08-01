@@ -1,9 +1,9 @@
 {
-  "name": "remotedesktop-hub",
+  "name": "remotedesktop-waker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Geräte-Registry, Wake-on-LAN und PWA-Auslieferung auf der NAS",
+  "description": "Wake-on-LAN und Standort-Kennung im LAN der Zielrechner",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",

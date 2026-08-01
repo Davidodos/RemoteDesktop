@@ -56,6 +56,24 @@ export class AgentClient {
     await this.request(`/api/actions/${encodeURIComponent(id)}/invoke`, { method: 'POST' })
   }
 
+  /**
+   * Lässt diesen Knoten ein Magic Packet an die genannte MAC senden.
+   *
+   * Der Knoten ist nicht das Ziel, sondern der Bote: er steht im Netz des
+   * schlafenden Rechners. Welcher das ist, entscheidet `lib/wake.ts`.
+   */
+  async wake(mac: string): Promise<void> {
+    await this.request('/api/wol', { method: 'POST', body: { mac } })
+  }
+
+  /**
+   * Stößt die Update-Prüfung an. Findet der Agent etwas, tauscht er sich aus
+   * und startet neu — die Antwort kommt vorher, danach gäbe es keine mehr.
+   */
+  async update(): Promise<UpdateReport> {
+    return await this.request<UpdateReport>('/api/update', { method: 'POST' })
+  }
+
   /** Was auf dem Rechner gerade läuft. Leere Liste heißt: nichts. */
   async getMediaSessions(): Promise<MediaSession[]> {
     const { sessions } = await this.request<{ sessions: MediaSession[] }>('/api/media/sessions')
@@ -110,6 +128,15 @@ export class AgentClient {
 
     return cause.serverMessage ?? `${this.device.name} antwortete mit HTTP ${cause.status}.`
   }
+}
+
+/** Was aus `POST /api/update` zurückkommt. */
+export interface UpdateReport {
+  /** `installing`, `uptodate`, `disabled`, `rejected`, … */
+  status: string
+  version?: string
+  /** Ein Satz, den die App unverändert anzeigen kann. */
+  message: string
 }
 
 export class AgentError extends Error {
