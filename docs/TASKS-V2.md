@@ -9,44 +9,19 @@ Begründungen und Alternativen: **`docs/PLAN-V2.md`**. Dieses Dokument sagt nur,
 
 ## Offene Aufräumarbeiten
 
-Kleinkram, der in einer Phase liegengeblieben ist und zu keiner neuen gehört.
-**Zuerst abarbeiten**, bevor eine Phase begonnen wird — sonst fällt er durchs
-Raster, weil die zugehörige Phase schon `erledigt` ist. Erledigtes hier
-löschen, nicht abhaken.
+Kleinkram, der **den Bau der nächsten Phase blockiert**. Steht hier etwas, wird
+es zuerst erledigt. Erledigtes hier löschen, nicht abhaken.
 
-- **`%USERPROFILE%` und Konsorten werden in `args` nicht aufgelöst.** Am
-  31.07.2026 auf dem Gerät gesehen: `explorer.exe` mit
-  `["%USERPROFILE%\\Downloads"]` öffnete „Dokumente" statt „Downloads". Das ist
-  die richtige Folge davon, dass keine Shell im Spiel ist — nur hat man dann
-  keinen Weg, den eigenen Benutzerordner zu benennen. Denkbar: eine kurze,
-  fest verdrahtete Liste von Platzhaltern (`${USERPROFILE}`, `${DESKTOP}`, …),
-  die der Katalog **beim Start** auflöst. Keine allgemeine Expansion, sonst ist
-  die Regel wieder aufgeweicht.
-- **`VirtualKeys` kennt keine Satzzeichen.** `"chord": ["LWin", "."]` für den
-  Emoji-Picker wird abgelehnt („nennt die unbekannte Taste '.'"). Buchstaben und
-  Funktionstasten sind da, `OEM_PERIOD`, `OEM_COMMA` und Verwandte fehlen.
-- **Die App verbindet nach einem Neustart des Agents nicht von selbst wieder.**
-  Beobachtet am 31.07.2026: Agent neu gestartet → die App bleibt getrennt und
-  muss selbst neu gestartet werden. Für einen Dienst, der sich bei jedem
-  Update neu startet (Phase 14), ist das zu wenig.
-- **`hubClient.ts` benutzt relative Pfade** (`fetch('/api/devices')`). Das
-  stimmt für die PWA, die vom Hub ausgeliefert wird — im WebView2-Fenster ist
-  die Herkunft aber `https://app.remotedesktop.invalid`, und der Aufruf geht ins
-  Leere. Die App meldet dann „Hub nicht erreichbar. Läuft Tailscale?", obwohl
-  beides stimmt. Am 31.07.2026 auf echter Hardware aufgefallen. Phase 9 hat den
-  Transport eingezogen, `hubClient` aber als einzigen Netzzugriff daran vorbei
-  gelassen. Kopplung im Fenster funktioniert, der Hub nicht. Phase 14 macht die
-  Datei ohnehin auf.
-- **Editor für `actions.json` im Windows-Fenster.** Phase 13 hat den
-  Schreibweg über das Netz bewusst nicht gebaut — bearbeitet wird die Datei
-  heute mit einem Texteditor. Ein Editor im Fenster aus Phase 11 wäre bequemer
-  und bliebe lokal. Dazu gehört die Frage, ob der Agent die Datei danach neu
-  einliest oder ob ein Neustart bleibt (heute: Neustart, weil die Prüfung sonst
-  auf einen Zeitpunkt rutscht, an dem niemand hinsieht).
+_(nichts offen)_
+
+Alles, was liegengeblieben ist, aber niemanden aufhält, steht am Dokumentende
+unter **„Aufräumarbeiten zum Schluss"**. Dort wird es *nach* Phase 16
+abgearbeitet, nicht vorher.
 
 ## Ablauf je Phase
 
-0. **Aufräumliste oben abarbeiten**, falls dort etwas steht.
+0. **Aufräumliste oben abarbeiten**, falls dort etwas steht. Sie enthält nur,
+   was blockiert; die Sammlung am Dokumentende bleibt bis nach Phase 16 liegen.
 1. **Zustand lesen**: die erste Phase unten, die nicht `erledigt` ist.
 2. **Arbeiten**: nur den Umfang dieser Phase. Kein Vorgriff auf spätere Phasen.
    Fällt unterwegs etwas auf, das nicht dazugehört → unter „Notizen" der Phase
@@ -76,7 +51,7 @@ zu beginnen.
 | | |
 |---|---|
 | App-Tests | `cd app && npm test` — Stand 31.07.2026: **249 grün** |
-| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **254 grün** |
+| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 31.07.2026: **259 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Android-Client | `cd clients/android && npm run apk` — baut eine echte APK; Toolchain-Einrichtung in `clients/android/README.md` |
 | Typprüfung | `cd app && npx tsc -b` |
@@ -279,6 +254,8 @@ Widerruf und Rechten. Grundlage für alles Weitere.
       11 Tests: gleicher Name greift, Groß-/Kleinschreibung und
       Domänen-Suffix egal, ähnlicher Name greift nicht, ohne eigenen
       Rechnernamen wird nichts gesperrt
+- [~] Teilweise bestätigt am 31.07.2026: der Client startet, das
+      Kopplungsfenster zeigt Code und QR, die Selbstverbindungssperre greift
 - [ ] `offen: Hardware` — tatsächlicher Start unter Windows, Tray, Pointer Lock
 
 ### Notizen
@@ -352,8 +329,13 @@ Widerruf und Rechten. Grundlage für alles Weitere.
       `minSdkVersion=26`, `targetSdkVersion=36`, `SessionService` mit
       `foregroundServiceType=0x1` (= `DATA_SYNC`, siehe Notizen), alle drei eigenen
       Klassen im DEX, debug-signiert und damit installierbar
-- [ ] `offen: Hardware` — auf dem Handy gegen die PWA vergleichen: Gesten,
-      Tastatur, H.264-Latenz, Verhalten beim Wegwischen
+- [x] Verhalten beim Wegwischen — **am 31.07.2026 am Gerät bestätigt**:
+      minimieren und über die Benachrichtigung zurück hält die Sitzung;
+      Wegwischen beendet Sitzung und Benachrichtigung. Beides erst nach den drei
+      Nachträgen unten, die dieser Lauf gefunden hat
+- [ ] `offen: Hardware` — Gesten, Bildschirmtastatur und H.264-Latenz am Handy
+      beurteilen. Der Vergleich gegen die PWA entfällt auf Wunsch: es zählt, ob
+      die APK für sich brauchbar ist
 
 ### Notizen
 
@@ -555,14 +537,26 @@ schickt nie eine Kommandozeile. Details in `docs/PLAN-V2.md`, Abschnitt 5.
 - `git mv hub/ waker/`: PWA-Auslieferung, Registry und `agentRelease.ts` raus.
   Übrig: WOL, `siteId`, Kopplung. Multi-Arch-Image
 - `.github/workflows/release.yml`
+- **Die App muss einen Neustart des Agents überstehen.** Heute bleibt sie
+  getrennt und muss selbst neu gestartet werden (am 31.07.2026 auf dem Gerät
+  gesehen). Ein Selbst-Update startet den Agent bei *jedem* Durchlauf neu —
+  ohne selbsttätiges Wiederverbinden wäre die Funktion unbrauchbar. Betroffen
+  ist `lib/inputChannel.ts` (der Kanal, an dem der Verbindungszustand hängt) und
+  die Sitzung darüber: nach einem Neustart ist das alte Sitzungstoken ungültig,
+  es muss also neu über `/api/session/challenge` angemeldet werden
 
 ### Abnahme
 
 - [ ] Beide Testläufe grün
 - [ ] Tests belegen: manipuliertes Manifest wird abgelehnt · gleiche `siteId`
       wird gefunden, fremde nicht · kein Kandidat → Knopf aus, kein Fehler
+- [ ] Tests belegen: nach einem Abriss meldet sich der Client neu an, statt mit
+      dem alten Token weiterzureden · die Wiederholversuche geben irgendwann auf,
+      statt endlos zu laufen
 - [ ] `waker/` enthält keine Geräteliste mehr
-- [ ] `offen: Hardware` — echter Weckvorgang, Selbst-Update auf dem PC
+- [ ] `offen: Hardware` — echter Weckvorgang, Selbst-Update auf dem PC, und der
+      Agent-Neustart bei laufender App: die Sitzung muss von allein
+      zurückkommen
 
 ### Notizen
 
@@ -612,6 +606,42 @@ _(leer)_
 
 ---
 
+## Aufräumarbeiten zum Schluss
+
+Liegengebliebenes, das **niemanden aufhält**. Wird nach Phase 16 abgearbeitet,
+nicht vorher — es blockiert keine Phase, und einzeln eingeschoben würde es den
+Bau nur zerfasern. Wer hier etwas erledigt, löscht die Zeile.
+
+- **`%USERPROFILE%` und Konsorten werden in `args` nicht aufgelöst.** Am
+  31.07.2026 auf dem Gerät gesehen: `explorer.exe` mit
+  `["%USERPROFILE%\\Downloads"]` öffnete „Dokumente" statt „Downloads". Das ist
+  die richtige Folge davon, dass keine Shell im Spiel ist — nur hat man dann
+  keinen Weg, den eigenen Benutzerordner zu benennen. Denkbar: eine kurze,
+  fest verdrahtete Liste von Platzhaltern (`${USERPROFILE}`, `${DESKTOP}`, …),
+  die der Katalog **beim Start** auflöst. Keine allgemeine Expansion, sonst ist
+  die Regel aus Phase 13 wieder aufgeweicht.
+- **`VirtualKeys` kennt keine Satzzeichen.** `"chord": ["LWin", "."]` für den
+  Emoji-Picker wird abgelehnt („nennt die unbekannte Taste '.'"). Buchstaben und
+  Funktionstasten sind da, `OEM_PERIOD`, `OEM_COMMA` und Verwandte fehlen.
+- **`hubClient.ts` benutzt relative Pfade** (`fetch('/api/devices')`). Das
+  stimmt für die PWA, die vom Hub ausgeliefert wird — im WebView2-Fenster ist
+  die Herkunft aber `https://app.remotedesktop.invalid`, und der Aufruf geht ins
+  Leere. Die App meldet dann „Hub nicht erreichbar. Läuft Tailscale?", obwohl
+  beides stimmt. Am 31.07.2026 auf echter Hardware aufgefallen. Phase 9 hat den
+  Transport eingezogen, `hubClient` aber als einzigen Netzzugriff daran vorbei
+  gelassen. Im Fenster koppelt man deshalb direkt statt über den Hub. **Prüfen,
+  ob Phase 14 das ohnehin erledigt hat** — dort schrumpft der Hub zum `waker`.
+- **Editor für `actions.json` im Windows-Fenster.** Phase 13 hat den
+  Schreibweg über das Netz bewusst nicht gebaut — bearbeitet wird die Datei
+  heute mit einem Texteditor. Ein Editor im Fenster aus Phase 11 wäre bequemer
+  und bliebe lokal. Dazu gehört die Frage, ob der Agent die Datei danach neu
+  einliest oder ob ein Neustart bleibt (heute: Neustart, weil die Prüfung sonst
+  auf einen Zeitpunkt rutscht, an dem niemand hinsieht).
+- **`agentkey.txt` per ACL absichern** — steht ausführlich unten unter den
+  Hardware-Punkten. Es ist keine reine Prüfung, sondern eine kleine Änderung:
+  `Agent:IdentityPath` in die `appsettings.json` aufnehmen und auf
+  `C:\ProgramData\RemoteDesktopAgent\` zeigen lassen.
+
 ## Zurückgestellt
 
 Phasen 17–20 (Tailscale ablösen) stehen in `docs/PLAN-V2.md`, Abschnitt 4a und
@@ -619,42 +649,50 @@ Phasen 17–20 (Tailscale ablösen) stehen in `docs/PLAN-V2.md`, Abschnitt 4a un
 
 ## Gesammelte Hardware-Punkte
 
-Was hier nicht prüfbar war und am echten Gerät nachgeholt werden muss:
+Was hier nicht prüfbar war und am echten Gerät nachgeholt werden muss.
 
-- **Phase 10:** Kopplung von Hand durchspielen — am Windows-Rechner einen Code
-  anfordern, ihn im Handy eintippen, danach Bild und Eingabe prüfen. Ebenso:
-  dass `/api/pair/code` von einem anderen Gerät im Tailnet tatsächlich 403
-  liefert (die Loopback-Erkennung ist hier nicht prüfbar).
-- **Phase 11:** Den Client unter Windows tatsächlich starten: Tray-Symbol,
-  Fenster öffnen und verstecken, Pointer Lock im Touchpad, echte Tastatur, und
-  ob die Meldung bei fehlender WebView2-Runtime wirklich kommt.
-- **Phase 11:** Die Selbstverbindungssperre am lebenden Objekt — den Client auf
-  demselben Rechner starten, auf dem der Agent läuft, und prüfen, dass die
-  Auswahl mit einer Meldung endet statt mit einem Bild im Bild.
-- **Phase 11:** Kopplungsfenster gegen den laufenden Agent: Code anzeigen,
-  Geräte auflisten, widerrufen. Die Loopback-Beschränkung des Agents lässt sich
-  hier nicht nachstellen.
-- **Phase 12:** Die gebaute APK auf dem Handy gegen die PWA halten: Gesten,
-  Bildschirmtastatur, H.264-Latenz. Ausdrücklich dazu: einmal wegwischen und
-  prüfen, ob die Benachrichtigung stehen bleibt und die Verbindung danach noch
-  lebt — das ist der ganze Grund für den Vordergrunddienst. (Das *Bauen* ist
-  seit dem 31.07.2026 erledigt, siehe Phase 12.)
-- **Phase 12:** Der QR-Scanner am lebenden Objekt. Er lässt sich erst prüfen,
-  wenn der Aufräumpunkt oben erledigt ist und ein Rechner tatsächlich einen Code
-  anzeigt. Dazu gehört die Kamera-Erlaubnis beim ersten Scan und der Abbruch
-  über die Zurück-Taste.
-- **Phase 12:** Die Benachrichtigungserlaubnis ab Android 13 — ablehnen und
-  prüfen, dass die Sitzung trotzdem startet, statt an der Rückfrage zu hängen.
-- **Phase 13:** Jede Art einmal am laufenden Windows-Rechner auslösen —
-  `process` mit Argumenten, `script`, `keys`, `url`, `sequence`. Besonders
-  `keys`: ob `LWin+P` wirklich die Projektionsleiste öffnet, hängt daran, dass
-  die 30 ms Haltezeit reichen und die Eingabe auf dem richtigen Desktop landet.
-- **Phase 13:** Den Abbruch beim Start provozieren — eine `actions.json` mit
-  einem falschen Pfad hinlegen und prüfen, dass der Dienst sich mit der Meldung
-  im Klartext beendet und nicht still weiterläuft.
-- **Phase 13:** `explorer.exe <adresse>` statt `UseShellExecute` — ob damit
-  tatsächlich der Standardbrowser aufgeht. Hier ist das nicht nachstellbar.
+### Am 31.07.2026 auf PC und Handy bestätigt
+
+Ein voller Durchlauf mit echtem Agent, Windows-Client und der APK. Er hat vier
+Fehler gefunden, die keine Testsuite zeigen konnte — sie stehen bei den Phasen
+12 und 13 in den Notizen. Erledigt und damit hier abgeschlossen:
+
+- **Phase 10:** Kopplung durchgespielt. `/api/pair/code` liefert von einem
+  anderen Gerät im Tailnet tatsächlich 403. **Achtung für spätere Läufe:** vom
+  Rechner selbst muss man `https://localhost:8443` nehmen — über den
+  MagicDNS-Namen kommt auch dort 403, weil die Verbindung über die
+  Tailscale-Schnittstelle geht und damit nicht von der Loopback-Adresse.
+- **Phase 11:** Selbstverbindungssperre am lebenden Objekt — der Client auf dem
+  Rechner des Agents endet mit einer Meldung statt mit einem Bild im Bild.
+- **Phase 11:** Kopplungsfenster gegen den laufenden Agent: Code und QR-Code
+  werden angezeigt.
+- **Phase 12:** QR-Scan am Handy — Kamera-Erlaubnis kommt beim ersten Scan,
+  Rechnername und Code werden korrekt übernommen.
+- **Phase 12:** Benachrichtigungserlaubnis ab Android 13 — die Sitzung startet
+  bei Zustimmung wie bei Ablehnung, die App hängt nicht an der Rückfrage.
+- **Phase 12:** Der Vordergrunddienst hält die Sitzung: minimieren, warten, über
+  die Benachrichtigung zurück — die Verbindung lebt. Wegwischen beendet Sitzung
+  **und** Benachrichtigung.
+- **Phase 13:** Alle fünf Arten am laufenden Rechner ausgelöst — `process` mit
+  Argumenten, `script` samt Rückfrage, `keys` (`LWin+d`, `LWin+s`), `url`,
+  `sequence`. `explorer.exe <adresse>` öffnet tatsächlich den Standardbrowser;
+  die 30 ms Haltezeit reichen für die Kombinationen.
+- **Phase 13:** Der Abbruch beim Start greift — falscher Pfad wie auch `args`
+  als Zeichenkette beenden den Agent mit einer Meldung im Klartext.
+
+### Weiterhin offen
+
+- **Phase 11:** Den Windows-Client vollständig durchgehen: Tray-Symbol, Fenster
+  öffnen und verstecken, Pointer Lock im Touchpad, echte Tastatur, und ob die
+  Meldung bei fehlender WebView2-Runtime wirklich kommt. Bisher ist nur belegt,
+  dass er startet und das Kopplungsfenster zeigt.
+- **Phase 12:** Gesten, Bildschirmtastatur und H.264-Latenz am Handy beurteilen.
+  Der ursprünglich geplante Vergleich gegen die PWA entfällt auf Wunsch — es
+  zählt, ob die APK für sich brauchbar ist.
 - **Phase 10:** `agentkey.txt` enthält den privaten Schlüssel im Klartext. Er
   muss unter `C:\ProgramData\RemoteDesktopAgent\` liegen und dieselben ACLs
   bekommen wie `cert.key` (Schritt 3 der `agent/README.md`). Bisher legt der
-  Agent die Datei nur an, ohne Rechte zu setzen.
+  Agent die Datei nur an, ohne Rechte zu setzen, und die Vorgabe zeigt neben die
+  `.exe`. Siehe „Aufräumarbeiten zum Schluss".
+- **Phase 14:** echter Weckvorgang, Selbst-Update auf dem PC, und der
+  Agent-Neustart bei laufender App.

@@ -6,7 +6,10 @@ Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.
 
 **V2-Umbau zur echten App (läuft):** Begründungen in **`docs/PLAN-V2.md`**,
 Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:
-`/naechste-phase`.
+`/naechste-phase`. Stand 31.07.2026: Phasen 9–13 erledigt und am echten Gerät
+durchgeprüft, als Nächstes Phase 14. Liegengebliebenes steht in `TASKS-V2.md`
+unter „Aufräumarbeiten zum Schluss" — das wartet bis nach Phase 16 und
+blockiert nichts.
 
 Toolchain im Container: `~/.bashrc` setzt `PATH` auf `~/.dotnet` und
 `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` (libicu fehlt, kein root).
