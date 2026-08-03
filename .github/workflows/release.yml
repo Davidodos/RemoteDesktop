@@ -56,6 +56,17 @@ jobs:
             -p:Version=${{ steps.version.outputs.value }} \
             -o publish/agent
 
+      # ---- Windows-Client ------------------------------------------------
+      # Er baut auch auf Linux (EnableWindowsTargeting), nur laufen tut er dort
+      # nicht. Der Installer packt genau diesen Ordner ein.
+      - name: Client bauen
+        run: |
+          dotnet publish desktop/RemoteDesktopClient.csproj \
+            -c Release -r win-x64 --self-contained false \
+            -p:Version=${{ steps.version.outputs.value }} \
+            -o publish/client
+          cd publish && zip -qr client.zip client
+
       - name: Manifest unterschreiben
         env:
           RELEASE_PRIVATE_KEY: ${{ secrets.RELEASE_PRIVATE_KEY }}
@@ -114,3 +125,4 @@ jobs:
             publish/release/manifest.json
             publish/release/manifest.json.sig
             publish/release/remotedesktop.apk
+            publish/client.zip

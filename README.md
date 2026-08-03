@@ -1,0 +1,180 @@
+# RemoteDesktop
+
+Steuere deinen Windows-PC vom Handy. Bild, Maus, Tastatur, Lautstärke,
+Herunterfahren — und selbst geschriebene Aktionen auf Knopfdruck, ohne die App
+überhaupt zu öffnen.
+
+Kein Port am Router, kein Konto bei einem fremden Anbieter, kein Rechner in der
+Mitte, der mitliest. Die Verbindung geht direkt von deinem Handy zu deinem PC.
+
+> **Sprache:** Programm und Doku sind deutsch. English readme:
+> [`README.en.md`](README.en.md).
+
+---
+
+## Was du brauchst
+
+- Einen **Windows-10-** oder **Windows-11-Rechner**, den du steuern willst
+- Ein **Android-Handy** (ab Android 8)
+- Ein kostenloses **Tailscale-Konto** — die Anmeldung geht mit einem Konto, das
+  du schon hast (Google, Microsoft, GitHub). Der Installer bringt dich hin.
+
+Tailscale ist das, was deine Geräte einander finden lässt. Du musst nichts davon
+verstehen; wichtig ist nur: **von außen ist nichts erreichbar**. Es gibt keine
+offene Tür ins Internet, die jemand ausprobieren könnte.
+
+---
+
+## Loslegen
+
+### 1. Auf dem Rechner installieren
+
+Lade `RemoteDesktop-Setup.exe` aus den
+[Releases](https://github.com/Davidodos/RemoteDesktop/releases) und starte sie.
+
+Der Installer fragt, was du haben willst:
+
+| | wofür |
+|---|---|
+| **Agent** | Macht *diesen* Rechner fernsteuerbar. Läuft im Hintergrund. |
+| **Client** | Das Fenster, mit dem du *andere* Rechner steuerst. |
+| **Tailscale** | Wird mitinstalliert, wenn es noch nicht da ist. |
+
+Auf dem Rechner, den du fernsteuern willst, brauchst du den **Agent**. Wenn du
+denselben Rechner auch als Fernbedienung für einen zweiten benutzen willst,
+nimm beides. Auf einem Arbeitslaptop, der nur steuern und nie gesteuert werden
+soll, reicht der **Client** — dann läuft dort auch kein Dienst, der Zugriff
+erlaubt.
+
+### 2. Einrichtung abschließen
+
+Nach der Installation öffnet sich das RemoteDesktop-Fenster und zeigt, was noch
+fehlt. Es sind drei bis vier Schritte, und jeder hat einen Knopf:
+
+1. **Tailscale installieren** — falls es noch nicht da ist
+2. **Bei Tailscale anmelden** — einmal im Browser
+3. **Zertifikat holen** — damit die Verbindung verschlüsselt ist. Kostenlos,
+   ein Knopfdruck
+4. **Handy koppeln** — dazu gleich mehr
+
+Abgehakte Schritte verschwinden nicht, sie werden grau. Wer Tailscale schon
+benutzt, fängt einfach weiter hinten an.
+
+### 3. App aufs Handy
+
+`remotedesktop.apk` aus denselben Releases herunterladen und installieren.
+Android fragt dabei einmal, ob es Apps aus dieser Quelle installieren darf — das
+ist normal bei Apps außerhalb des Play Store.
+
+### 4. Koppeln
+
+Im Fenster am Rechner auf **Geräte koppeln…**. Dort steht ein sechsstelliger
+Code und derselbe Code als QR-Bild. In der App auf **Gerät koppeln**, den
+QR-Code scannen, fertig.
+
+Der Code gilt **fünf Minuten** und funktioniert **einmal**. Danach kennen sich
+die beiden Geräte dauerhaft — und zwar nur diese beiden.
+
+---
+
+## Was du danach hast
+
+- **Bild und Steuerung** — Bildschirm live, Touchpad, Bildschirmtastatur.
+  Mehrere Monitore lassen sich umschalten.
+- **Medien** — Pause, weiter, Lautstärke, Titelanzeige. Auch mit gesperrtem
+  Bildschirm.
+- **Energie** — Ruhezustand, Herunterfahren, Neustart. Und **Aufwecken**, wenn
+  ein zweites Gerät im selben Netz wach ist (siehe unten).
+- **Aktionen** — was du in einer Textdatei auf dem Rechner hinterlegst: ein
+  Programm starten, ein PowerShell-Skript, eine Tastenkombination, eine
+  Webseite, oder eine Abfolge davon. Sie erscheinen als Knöpfe in der App.
+- **Widget, Schnelleinstellungs-Kachel und App-Kürzel** — die Aktionen mit einem
+  Tipp vom Startbildschirm, ohne die App zu öffnen.
+
+### Aufwecken
+
+Ein ausgeschalteter Rechner kann nichts empfangen — sein Netzwerkchip lauscht
+auf ein Signal, das **nicht über einen Router kommt**. Ein wacher Rechner oder
+ein kleiner Dienst im selben Netz muss es aussenden. Hast du nur einen einzigen
+Rechner, ist der Weckknopf ausgegraut und erklärt warum. Das ist kein Fehler,
+sondern der Normalfall.
+
+Wer eine NAS oder einen Raspberry Pi hat, der ohnehin durchläuft, kann dort den
+mitgelieferten **Waker** als Docker-Container betreiben — siehe
+[`waker/README.md`](waker/README.md).
+
+---
+
+## Ist das sicher?
+
+Der Agent hat vollständige Kontrolle über den Rechner. Das ist sein Zweck, und
+deshalb ist der Zugang eng:
+
+- **Kein Passwort, das man abtippt.** Beim Koppeln erzeugt dein Handy ein
+  Schlüsselpaar. Der Rechner merkt sich nur den öffentlichen Teil; der private
+  verlässt das Handy nie.
+- **Jedes Gerät einzeln.** Es gibt kein Geheimnis, das für alle Rechner
+  zugleich gilt. Ein verlorenes Handy wird an jedem Rechner einzeln
+  widerrufen — sofort wirksam, auch mitten in einer Sitzung.
+- **Nichts aus dem Internet erreichbar.** Alles läuft über Tailscale.
+- **Aktionen werden am Rechner festgelegt**, nie vom Handy geschickt. Die App
+  kennt nur Kennungen wie `spotify`, keine Befehlszeilen. Es gibt keinen Weg
+  über das Netz, diese Liste zu ändern.
+
+Die ausführliche Durchsicht mit allen Befunden steht in
+[`docs/SICHERHEIT.md`](docs/SICHERHEIT.md) — auch das, was bewusst so gelassen
+wurde und warum.
+
+**Verloren gegangenes Handy?** [`docs/SICHERHEIT.md`](docs/SICHERHEIT.md#wenn-ein-gerät-verloren-geht)
+sagt in drei Schritten, was zu tun ist.
+
+---
+
+## Wenn etwas nicht geht
+
+| Was du siehst | Was dahintersteckt |
+|---|---|
+| „… nicht erreichbar" | Der Rechner schläft, oder Tailscale läuft auf einem der beiden Geräte nicht. Im Fenster unter *Einrichtung* nachsehen. |
+| „… kennt dieses Gerät nicht mehr" | Die Kopplung wurde widerrufen oder der Rechner neu aufgesetzt. Einmal neu koppeln. |
+| Der Weckknopf ist grau | Im Netz jenes Rechners ist gerade niemand wach, der ihn wecken könnte. Der Knopf sagt es beim Draufzeigen. |
+| Das Fenster sagt, die Oberfläche fehle | Bei einer selbst gebauten Fassung: `cd app && npm run build` vergessen. |
+
+---
+
+## Selbst bauen
+
+Alles außer der Windows-Ausführung baut auch unter Linux.
+
+```bash
+cd app        && npm install && npm test && npm run build   # Oberfläche
+cd agent      && dotnet build                               # Dienst
+cd desktop    && dotnet build                               # Fenster
+cd setup.Tests && dotnet test                               # Einrichtungslogik
+cd clients/android && npm run apk                           # APK
+```
+
+Der Aufbau im Überblick:
+
+| Ordner | Was drin ist |
+|---|---|
+| `agent/` | C#, der Dienst auf dem gesteuerten Rechner |
+| `desktop/` | C#, Tray-Programm und Fenster |
+| `setup/` | C#, die Einrichtungslogik — geteilt von Installer und Fenster |
+| `app/` | React, die Oberfläche für alle drei Plattformen |
+| `clients/android/` | Capacitor + Kotlin, die APK |
+| `waker/` | Node, der Weck-Dienst für NAS oder Pi |
+| `installer/` | Inno-Setup-Skript |
+
+Mehr dazu: [`docs/ARCHITEKTUR.md`](docs/ARCHITEKTUR.md).
+
+---
+
+## Lizenz
+
+[Apache-2.0](LICENSE). Ohne Gewähr — wer dieses Programm einsetzt, gibt einem
+weiteren Gerät die Kontrolle über seinen Rechner und entscheidet selbst, ob er
+das will.
+
+Tailscale ist ein eigenständiges Programm und gehört nicht zu diesem Projekt; es
+wird bei der Einrichtung von seinen Herstellern geladen und steht unter deren
+Bedingungen.

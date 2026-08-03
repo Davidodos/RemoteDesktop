@@ -113,13 +113,18 @@ export class AgentClient {
     }
 
     if (cause.status === undefined) {
-      return `${this.device.name} nicht erreichbar. Läuft der Rechner und ist der Agent gestartet?`
+      return (
+        `${this.device.name} antwortet nicht. Läuft der Rechner, und ist Tailscale ` +
+        'auf beiden Geräten an? Schläft er, hilft der Weckknopf in der Geräteliste.'
+      )
     }
 
     if (cause.status === 401) {
       return this.device.clientId === undefined
-        ? `${this.device.name} hat das Token abgelehnt — stimmt es in devices.json?`
-        : `${this.device.name} kennt dieses Gerät nicht mehr. Bitte neu koppeln.`
+        ? `${this.device.name} hat den Zugang abgelehnt. Dieser Eintrag stammt noch aus ` +
+          'einer Zeit vor der Kopplung — einmal neu koppeln, dann ist er in Ordnung.'
+        : `${this.device.name} kennt dieses Gerät nicht mehr. Am Rechner „Geräte koppeln…“ ` +
+          'öffnen und den Code noch einmal scannen.'
     }
 
     if (cause.status === 403) {

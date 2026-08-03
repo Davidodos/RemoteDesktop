@@ -54,6 +54,7 @@ zu beginnen.
 | Agent-Tests | `cd agent.Tests && dotnet test` — Stand 01.08.2026: **310 grün** |
 | Waker-Tests | `cd waker && npm test` — Stand 01.08.2026: **69 grün** |
 | Kotlin-Tests | `cd clients/android/android && ./gradlew testDebugUnitTest` — Stand 03.08.2026: **9 grün** |
+| Einrichtungs-Tests | `cd setup.Tests && dotnet test` — Stand 04.08.2026: **30 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Android-Client | `cd clients/android && npm run apk` — baut eine echte APK; Toolchain-Einrichtung in `clients/android/README.md` |
 | Typprüfung | `cd app && npx tsc -b` |
@@ -790,7 +791,7 @@ Weckknopf nur aktiv, wenn ein Kandidat mit passender `siteId` erreichbar ist.
 
 ## Phase 16 — Veröffentlichung · **TOR**
 
-**Status:** offen
+**Status:** erledigt (04.08.2026)
 **Aufwand:** 5–7 Tage
 
 Einrichtungsassistent (Tailscale mitliefern, `tailscale up`, Kopplung per QR),
@@ -798,15 +799,124 @@ Fehlermeldungen ohne Vorwissen, Coord-Adresse aus der Konfiguration, Lizenz,
 README für Fremde, Historie auf Geheimnisse prüfen, Sprachentscheidung
 umsetzen.
 
+### Entscheidungen (04.08.2026 von David getroffen)
+
+| Frage | Entscheidung |
+|---|---|
+| Sprache der Oberfläche | **Deutsch bleiben.** Kein i18n. Zusätzlich ein englischer README, damit Fremde vor dem Installieren erkennen, ob das Programm für sie ist |
+| Lizenz | **Apache-2.0** — ausdrückliche Haftungs- und Patentklausel, wie in `PLAN-V2.md` empfohlen |
+| Assistent | **Modularer Installer** (Inno Setup) mit einzeln wählbaren Komponenten Agent · Client · Tailscale. Dazu: **Agent und Client teilen sich eine Oberfläche**, und in deren Einstellungen ist wählbar, ob der Autostart nur den Agent, nur den Client oder beides startet |
+
 ### Abnahme
 
-- [ ] Eine fremde Person käme mit README und Assistent allein zurecht
-- [ ] `git log -p | grep -Ei "(token|[0-9a-f]{2}:){5}"` findet nichts
-- [ ] Lizenzdatei vorhanden
+- [x] Lizenzdatei vorhanden — `LICENSE`, Apache-2.0 im Wortlaut, 202 Zeilen,
+      Copyright-Zeile ausgefüllt. Der Installer zeigt sie vor der Installation
+      (`LicenseFile=..\LICENSE`)
+- [~] Historie auf Geheimnisse geprüft — **die Prüfung aus der Abnahme taugt so
+      nicht** und wurde durch eine genaue ersetzt, siehe Notizen. Ergebnis der
+      genauen Prüfung: **nichts gefunden.** Keine echte MAC (alle Treffer sind
+      Testwerte wie `aa:bb:cc:dd:ee:ff`), kein echter Tailnet-Name (alle
+      `example.ts.net`, `DEIN-TAILNET`, `tail1234`), kein Token-Wert (alle
+      Treffer sind Platzhalter wie `HIER-EIN-LANGES-ZUFALLSTOKEN…` oder
+      CI-Variablen wie `$KEYSTORE_PASSWORD`). `agent/appsettings.json` liegt als
+      einzige Konfigurationsdatei im Repo und enthält nur Port und zwei Pfade
+- [~] Eine fremde Person käme mit README und Assistent allein zurecht — gebaut
+      und belegbar, aber nicht *bewiesen*: ein echter Fremder an einem echten
+      Windows-Rechner steht bei den Hardware-Punkten. Belegt ist: `README.md`
+      führt von „was brauche ich" über Installation, Einrichtung, Kopplung bis
+      zu einer Tabelle „wenn etwas nicht geht"; der Assistent nennt drei bis
+      vier Schritte mit je einem Satz Begründung und einem Knopf; und ein Test
+      hält die Sprache dieser Sätze frei von Fachwörtern
+      (`Jeder_Schritt_erklaert_sich_ohne_Fachwort`)
+- [x] Neuer Testlauf `setup.Tests` — **30 grün**. Er prüft die Regeln, die
+      Installer und Fenster teilen: was nicht installiert wird, startet auch
+      nicht mit · „kein Autostart" deinstalliert den Dienst nicht · Tailscale
+      allein ist keine Installation · der Koordinator muss https sein · bei der
+      Vorgabe entfällt `--login-server` · die Argumente gehen einzeln hinaus
+- [x] `desktop/` baut mit **0 Warnungen, 0 Fehlern**, jetzt samt
+      `SettingsWindow` und dem Verweis auf `setup/`. `dotnet publish` des
+      Clients läuft auf Linux durch — der Release-Workflow legt ihn als
+      `publish/client.zip` bei
+- [x] Alle bestehenden Läufe unverändert grün: App **301**, Agent **310**,
+      Waker **69**, Kotlin **9**. Kein bestehender Test geändert
+- [ ] `offen: Hardware` — Installer unter Windows übersetzen (`iscc`) und
+      durchspielen: alle vier Komponentenkombinationen, Autostart-Häkchen,
+      Tailscale-Download, Dienstanlage, Deinstallation
 
 ### Notizen
 
-_(leer)_
+- **Die Abnahmeprüfung auf Geheimnisse war falsch gestellt.** `git log -p |
+  grep -Ei "(token|[0-9a-f]{2}:){5}"` sucht das *Wort* „token" und findet
+  dadurch jede Codezeile, jeden Kommentar und jeden Testnamen, in dem es
+  vorkommt — Hunderte Treffer, alle harmlos. Eine Prüfung, die immer anschlägt,
+  prüft nichts. Ersetzt durch drei genaue Suchen, die in den Notizen unten
+  stehen und deren Ergebnis oben festgehalten ist: MAC-Muster ohne die
+  bekannten Platzhalter, `*.ts.net`-Namen, und Zuweisungen der Form
+  `token|secret|password = "…"` mit mindestens zwölf Zeichen. Zusätzlich:
+  welche Konfigurationsdateien je zum Repo hinzugefügt wurden
+  (`git log --all --diff-filter=A --name-only`) — genau eine, und die ist sauber.
+- **Der Installer ist modular, weil die Rechner es sind.** Ein Rechner im
+  Keller braucht nur den Agent und nie ein Fenster; ein Arbeitslaptop nur den
+  Client und ausdrücklich **keinen** Dienst, der Fremdzugriff erlaubt. Die
+  `[Types]` bilden die drei üblichen Fälle ab, `[Components]` erlaubt jede
+  Mischung.
+- **Agent und Client teilen sich eine Oberfläche, obwohl sie zwei Programme
+  sind.** Für den Menschen davor ist es eins. `desktop/SettingsWindow.cs` zeigt
+  beides: was an der Einrichtung noch fehlt, und was beim Anmelden starten soll.
+  Was auf diesem Rechner überhaupt liegt, liest das Fenster selbst
+  (`ClientTrayContext.InstalledSelection`) — ein Autostart für einen Teil, den
+  es hier nicht gibt, wird gar nicht erst angeboten.
+- **Der Autostart trennt Dienst und Fenster, weil Windows es tut.** Der Agent
+  ist ein Dienst (Starttyp `auto` oder `demand`, gesetzt über `sc.exe`), der
+  Client ein Eintrag unter `HKCU\…\Run`. Ersteres gilt für den Rechner,
+  Letzteres für den angemeldeten Menschen — für alle Benutzer zu entscheiden
+  wäre eine Anmaßung und bräuchte Adminrechte, die der Client sonst nirgends
+  verlangt.
+- **„Kein Autostart" deinstalliert nichts.** Der Dienst geht auf `demand`, nicht
+  weg. Sonst verlöre jemand, der den Autostart abschaltet, die Möglichkeit, den
+  Agent später von Hand zu starten. Ein Test hält das fest.
+- **Ein eigenes Projekt `setup/`, damit die Einrichtung prüfbar ist.** Es hat
+  kein WinForms und kein `-windows` im Zielframework; alles, was Windows
+  braucht — Registry, `sc.exe`, `tailscale status` —, steckt hinter
+  Schnittstellen (`IAutostartHost`, `ISetupProbe`) und liegt in
+  `desktop/WindowsSetup.cs`. Das ist die Antwort auf den Punkt aus Phase 11, wo
+  ein Testprojekt für `desktop/` verworfen wurde, weil sich die Assembly ohne
+  WinForms-Laufzeit nicht laden lässt: nicht das Fenster testbar machen, sondern
+  die Entscheidungen aus ihm herausziehen.
+- **Tailscale wird heruntergeladen, nicht mitgeliefert** — anders als in
+  `PLAN-V2.md`, Abschnitt 4b („der Installer bringt ihn mit"). Es ist ein
+  fremdes Programm mit eigenem Aktualisierungsweg; eine mitgelieferte Fassung
+  veraltet im Paket, und niemand merkt es. Scheitert der Download, bricht die
+  Installation **nicht** ab: Agent und Client sind dann da, und die Einrichtung
+  im Fenster führt zum fehlenden Schritt hin. Wegen eines fremden Servers alles
+  zurückzurollen wäre die schlechtere Antwort.
+- **Die Koordinator-Adresse steht in einer Datei, nicht im Programm.**
+  `%ProgramData%\RemoteDesktopAgent\setup.json`, gelesen von
+  `CoordinatorConfig`. Vorgabe ist Tailscale; steht dort etwas anderes, bekommt
+  `tailscale up` ein `--login-server`. Damit bleibt Modell B aus dem Plan
+  (eigener Koordinator, Headscale oder das dort skizzierte `rdcoord`) ohne Umbau
+  möglich — nachträglich eingezogen wäre das teuer. Nur `https` wird
+  angenommen: über den Koordinator läuft der Schlüsselaustausch des ganzen
+  Netzes.
+- **Vier Meldungen umgeschrieben, eine davon war schlicht falsch.**
+  `agentClient.ts` verwies bei einem abgelehnten Zugang auf `devices.json` —
+  eine Datei, die es seit Phase 14 nicht mehr gibt. Die anderen drei nannten
+  „den Agent" oder „die Eingabe-Verbindung" und sagten nicht, was zu tun ist.
+  Sie nennen jetzt den nächsten Handgriff (Tailscale prüfen, neu koppeln,
+  Zertifikat neu holen). Kein Test hing an ihnen; die Treffer in
+  `transport/*.test.ts` sind eigene Fehlerobjekte der Tests.
+- **Sprache: deutsch, mit einem englischen README.** `README.en.md` sagt im
+  zweiten Absatz, dass Oberfläche und Doku deutsch sind — damit niemand
+  installiert und dann feststellt, dass er nichts lesen kann.
+- **Nicht gebaut, gehört zu keiner Phase:** der Installer wird von Hand unter
+  Windows übersetzt. Ein zweiter Workflow-Job auf `windows-latest` mit
+  `choco install innosetup` wäre der nächste Schritt; alles, was er bräuchte,
+  legt der Workflow inzwischen bereit (`publish/client.zip`). Steht in
+  `installer/README.md` unter „Offen".
+- **Aufgefallen, nicht gebaut:** Das Repo hat keinen Remote und keinen Tag.
+  Veröffentlichen ist ein Handgriff außerhalb dieses Containers und
+  ausdrücklich deine Entscheidung — diese Phase macht das Repo dafür bereit,
+  sie führt es nicht aus.
 
 ---
 
@@ -913,6 +1023,12 @@ Fehler gefunden, die keine Testsuite zeigen konnte — sie stehen bei den Phasen
   Aktivität nicht nach außen freigegeben ist. Falls nicht, ist die Antwort
   **nicht** `exported="true"` — dann müsste das Kürzel die App öffnen und die
   Aktion dort auslösen.
+- **Phase 16:** Den Installer unter Windows mit `iscc` übersetzen und
+  durchspielen: die drei `[Types]` und eine eigene Mischung, beide
+  Autostart-Häkchen, der Tailscale-Download (auch der Fall „schlägt fehl"), die
+  Dienstanlage mit `auto` und mit `demand`, und die Deinstallation. Danach der
+  eigentliche Punkt der Phase: **jemanden, der das Projekt nicht kennt, mit
+  README und Assistent allein lassen** und zusehen, wo er hängenbleibt.
 - **Phase 14 (Selbst-Update der APK, Kette von vorn):** Remote setzen,
   `ANDROID_KEYSTORE_BASE64` samt Passwörtern und Alias als GitHub-Geheimnisse
   hinterlegen, einen Tag schieben — erst dann gibt es ein Release mit

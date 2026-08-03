@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Bewusst ohne `-windows` und ohne WinForms: dieselbe Bibliothek benutzen
+         der Installer, das Einstellungsfenster und der Testlauf. Nur dadurch
+         lässt sich die Einrichtungslogik ohne Windows prüfen — was sie
+         *ausführt*, steckt hinter Schnittstellen. -->
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>RemoteDesktopSetup</RootNamespace>
+    <AssemblyName>RemoteDesktopSetup</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

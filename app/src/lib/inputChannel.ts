@@ -210,7 +210,11 @@ export class InputChannel {
       onError: () => {
         // Details liefert der Browser aus Sicherheitsgründen nicht. Die
         // häufigste Ursache ist ein abgelaufenes Tailscale-Zertifikat.
-        this.onError(`Eingabe-Verbindung zu ${this.device.name} gestört.`)
+        this.onError(
+          `Die Verbindung zu ${this.device.name} ist gestört. Meist ist das ` +
+          'Sicherheitszertifikat des Rechners abgelaufen — im Fenster dort unter ' +
+          '„Einrichtung“ neu holen.',
+        )
       },
     })
   }

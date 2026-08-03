@@ -1,5 +1,12 @@
 # Agent — Einrichtung auf PC und Laptop
 
+> **Der übliche Weg ist seit Phase 16 der Installer** (`installer/README.md`):
+> er kopiert die Dateien, legt den Dienst an, setzt die Rechte auf
+> `%ProgramData%\RemoteDesktopAgent` und führt danach durch Tailscale,
+> Zertifikat und Kopplung. Diese Anleitung bleibt der Weg von Hand — für den
+> eigenen Aufbau, für eine Fehlersuche und als Beschreibung dessen, was der
+> Installer tut.
+
 Auf beiden Windows-Rechnern durchführen. **Kein .NET, kein Git, kein Quellcode
 nötig** — die fertige `.exe` ist self-contained und liegt auf der NAS.
 

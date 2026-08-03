@@ -6,14 +6,15 @@ Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.
 
 **V2-Umbau zur echten App (läuft):** Begründungen in **`docs/PLAN-V2.md`**,
 Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:
-`/naechste-phase`. Stand 03.08.2026: Phasen 9–15 erledigt, Phasen 9–13 am
-echten Gerät durchgeprüft; als Nächstes Phase 16 (**TOR**). Liegengebliebenes steht in `TASKS-V2.md`
-unter „Aufräumarbeiten zum Schluss" — das wartet bis nach Phase 16 und
-blockiert nichts.
+`/naechste-phase`. Stand 04.08.2026: **Phasen 9–16 erledigt** — der V2-Umbau ist
+durch. Phasen 9–13 sind am echten Gerät durchgeprüft; offen sind nur noch
+Hardware-Punkte und die Sammlung „Aufräumarbeiten zum Schluss" in `TASKS-V2.md`,
+die jetzt dran wäre. Phasen 17–20 (Tailscale ablösen) sind zurückgestellt; die
+Entscheidung darüber steht nach Phase 16 an.
 
 Toolchain im Container: `~/.bashrc` setzt `PATH` auf `~/.dotnet` und
 `DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1` (libicu fehlt, kein root).
-`cd app && npm test` · `cd agent.Tests && dotnet test`.
+`cd app && npm test` · `cd agent.Tests && dotnet test` · `cd setup.Tests && dotnet test`.
 
 Android baut hier ebenfalls — JDK 21 in `~/.jdk`, SDK in `~/android-sdk`
 (seit 31.07.2026). `export JAVA_HOME=~/.jdk/jdk-21.0.12+8 PATH="$JAVA_HOME/bin:$PATH"
@@ -27,6 +28,8 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 | Ordner | Stack | Läuft auf |
 |---|---|---|
 | `agent/` | C# / .NET 8, Windows-Dienst | PC + Laptop, Port 8443 |
+| `setup/` | C# / .NET 8, Klassenbibliothek | Einrichtungslogik für Installer **und** Fenster |
+| `installer/` | Inno Setup 6 | modularer Installer (Agent · Client · Tailscale) |
 | `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop, zeigt `app/dist` |
 | `waker/` | Node/TS + Express, Docker | NAS, Port 3080 |
 | `app/` | React + Vite, PWA | Handy (Browser/Homescreen) |

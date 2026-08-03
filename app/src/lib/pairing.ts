@@ -119,7 +119,10 @@ function describeFailure(cause: unknown, host: string): string {
   }
 
   if (cause.status === undefined) {
-    return `${host} antwortet nicht. Läuft der Rechner und ist der Agent gestartet?`
+    return (
+      `${host} antwortet nicht. Läuft der Rechner, und ist Tailscale auf beiden ` +
+      'Geräten an? Der Name muss genau so lauten wie im Fenster am Rechner.'
+    )
   }
 
   return cause.serverMessage ?? `${host} antwortete mit HTTP ${cause.status}.`
