@@ -1,5 +1,7 @@
+import type { SurfaceBoard } from '../lib/surfaceBoard.ts'
 import { findLatestApk, isDifferentVersion } from './appUpdate.ts'
 import { PlatformError } from './errors.ts'
+import type { SurfaceBoardPublisher } from './surfaces.ts'
 import type {
   Capabilities,
   ClipboardAccess,
@@ -50,6 +52,17 @@ interface AppUpdatePlugin {
   install(options: { url: string }): Promise<void>
 }
 
+/**
+ * Das dritte eigene Plugin: der Steckbrief für Widget, Tile und App-Kürzel.
+ *
+ * Er geht als Text hinüber und nicht als Objekt. Die Brücke könnte auch ein
+ * Objekt, aber drüben wird er ohnehin als Ganzes abgelegt — und ein Text, der
+ * einmal geschrieben und einmal gelesen wird, kann unterwegs nichts verlieren.
+ */
+interface SurfacesPlugin {
+  publish(options: { board: string }): Promise<void>
+}
+
 export interface CapacitorPlugins {
   preferences: PreferencesPlugin
   clipboard: ClipboardPlugin
@@ -61,6 +74,8 @@ export interface CapacitorPlugins {
    * kann — statt beim Start an einem fehlenden Plugin zu scheitern.
    */
   appUpdate?: AppUpdatePlugin
+  /** Ebenfalls freiwillig, aus demselben Grund wie {@link CapacitorPlugins.appUpdate}. */
+  surfaces?: SurfacesPlugin
 }
 
 /**
@@ -254,6 +269,30 @@ function qrScanner(plugins: CapacitorPlugins): QrScanner {
   }
 }
 
+/**
+ * Reicht den Steckbrief an die nativen Flächen weiter.
+ *
+ * Ein Fehler beim Übergeben wird geschluckt: die Flächen sind eine Zugabe, und
+ * wer gerade den Rechner steuert, soll deswegen kein Fehlerband sehen. Ohne
+ * Plugin — eine ältere APK — passiert schlicht nichts.
+ */
+function surfaceBoardPublisher(plugins: CapacitorPlugins): SurfaceBoardPublisher {
+  return {
+    async publish(board: SurfaceBoard | undefined): Promise<void> {
+      if (plugins.surfaces === undefined) {
+        return
+      }
+
+      // Der leere Text ist das Zeichen zum Abräumen. Ein `undefined` durch die
+      // Brücke zu schicken hieße, sich auf deren Umgang mit fehlenden Feldern
+      // zu verlassen — der ist je nach Plattform ein anderer.
+      await plugins.surfaces
+        .publish({ board: board === undefined ? '' : JSON.stringify(board) })
+        .catch(() => undefined)
+    },
+  }
+}
+
 function sessionKeepAlive(plugins: CapacitorPlugins): SessionKeepAlive {
   return {
     async begin(deviceName: string): Promise<void> {
@@ -298,6 +337,7 @@ export function capacitorPlatform(
     clipboard: clipboardAccess(plugins),
     qr: qrScanner(plugins),
     session: sessionKeepAlive(plugins),
+    surfaces: surfaceBoardPublisher(plugins),
   }
 }
 
@@ -323,6 +363,7 @@ async function registerCapacitorPlugins(): Promise<CapacitorPlugins> {
     barcode: registerPlugin<BarcodeScannerPlugin>('CapacitorBarcodeScanner'),
     session: registerPlugin<SessionServicePlugin>('SessionService'),
     appUpdate: registerPlugin<AppUpdatePlugin>('AppUpdate'),
+    surfaces: registerPlugin<SurfacesPlugin>('Surfaces'),
   }
 }
 

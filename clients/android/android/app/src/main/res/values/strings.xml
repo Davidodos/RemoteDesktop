@@ -10,4 +10,19 @@
     <string name="session_notification_title">RemoteDesktop</string>
     <string name="session_notification_text">Verbunden mit %1$s</string>
     <string name="session_notification_text_unknown">Verbunden</string>
+
+    <string name="widget_label">RemoteDesktop-Aktionen</string>
+    <string name="widget_description">Aktionen des zuletzt benutzten Rechners auf einen Tipp.</string>
+    <string name="widget_empty_unpaired">Noch kein Rechner verbunden. Einmal die App öffnen.</string>
+    <string name="widget_empty_actions">%1$s bietet keine Aktionen ohne Rückfrage an.</string>
+
+    <string name="tile_label">PC wecken</string>
+    <string name="tile_checking">Prüfe…</string>
+    <string name="tile_unpaired">Noch kein Rechner verbunden</string>
+    <string name="tile_state_awake">Läuft — tippen zum Schlafenlegen</string>
+    <string name="tile_state_asleep">Schläft — tippen zum Wecken</string>
+    <string name="tile_no_messenger">Kann von hier nicht geweckt werden</string>
+    <string name="tile_messenger_offline">Im Netz des Rechners ist niemand wach</string>
+    <string name="tile_sleeping">%1$s wird schlafen gelegt.</string>
+    <string name="tile_waking">%1$s wird geweckt.</string>
 </resources>

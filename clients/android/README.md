@@ -64,6 +64,19 @@ braucht (Gesten, Kamera, Verhalten beim Wegwischen), bleibt es beim Handy.
 **`npm run sync` nach jeder Änderung an `app/`.** Die Oberfläche ist kein Teil
 des Gradle-Builds; ohne den Lauf steckt in der APK die vorige Fassung.
 
+Der Kotlin-Anteil unter `surfaces/` hat einen eigenen Testlauf, und der läuft
+hier ebenfalls:
+
+```bash
+cd android && ./gradlew testDebugUnitTest
+```
+
+Geprüft wird darin, was ohne Gerät prüfbar ist und wehtut, wenn es falsch ist:
+dass die Unterschrift des Handys im Format ankommt, das der Agent erwartet, und
+dass der Steckbrief aus `app/src/lib/surfaceBoard.ts` drüben so gelesen wird,
+wie er geschrieben wurde. Dafür liegt die echte `org.json` als Testabhängigkeit
+dabei — die aus `android.jar` ist im JVM-Testlauf eine leere Hülle.
+
 ## Was hier von Hand steht
 
 Alles unter `android/` außer diesen Dateien stammt aus der Vorlage von
@@ -73,9 +86,12 @@ Alles unter `android/` außer diesen Dateien stammt aus der Vorlage von
 |---|---|
 | `SessionService.java` | Der Vordergrunddienst samt Benachrichtigung |
 | `SessionServicePlugin.java` | Die Brücke, über die die App ihn startet und stoppt |
-| `MainActivity.java` | Meldet das Plugin an — App-eigene Plugins findet Capacitor nicht von allein |
-| `AndroidManifest.xml` | Dienst, sein Typ `connectedDevice`, Rechte für Benachrichtigung und Kamera |
-| `res/values/strings.xml` | Texte der Benachrichtigung |
+| `AppUpdatePlugin.java`, `ApkInstaller.java` | Fassung ablesen und eine neue APK installieren (Phase 14) |
+| `surfaces/` | Widget, Quick-Settings-Kachel und App-Kürzel — in Kotlin (Phase 15) |
+| `MainActivity.java` | Meldet die Plugins an — App-eigene Plugins findet Capacitor nicht von allein |
+| `AndroidManifest.xml` | Dienst samt Typ `dataSync`, die drei Flächen, Rechte für Benachrichtigung, Kamera und Installation |
+| `res/values/strings.xml`, `res/layout/widget_*`, `res/xml/widget_actions_info.xml` | Texte der Benachrichtigung, Aussehen des Widgets |
+| `variables.gradle`, `app/build.gradle` | `minSdk` 26, Kotlin-Plugin, die echte `org.json` für den Testlauf |
 
 Die JS-Seite spricht die Plugins über ihren Namen an (`registerPlugin`), nicht
 über deren TypeScript-Aufsätze. Dadurch braucht `app/` nur `@capacitor/core` und

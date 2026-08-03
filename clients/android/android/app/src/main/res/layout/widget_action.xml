@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ein Knopf des Rasters. Als TextView statt Button: RemoteViews darf an einem
+     Button keinen Text setzen, ohne dass ältere Android-Fassungen zicken. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_action_label"
+    android:layout_width="0dp"
+    android:layout_weight="1"
+    android:layout_height="wrap_content"
+    android:layout_margin="4dp"
+    android:padding="12dp"
+    android:background="@drawable/widget_action_background"
+    android:gravity="center"
+    android:textColor="#FFFFFF"
+    android:textSize="13sp"
+    android:maxLines="2"
+    android:ellipsize="end" />

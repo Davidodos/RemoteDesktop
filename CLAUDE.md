@@ -6,8 +6,8 @@ Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.
 
 **V2-Umbau zur echten App (läuft):** Begründungen in **`docs/PLAN-V2.md`**,
 Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:
-`/naechste-phase`. Stand 01.08.2026: Phasen 9–14 erledigt, Phasen 9–13 am
-echten Gerät durchgeprüft; als Nächstes Phase 15. Liegengebliebenes steht in `TASKS-V2.md`
+`/naechste-phase`. Stand 03.08.2026: Phasen 9–15 erledigt, Phasen 9–13 am
+echten Gerät durchgeprüft; als Nächstes Phase 16 (**TOR**). Liegengebliebenes steht in `TASKS-V2.md`
 unter „Aufräumarbeiten zum Schluss" — das wartet bis nach Phase 16 und
 blockiert nichts.
 
@@ -19,6 +19,8 @@ Android baut hier ebenfalls — JDK 21 in `~/.jdk`, SDK in `~/android-sdk`
 (seit 31.07.2026). `export JAVA_HOME=~/.jdk/jdk-21.0.12+8 PATH="$JAVA_HOME/bin:$PATH"
 ANDROID_HOME=~/android-sdk`, dann `cd clients/android && npm run apk`.
 Ausführen lässt sich die APK hier nicht — nur bauen und ihren Inhalt prüfen.
+Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
+`cd clients/android/android && ./gradlew testDebugUnitTest`.
 
 ## Aufbau
 

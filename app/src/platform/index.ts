@@ -1,5 +1,6 @@
 import { webPlatform } from './web.ts'
 import type { SessionKeepAlive } from './session.ts'
+import type { SurfaceBoardPublisher } from './surfaces.ts'
 
 /**
  * Was die App von ihrer Umgebung braucht.
@@ -100,10 +101,17 @@ export interface Platform {
   readonly clipboard: ClipboardAccess
   readonly qr: QrScanner
   readonly session: SessionKeepAlive
+  /**
+   * Flächen außerhalb der App — unter Android Widget, Tile und App-Kürzel.
+   * Sie lösen Aktionen aus, ohne dass die App läuft, und brauchen dafür einen
+   * Steckbrief (siehe `lib/surfaceBoard.ts`).
+   */
+  readonly surfaces: SurfaceBoardPublisher
 }
 
 export { PlatformError } from './errors.ts'
 export { noSessionKeepAlive, type SessionKeepAlive } from './session.ts'
+export { noSurfaces, type SurfaceBoardPublisher } from './surfaces.ts'
 
 let current: Platform = webPlatform
 

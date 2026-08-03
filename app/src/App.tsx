@@ -5,6 +5,7 @@ import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
 import { InputChannel } from './lib/inputChannel.ts'
 import { protocolMismatch } from './lib/protocol.ts'
 import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
+import { buildSurfaceBoard } from './lib/surfaceBoard.ts'
 import { rememberSite, siteChanged } from './lib/wake.ts'
 import { getPlatform } from './platform/index.ts'
 import { storage } from './lib/storage.ts'
@@ -86,6 +87,29 @@ export function App(): React.JSX.Element {
     () => (selected === undefined ? undefined : new AgentClient(selected)),
     [selected],
   )
+
+  /**
+   * Den Steckbrief für Widget, Tile und App-Kürzel nachführen.
+   *
+   * Er wird beim Verbinden geschrieben und nicht erst, wenn jemand die
+   * Aktionen-Seite öffnet — ein Widget, das leer bleibt, bis man die App an der
+   * richtigen Stelle besucht hat, wäre keins. Scheitert das Abfragen, bleibt der
+   * alte Steckbrief stehen: eine Liste von gestern ist besser als keine, und
+   * ausgelöst wird ohnehin nur, was der Rechner im Augenblick des Antippens
+   * noch kennt.
+   */
+  useEffect(() => {
+    if (selected === undefined || agent === undefined) {
+      return
+    }
+
+    void agent.getActions().then(
+      (actions) => {
+        void getPlatform().surfaces.publish(buildSurfaceBoard(selected, actions, devices))
+      },
+      () => undefined,
+    )
+  }, [selected, agent, devices])
 
   /**
    * Ein Gerät wählen — erst nachfragen, wen man da vor sich hat.

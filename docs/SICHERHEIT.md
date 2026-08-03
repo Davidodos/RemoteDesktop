@@ -57,6 +57,17 @@ das Netz gibt es keinen Schreibweg, und der Client schickt nie eine
 Kommandozeile, sondern nur eine Kennung. Argumente gehen als Array hinaus, nie
 über eine Shell (`UseShellExecute` steht überall auf `false`).
 
+**Die Android-Flächen lösen Aktionen aus, ohne dass die App läuft.** Widget,
+Quick-Settings-Kachel und App-Kürzel melden sich mit demselben Geräteschlüssel
+an wie die App — sie umgehen die Kopplung nicht, sie benutzen sie. Drei
+Entscheidungen halten das eng: der private Schlüssel wird **nicht kopiert**,
+sondern dort gelesen, wo die App ihn hält; es wird **kein Sitzungstoken
+gemerkt**, jeder Tipp meldet sich neu an; und Widget-Rundruf wie
+`ShortcutRelay` sind **nicht nach außen freigegeben**, damit keine andere App
+auf dem Handy in unserem Namen etwas auf dem PC startet. Aktionen mit
+`confirm` erscheinen auf keiner Fläche — eine Rückfrage lässt sich dort nicht
+stellen, und der Merker aus Phase 13 wäre sonst still ausgehebelt.
+
 **Wecken ist absichtlich schwach abgesichert.** `POST /api/wol` verlangt das
 Recht `wake` wie jeder andere Endpunkt, aber der Schaden wäre ohnehin gering:
 ein Magic Packet kann nur einschalten und wirkt nur im eigenen Netz. Die

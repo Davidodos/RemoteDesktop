@@ -50,9 +50,10 @@ zu beginnen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 01.08.2026: **290 grün** |
+| App-Tests | `cd app && npm test` — Stand 03.08.2026: **301 grün** |
 | Agent-Tests | `cd agent.Tests && dotnet test` — Stand 01.08.2026: **310 grün** |
 | Waker-Tests | `cd waker && npm test` — Stand 01.08.2026: **69 grün** |
+| Kotlin-Tests | `cd clients/android/android && ./gradlew testDebugUnitTest` — Stand 03.08.2026: **9 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Android-Client | `cd clients/android && npm run apk` — baut eine echte APK; Toolchain-Einrichtung in `clients/android/README.md` |
 | Typprüfung | `cd app && npx tsc -b` |
@@ -668,7 +669,7 @@ schickt nie eine Kommandozeile. Details in `docs/PLAN-V2.md`, Abschnitt 5.
 
 ## Phase 15 — Android-Flächen
 
-**Status:** offen
+**Status:** erledigt (03.08.2026)
 **Tor:** nein
 **Aufwand:** 4–5 Tage
 
@@ -677,12 +678,96 @@ Weckknopf nur aktiv, wenn ein Kandidat mit passender `siteId` erreichbar ist.
 
 ### Abnahme
 
-- [ ] Kotlin-Anteile vorhanden und in sich stimmig
-- [ ] `offen: Hardware` — Widget, Tile und Shortcuts auf dem Gerät
+- [x] Kotlin-Anteile vorhanden und in sich stimmig — zehn Klassen unter
+      `clients/android/android/app/src/main/java/app/remotedesktop/client/surfaces/`,
+      alle im DEX der gebauten APK. `./gradlew assembleDebug testDebugUnitTest`
+      läuft ohne Fehler und ohne Warnung durch; im Manifest der fertigen APK
+      stehen `ActionWidget` (Receiver, nicht freigegeben, mit
+      `APPWIDGET_UPDATE` und `@xml/widget_actions_info`), `WakeTile` (Dienst,
+      freigegeben, `BIND_QUICK_SETTINGS_TILE`) und `ShortcutRelay` (Aktivität,
+      nicht freigegeben)
+- [x] Neuer Kotlin-Testlauf: **9 grün** (`SignaturesTest` 5,
+      `SurfaceBoardTest` 4). Die wichtigste Zusage steht darin: was der native
+      Teil unterschreibt, nimmt der Agent an — geprüft gegen den
+      P1363-Prüfer der JVM, weil .NET dasselbe Format verlangt
+- [x] `cd app && npm test` **301 statt 290**, kein bestehender Test geändert
+      (`git diff HEAD --stat -- "*.test.*" "*Tests.cs"` leer). `npx tsc -b`
+      sauber, `npm run build` läuft durch. Agent weiterhin **310**, Waker **69**
+      (an beiden nichts angefasst)
+- [x] Der Weckknopf ist nur da, wenn wirklich jemand wecken kann: die Kachel
+      fragt beim Aufklappen erst das Ziel und dann den Boten mit `/health` und
+      steht sonst auf `STATE_UNAVAILABLE` samt Begründung. Die Auswahl des
+      Boten nach `siteId` macht weiterhin `lib/wake.ts` — sie ist nicht
+      zweitgeschrieben, siehe Notizen
+- [ ] `offen: Hardware` — Widget, Kachel und Kürzel auf dem Gerät: erscheinen
+      sie in der Auswahl, lösen sie aus, kommt bei einem Fehlschlag die Meldung
 
 ### Notizen
 
-_(leer)_
+- **Die Flächen laufen ohne die App — das ist die ganze Schwierigkeit.** Wer
+  ein Widget antippt, hat keine WebView, kein React und keinen Speicher, aus
+  dem sich etwas lesen ließe. Der native Teil muss sich also selbst am Agent
+  anmelden: Challenge holen, mit dem Geräteschlüssel unterschreiben,
+  Sitzungstoken holen, auslösen. Drei Anfragen je Tipp, kein gemerktes Token —
+  für das gäbe es keinen Ort, an dem es sicherer läge als der Schlüssel, aus
+  dem man sich jederzeit ein neues holt.
+- **Die Aufteilung: TypeScript entscheidet *wer*, Kotlin entscheidet *jetzt*.**
+  Die App legt beim Verbinden einen Steckbrief ab (`lib/surfaceBoard.ts` →
+  `SurfacesPlugin` → eigene Ablage): Rechner, Aktionen, und wer ihn wecken
+  könnte. Die Auswahl des Weckboten nach `siteId` bleibt damit an genau einer
+  Stelle — sie ein zweites Mal in Kotlin zu schreiben wäre die Sorte
+  Doppelung, die erst auffällt, wenn beide Seiten verschieden falsch sind. Die
+  Fläche prüft nur noch, ob dieser Bote *gerade* antwortet; das kann der
+  Steckbrief nicht wissen, er ist womöglich Tage alt.
+- **Der private Schlüssel wird nicht kopiert.** Er wird dort gelesen, wo die
+  App ihn ohnehin hält (`CapacitorStorage`, Schlüssel
+  `remotedesktop.clientKey`). Eine zweite Kopie wäre ein zweiter Ort, an dem er
+  abhandenkommt, und beim Entkoppeln einer, den jemand zu leeren vergisst.
+- **Aktionen mit `confirm` erscheinen auf keiner Fläche.** Ein Widget kann
+  nicht nachfragen — es hat keine Oberfläche, in der eine Rückfrage stünde. Sie
+  trotzdem anzubieten hieße, den Merker aus Phase 13 still auszuhebeln, und
+  zwar bei genau den Aktionen, die ihn tragen. Ein Test hält das fest.
+- **Kein `WorkManager`, anders als in `PLAN-V2.md`, Abschnitt 6 skizziert.** Er
+  bringt Wiederholungen mit, und die sind hier falsch: eine Aktion startet ein
+  Programm oder drückt Tasten, und beides ein zweites Mal auszuführen ist kein
+  Wiederherstellen, sondern ein zweiter Eingriff. Stattdessen `goAsync()` mit
+  einem eigenen Strang — ein Rundruf hat gut zehn Sekunden, drei Anfragen über
+  Tailscale brauchen Bruchteile davon. Ein Fehlschlag wird gemeldet und nicht
+  wiederholt.
+- **Die Unterschrift wird von Hand nach IEEE P1363 umgerechnet.** Java liefert
+  DER, der Agent prüft P1363 — dieselbe Falle wie in Phase 14, nur in der
+  dritten Sprache. `SHA256withECDSAinP1363Format` zu verlangen wäre kürzer
+  gewesen, den Namen kennt aber nicht jede Android-Fassung ab API 26, und ein
+  Fehlschlag käme erst auf dem Gerät heraus — wo er wie ein Angriff aussieht.
+  Deshalb steht die Umrechnung selbst da und wird gegen den P1363-Prüfer der
+  JVM geprüft.
+- **`java.util.Base64` statt `android.util.Base64`,** durchgängig. Ersteres
+  gibt es seit API 26 (das ist die Untergrenze dieser App) und es läuft auch in
+  einem gewöhnlichen JVM-Testlauf. Letzteres ist dort eine leere Hülle, und die
+  Signaturprüfung wäre damit nicht prüfbar gewesen. Aus demselben Grund liegt
+  die echte `org.json` als Testabhängigkeit dabei.
+- **Kotlin ist jetzt im App-Modul eingezogen** — wie es in den Notizen zu
+  Phase 12 angekündigt war. Das Gradle-Plugin steht in derselben Fassung
+  (2.2.20) da wie beim QR-Scanner aus `node_modules`, und Java wie Kotlin
+  übersetzen auf JVM 21; ohne beides bricht der Bau ab. Der Java-Bestand aus
+  Phase 12 und 14 wurde **nicht** umgeschrieben: eine Übersetzung ohne Anlass
+  hätte nur Risiko ohne Gewinn gebracht.
+- **Die Kachel steht beim Aufklappen zuerst auf „Prüfe…".** Sie mit dem Zustand
+  von vorhin zu zeigen wäre der Fehler, den man auf halbem Weg zum Schreibtisch
+  bemerkt: getippt, nichts passiert, Rechner war längst an.
+- **`ShortcutRelay` ist nicht nach außen freigegeben,** ebenso wenig der
+  Rundruf des Widgets. Beide lösen auf Zuruf Programme auf dem PC aus; für
+  fremde Apps auf demselben Handy haben sie nichts zu bieten. Ob das
+  Startprogramm ein nicht freigegebenes Ziel starten darf, ist der eine Punkt
+  an den Kürzeln, der sich hier nicht belegen lässt — er steht bei den
+  Hardware-Punkten.
+- **Aufgefallen, nicht gebaut (gehört zu keiner Phase):** Das Widget zeigt
+  immer den zuletzt benutzten Rechner. Wer zwei Rechner nebeneinander benutzt,
+  hätte gern zwei Widgets mit fester Zuordnung — dafür bräuchte es eine
+  Einrichtungsansicht beim Ablegen (`configure`-Aktivität). Steht unten unter
+  „Aufräumarbeiten zum Schluss". Ebenso: die Kachel ließe sich ab Android 13
+  per `requestAddTileService` aus der App heraus anbieten, statt darauf zu
+  warten, dass jemand sie in den Schnelleinstellungen findet.
 
 ---
 
@@ -731,6 +816,13 @@ Bau nur zerfasern. Wer hier etwas erledigt, löscht die Zeile.
   und bliebe lokal. Dazu gehört die Frage, ob der Agent die Datei danach neu
   einliest oder ob ein Neustart bleibt (heute: Neustart, weil die Prüfung sonst
   auf einen Zeitpunkt rutscht, an dem niemand hinsieht).
+- **Widget je Rechner statt „der zuletzt benutzte".** Heute zeigt das Widget
+  immer den Rechner, mit dem zuletzt gearbeitet wurde. Wer PC und Laptop
+  nebeneinander benutzt, hätte gern zwei Widgets mit fester Zuordnung — dafür
+  braucht es eine Einrichtungsansicht beim Ablegen (`configure`-Aktivität) und
+  einen Steckbrief je Rechner statt einem. Ebenfalls hierher: die Kachel ließe
+  sich ab Android 13 per `requestAddTileService` aus der App heraus anbieten,
+  statt darauf zu warten, dass jemand sie in den Schnelleinstellungen findet.
 - **`agentkey.txt` per ACL absichern** — steht ausführlich unten unter den
   Hardware-Punkten. Es ist keine reine Prüfung, sondern eine kleine Änderung:
   `Agent:IdentityPath` in die `appsettings.json` aufnehmen und auf
@@ -788,6 +880,16 @@ Fehler gefunden, die keine Testsuite zeigen konnte — sie stehen bei den Phasen
   bekommen wie `cert.key` (Schritt 3 der `agent/README.md`). Bisher legt der
   Agent die Datei nur an, ohne Rechte zu setzen, und die Vorgabe zeigt neben die
   `.exe`. Siehe „Aufräumarbeiten zum Schluss".
+- **Phase 15:** Die drei Flächen am Gerät: erscheint das Widget in der Auswahl
+  und zeigt es die Aktionen des zuletzt benutzten Rechners · löst ein Tipp aus,
+  und kommt bei einem Fehlschlag die Meldung statt Stille · findet sich die
+  Kachel in den Schnelleinstellungen, und stimmen ihre beiden Zustände (läuft →
+  schlafen legen, schläft → wecken, niemand wach im Netz → nicht verfügbar) ·
+  erscheinen die Kürzel beim langen Druck auf das App-Symbol. Der eine Punkt
+  mit echtem Zweifel: ob das Startprogramm `ShortcutRelay` startet, obwohl die
+  Aktivität nicht nach außen freigegeben ist. Falls nicht, ist die Antwort
+  **nicht** `exported="true"` — dann müsste das Kürzel die App öffnen und die
+  Aktion dort auslösen.
 - **Phase 14:** echter Weckvorgang (vom Laptop aus und von der NAS), das
   Selbst-Update auf dem PC — dazu muss vorher einmal `scripts/release-key.mjs`
   gelaufen und der öffentliche Schlüssel eingetragen sein —, und der

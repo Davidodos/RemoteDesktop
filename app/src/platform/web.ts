@@ -1,5 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
+import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
   ClipboardAccess,
@@ -135,4 +136,7 @@ export const webPlatform: Platform = {
   // Ein Browser-Tab lässt sich nicht davon abhalten, gedrosselt zu werden. Das
   // ist genau der Punkt, an dem die APK aus Phase 12 besser ist.
   session: noSessionKeepAlive,
+  // Ein Widget auf dem Startbildschirm ist nichts, was eine Seite vergeben
+  // könnte — dafür braucht es die APK.
+  surfaces: noSurfaces,
 }

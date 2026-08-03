@@ -4,6 +4,8 @@ import android.os.Bundle;
 
 import com.getcapacitor.BridgeActivity;
 
+import app.remotedesktop.client.surfaces.SurfacesPlugin;
+
 public class MainActivity extends BridgeActivity {
 
     @Override
@@ -13,6 +15,7 @@ public class MainActivity extends BridgeActivity {
         // super.onCreate() stehen, weil die Brücke dort gebaut wird.
         registerPlugin(SessionServicePlugin.class);
         registerPlugin(AppUpdatePlugin.class);
+        registerPlugin(SurfacesPlugin.class);
 
         super.onCreate(savedInstanceState);
     }

@@ -40,6 +40,50 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Die drei Flächen aus Phase 15. Sie laufen ohne die App: angetippt
+             wird ein Knopf, und was danach passiert, macht der native Teil
+             allein (siehe surfaces/). -->
+
+        <!-- Nicht freigegeben: den Rundruf zum Auslösen schickt das Widget an
+             sich selbst, und die Aktualisierung schickt das System. Wäre er
+             freigegeben, könnte jede App auf dem Handy Aktionen auf dem PC
+             starten. -->
+        <receiver
+            android:name=".surfaces.ActionWidget"
+            android:label="@string/widget_label"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_actions_info" />
+        </receiver>
+
+        <!-- Die Kachel muss freigegeben sein — sie wird von den
+             Schnelleinstellungen des Systems gebunden. Die Erlaubnis stellt
+             sicher, dass das auch wirklich nur das System kann. -->
+        <service
+            android:name=".surfaces.WakeTile"
+            android:exported="true"
+            android:icon="@android:drawable/ic_lock_power_off"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- Die Weiche hinter einem Kürzel. Ohne Oberfläche und ohne Eintrag in
+             den zuletzt verwendeten Apps: sie ist eine Zehntelsekunde da. -->
+        <activity
+            android:name=".surfaces.ShortcutRelay"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.NoDisplay" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

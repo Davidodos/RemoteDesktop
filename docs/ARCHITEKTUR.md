@@ -9,6 +9,7 @@ Ein einziges UI — kein Wechsel zwischen Apps.
         ┌─────────────────────────────┐
         │  Handy (Android APK)        │
         │  Capacitor + React          │
+        │  Widget · Kachel · Kürzel   │
         └──────────┬──────────────────┘
                    │ Tailscale (LAN = direkt, unterwegs = DERP/direkt)
         ┌──────────┴──────────┬────────────────────┐

@@ -1,5 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
+import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
   ClipboardAccess,
@@ -153,5 +154,8 @@ export function webview2Platform(host: WebView2Host): Platform {
     qr,
     // Das Fenster wird nicht gedrosselt — es gibt nichts offenzuhalten.
     session: noSessionKeepAlive,
+    // Kacheln im Startmenü wären das Windows-Gegenstück; sie gehören nicht zu
+    // dieser Phase, und niemand hat danach gefragt.
+    surfaces: noSurfaces,
   }
 }

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- updatePeriodMillis bleibt 0: das Widget hat nichts, was von selbst
+     veraltet. Neu gezeichnet wird es, wenn die App einen neuen Steckbrief
+     hinterlegt — ein Wecktakt kostete nur Akku. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_actions"
+    android:description="@string/widget_description"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />
