@@ -658,6 +658,23 @@ schickt nie eine Kommandozeile. Details in `docs/PLAN-V2.md`, Abschnitt 5.
 - **Nicht gebaut, gehört zu keiner Phase:** ein Weg, einen Waker zu koppeln,
   ohne dessen Kopplungscode auf der NAS von Hand zu holen. Steht oben unter
   „Offene Aufräumarbeiten" nicht — es blockiert nichts und ist einmalig.
+- **Nachtrag 03.08.2026: Das Selbst-Update der APK hat keinen Aufrufer.** Am
+  Gerät kommt kein Hinweis und keine Rückfrage — zu Recht: `grep -rn
+  "update\.check\|\.update\." app/src --include=*.tsx` findet für die App
+  keine einzige Stelle. Der ganze Unterbau steht (`platform/appUpdate.ts`,
+  `updateService` in `capacitor.ts`, nativ `AppUpdatePlugin` und `ApkInstaller`,
+  `REQUEST_INSTALL_PACKAGES` im Manifest) und ist geprüft; es fehlt genau das
+  Stück dazwischen. Beim Agent gibt es den Knopf (`PowerView.tsx` ruft
+  `agent.update()`), bei der APK nie. Die Abnahme dieser Phase hat das auch
+  nicht behauptet — sie belegt nur, dass die APK *mit* dem Plugin durchbaut.
+  Zwei weitere Dinge stünden auch dann noch im Weg: es gibt **kein Release**
+  (`git remote -v` leer, `git tag` leer — `findLatestApk` liefert korrekt
+  `undefined`), und die installierte APK ist **debug-signiert**, während der
+  Workflow mit dem Release-Keystore signiert. Android lässt eine APK nur über
+  eine installierte, wenn beide denselben Schlüssel tragen; die erste
+  Release-Fassung muss also einmal von Hand installiert werden. Das
+  Verdrahten der Oberfläche steht unten unter „Aufräumarbeiten zum Schluss",
+  der Rest bei den Hardware-Punkten.
 - **Aufgefallen, nicht gebaut (spätere Phasen):** `screenChannel.ts` verbindet
   nach einem Abriss nicht selbsttätig neu; nach einem Agent-Neustart kommt die
   Eingabe zurück, das Bild braucht einen Wechsel der Ansicht. Das gehört zum
@@ -816,6 +833,12 @@ Bau nur zerfasern. Wer hier etwas erledigt, löscht die Zeile.
   und bliebe lokal. Dazu gehört die Frage, ob der Agent die Datei danach neu
   einliest oder ob ein Neustart bleibt (heute: Neustart, weil die Prüfung sonst
   auf einen Zeitpunkt rutscht, an dem niemand hinsieht).
+- **Das Selbst-Update der APK an die Oberfläche hängen.** Der Unterbau aus
+  Phase 14 hat keinen Aufrufer: beim Start einmal `getPlatform().update.check()`
+  und bei einem Fund ein Hinweis mit Knopf, sinnvollerweise neben dem
+  Agent-Update in `PowerView` — dann stehen Rechner und Handy an derselben
+  Stelle. Klein (der Rest ist gebaut und geprüft), aber ohne ein Release im
+  Repo zeigt es nur „kein Update verfügbar"; deshalb erst nach Phase 16.
 - **Widget je Rechner statt „der zuletzt benutzte".** Heute zeigt das Widget
   immer den Rechner, mit dem zuletzt gearbeitet wurde. Wer PC und Laptop
   nebeneinander benutzt, hätte gern zwei Widgets mit fester Zuordnung — dafür
@@ -890,6 +913,12 @@ Fehler gefunden, die keine Testsuite zeigen konnte — sie stehen bei den Phasen
   Aktivität nicht nach außen freigegeben ist. Falls nicht, ist die Antwort
   **nicht** `exported="true"` — dann müsste das Kürzel die App öffnen und die
   Aktion dort auslösen.
+- **Phase 14 (Selbst-Update der APK, Kette von vorn):** Remote setzen,
+  `ANDROID_KEYSTORE_BASE64` samt Passwörtern und Alias als GitHub-Geheimnisse
+  hinterlegen, einen Tag schieben — erst dann gibt es ein Release mit
+  `remotedesktop.apk`, das `findLatestApk` finden kann. Danach **einmalig** am
+  Handy die debug-signierte Fassung deinstallieren und die Release-APK von Hand
+  installieren; ab da greift das Update über sich selbst.
 - **Phase 14:** echter Weckvorgang (vom Laptop aus und von der NAS), das
   Selbst-Update auf dem PC — dazu muss vorher einmal `scripts/release-key.mjs`
   gelaufen und der öffentliche Schlüssel eingetragen sein —, und der
