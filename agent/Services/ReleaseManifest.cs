@@ -114,5 +114,5 @@ public sealed class ManifestVerifier(string? publicKeyBase64)
 public static class ReleaseKeys
 {
     /// <summary>Base64 des öffentlichen Schlüssels im SPKI-Format (ECDSA P-256).</summary>
-    public const string PublicKey = "";
+    public const string PublicKey = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEEjPr0+IzfQABwJELuxxtx2a8YpYxNU9QrazfA43W/p7FncNcjhTRsbQsjPyLcqxEFu0QM1T7PCBt3I276a10dQ==";
 }
