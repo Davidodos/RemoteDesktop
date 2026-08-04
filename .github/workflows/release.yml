@@ -103,10 +103,17 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        # `working-directory` und nicht `npx --prefix`: Letzteres sagt npm nur, wo
+        # das Paket liegt, und lässt das Arbeitsverzeichnis stehen. Capacitor
+        # sucht seine Konfiguration aber dort, wo es gestartet wird — im
+        # Wurzelverzeichnis findet es keine und meldet, die Android-Plattform sei
+        # nicht angelegt. Lokal fällt das nie auf, weil `npm run apk` ohnehin aus
+        # diesem Ordner läuft.
+        working-directory: clients/android
         run: |
-          npm --prefix clients/android ci
-          npx --prefix clients/android cap sync android
-          cd clients/android/android
+          npm ci
+          npx cap sync android
+          cd android
           ./gradlew assembleRelease \
             -PversionName="${{ steps.version.outputs.value }}" \
             -PversionCode="$GITHUB_RUN_NUMBER" \
