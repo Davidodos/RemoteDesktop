@@ -9,6 +9,11 @@ agentkey.txt
 *.crt
 *.key
 *.pfx
+# Der Android-Signaturschlüssel. Geht er verloren, lässt sich keine installierte
+# App je wieder aktualisieren — und wer ihn hat, kann eine untergeschobene APK
+# als Update ausgeben. Er gehört ausschließlich in ein GitHub-Secret.
+*.keystore
+*.jks
 appsettings.Local.json
 appsettings.Production.json
 

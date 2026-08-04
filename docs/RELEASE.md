@@ -13,6 +13,25 @@ ist jede weitere Fassung ein `git tag`.
 Diese Schritte kann nur jemand machen, der Zugang zum GitHub-Konto und zu einem
 Windows-Rechner hat.
 
+### 0. Öffentlich oder privat — und warum das hier keine Geschmacksfrage ist
+
+**Das Repository muss öffentlich sein, damit die Updates funktionieren.**
+
+Agent, Windows-Client und App fragen die GitHub-API **ohne Anmeldung**
+(`api.github.com/repos/…/releases/latest`) und laden die Anhänge über
+`browser_download_url`. Bei einem privaten Repository antwortet die API mit 404
+und der Download verlangt ein Token — es gäbe also nichts zu finden und nichts
+zu holen. Ein Token in eine App zu legen, die auf fremden Geräten läuft, wäre
+kein Ausweg, sondern ein weitergegebenes Geheimnis.
+
+Nebenbei: für öffentliche Repositories sind GitHub-Actions-Minuten unbegrenzt.
+Bei privaten zählt der `windows-latest`-Läufer des Installer-Jobs **doppelt**
+gegen das Freikontingent.
+
+Wer nicht veröffentlichen will, hat zwei Wege: die Releases von einem eigenen
+Server ausliefern (dann sind drei Adressen zu ändern, siehe Schritt 1), oder
+beim Kopieren von Hand bleiben.
+
 ### 1. Repository anlegen und verbinden
 
 ```bash
