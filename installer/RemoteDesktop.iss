@@ -85,11 +85,23 @@ Filename: "{sys}\msiexec.exe"; Parameters: "/i ""{tmp}\tailscale-setup.msi"" /qn
     Components: tailscale; Check: NeedsTailscale and TailscaleDownloaded; \
     StatusMsg: "Tailscale wird installiert…"; Flags: runhidden waituntilterminated
 
+; Beim ersten Mal anlegen, danach nur den Starttyp nachziehen. Ein zweites
+; `sc create` schlüge fehl, und der Fehler wäre für den Nutzer nicht von einem
+; echten zu unterscheiden.
 Filename: "{sys}\sc.exe"; Parameters: "create {#Service} binPath= ""{app}\RemoteDesktopAgent.exe"" start= {code:AgentStartType} DisplayName= ""RemoteDesktop Agent"""; \
-    Components: agent; Flags: runhidden waituntilterminated
+    Components: agent; Check: not ServiceExists; Flags: runhidden waituntilterminated
+
+Filename: "{sys}\sc.exe"; Parameters: "config {#Service} binPath= ""{app}\RemoteDesktopAgent.exe"" start= {code:AgentStartType}"; \
+    Components: agent; Check: ServiceExists; Flags: runhidden waituntilterminated
 
 Filename: "{sys}\sc.exe"; Parameters: "description {#Service} ""Macht diesen Rechner über RemoteDesktop fernsteuerbar."""; \
     Components: agent; Flags: runhidden waituntilterminated
+
+; Nach einem Update wieder anwerfen — sonst wäre der Rechner nach jeder
+; Aktualisierung stumm, bis jemand ihn neu startet. Nur, wenn er auch von allein
+; starten soll.
+Filename: "{sys}\sc.exe"; Parameters: "start {#Service}"; \
+    Components: agent; Tasks: autostartagent; Flags: runhidden waituntilterminated
 
 Filename: "{app}\client\RemoteDesktopClient.exe"; Description: "Einrichtung jetzt abschließen"; \
     Components: client; Flags: postinstall nowait skipifsilent
@@ -114,6 +126,31 @@ var
 function TailscaleDownloaded: Boolean;
 begin
   Result := Downloaded;
+end;
+
+{ Ob der Dienst schon eingetragen ist — dann ist dies ein Update und keine
+  Erstinstallation. }
+function ServiceExists: Boolean;
+begin
+  Result := RegKeyExists(HKEY_LOCAL_MACHINE,
+    'SYSTEM\CurrentControlSet\Services\{#Service}');
+end;
+
+{ Vor dem Kopieren den Dienst anhalten.
+
+  Eine laufende .exe lässt sich unter Windows nicht ersetzen. Ohne diesen
+  Schritt scheitert jedes Update an genau der Datei, um die es geht — und der
+  Installer meldet einen Dateizugriffsfehler, mit dem niemand etwas anfangen
+  kann. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+
+  if ServiceExists then
+    Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#Service}', '',
+         SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
 { Ob Tailscale schon da ist. Wer es längst benutzt, soll es nicht ein zweites

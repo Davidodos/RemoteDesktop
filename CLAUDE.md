@@ -2,6 +2,7 @@
 
 Handy-App (Android) zur Fernsteuerung von PC und Laptop (beide Windows 10/11).
 
+Veröffentlichen und Updates: **`docs/RELEASE.md`**
 Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
 
 **V2-Umbau zur echten App (läuft):** Begründungen in **`docs/PLAN-V2.md`**,

@@ -55,10 +55,13 @@ Deinstalliert wird der Dienst mit `sc stop` und `sc delete`. Die gekoppelten
 Geräte in `%ProgramData%` bleiben absichtlich stehen — wer neu installiert, will
 meist nicht alle Handys neu koppeln.
 
-## Offen
+## Im CI
 
-Gebaut wird der Installer heute von Hand unter Windows. Ihn im
-Release-Workflow zu erzeugen bräuchte einen zweiten Job auf `windows-latest`
-(`choco install innosetup`), der die Artefakte des ersten übernimmt. Der
-Workflow legt inzwischen alles bereit, was dafür nötig ist —
-`publish/client.zip` liegt seit Phase 16 mit im Release.
+Der Release-Workflow baut ihn seit dem 04.08.2026 selbst: ein zweiter Job auf
+`windows-latest` (`choco install innosetup`) übernimmt die Artefakte des ersten
+und hängt `RemoteDesktop-Setup-<fassung>.exe` an dasselbe Release. Der Befehl
+oben bleibt der Weg, um ihn zwischendurch von Hand zu prüfen.
+
+Der Windows-Client holt sich genau diese Datei, wenn jemand im
+Einstellungsfenster auf *Nach Updates suchen* drückt — deshalb muss der Anhang
+mit `RemoteDesktop-Setup` beginnen (`setup/ReleaseCheck.cs`).

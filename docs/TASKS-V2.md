@@ -50,11 +50,11 @@ zu beginnen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 03.08.2026: **301 grün** |
+| App-Tests | `cd app && npm test` — Stand 04.08.2026: **306 grün** |
 | Agent-Tests | `cd agent.Tests && dotnet test` — Stand 01.08.2026: **310 grün** |
 | Waker-Tests | `cd waker && npm test` — Stand 01.08.2026: **69 grün** |
 | Kotlin-Tests | `cd clients/android/android && ./gradlew testDebugUnitTest` — Stand 03.08.2026: **9 grün** |
-| Einrichtungs-Tests | `cd setup.Tests && dotnet test` — Stand 04.08.2026: **30 grün** |
+| Einrichtungs-Tests | `cd setup.Tests && dotnet test` — Stand 04.08.2026: **37 grün** |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 | Android-Client | `cd clients/android && npm run apk` — baut eine echte APK; Toolchain-Einrichtung in `clients/android/README.md` |
 | Typprüfung | `cd app && npx tsc -b` |
@@ -943,12 +943,6 @@ Bau nur zerfasern. Wer hier etwas erledigt, löscht die Zeile.
   und bliebe lokal. Dazu gehört die Frage, ob der Agent die Datei danach neu
   einliest oder ob ein Neustart bleibt (heute: Neustart, weil die Prüfung sonst
   auf einen Zeitpunkt rutscht, an dem niemand hinsieht).
-- **Das Selbst-Update der APK an die Oberfläche hängen.** Der Unterbau aus
-  Phase 14 hat keinen Aufrufer: beim Start einmal `getPlatform().update.check()`
-  und bei einem Fund ein Hinweis mit Knopf, sinnvollerweise neben dem
-  Agent-Update in `PowerView` — dann stehen Rechner und Handy an derselben
-  Stelle. Klein (der Rest ist gebaut und geprüft), aber ohne ein Release im
-  Repo zeigt es nur „kein Update verfügbar"; deshalb erst nach Phase 16.
 - **Widget je Rechner statt „der zuletzt benutzte".** Heute zeigt das Widget
   immer den Rechner, mit dem zuletzt gearbeitet wurde. Wer PC und Laptop
   nebeneinander benutzt, hätte gern zwei Widgets mit fester Zuordnung — dafür
@@ -960,6 +954,41 @@ Bau nur zerfasern. Wer hier etwas erledigt, löscht die Zeile.
   Hardware-Punkten. Es ist keine reine Prüfung, sondern eine kleine Änderung:
   `Agent:IdentityPath` in die `appsettings.json` aufnehmen und auf
   `C:\ProgramData\RemoteDesktopAgent\` zeigen lassen.
+
+## Nachtrag 04.08.2026 — Updates ohne Dateikopieren
+
+Nach Phase 16 auf Wunsch gebaut (Commit „feat: Updates ohne Dateikopieren"). Es
+schließt den Punkt „Selbst-Update der APK an die Oberfläche hängen" aus der
+Liste oben und zwei Lücken, die dabei auffielen:
+
+- **Die APK hat jetzt einen Aufrufer.** `views/AppUpdateView.tsx` prüft beim
+  Öffnen der Energie-Seite und zeigt ein Angebot, wenn eines dasteht. Die
+  Zustandslogik liegt in `lib/appUpdateState.ts` und ist geprüft (5 Tests) —
+  vor allem die Zusage, dass „alles aktuell" **nicht** angezeigt wird: eine
+  Zeile, die bei jedem Öffnen dasteht und nie etwas zu sagen hat, ist Lärm.
+- **Der Windows-Client konnte sich gar nicht aktualisieren.** Der Agent kann es
+  seit Phase 14, das Fenster nie. Jetzt geht es über den **Installer**, nicht
+  über einzelne Dateien: der Client ist ein Ordner mit Abhängigkeiten, der
+  Agent ein Dienst, der erst gestoppt werden muss. `setup/ReleaseCheck.cs`
+  (7 Tests) findet den Installer im Release, `desktop/ClientUpdate.cs` lädt und
+  startet ihn, das Einstellungsfenster hat den Knopf.
+- **Der Installer stoppte den Dienst nicht.** Damit wäre jedes Update an genau
+  der Datei gescheitert, um die es geht — eine laufende `.exe` lässt sich unter
+  Windows nicht ersetzen. `PrepareToInstall` hält ihn an, `sc start` wirft ihn
+  danach wieder an. Außerdem legt der Installer den Dienst nur noch beim ersten
+  Mal an und zieht danach nur den Starttyp nach; ein zweites `sc create` wäre
+  fehlgeschlagen und der Fehler für niemanden von einem echten zu unterscheiden.
+- **Der Installer wird jetzt im CI gebaut.** Zweiter Job auf `windows-latest`
+  (`choco install innosetup`), der die Artefakte des ersten übernimmt und seine
+  `.exe` an dasselbe Release hängt. Damit ist die Kette vollständig: ein Tag,
+  und alle drei Teile holen sich den Rest selbst.
+- **`docs/RELEASE.md`** beschreibt die einmalige Einrichtung (Remote,
+  Release-Schlüssel, Android-Keystore, erste Installation von Hand) und was ab
+  dann je Fassung passiert. Diese fünf Schritte sind der Rest, der **nicht**
+  automatisierbar ist — sie brauchen ein GitHub-Konto und einen Windows-Rechner.
+
+`offen: Hardware` bleibt: die Kette einmal von einem Tag bis zum aktualisierten
+Gerät durchspielen, auf beiden Plattformen.
 
 ## Zurückgestellt
 

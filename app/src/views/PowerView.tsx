@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AppUpdateView } from './AppUpdateView.tsx'
 import type { AgentClient } from '../lib/agentClient.ts'
 import type { PowerAction } from '../lib/types.ts'
 
@@ -57,6 +58,10 @@ export function PowerView({ agent, deviceName, onError }: Props): React.JSX.Elem
         ))}
       </div>
 
+      {/* Erst die App, dann der Rechner: die App ist das, was der Nutzer in
+          der Hand hält, und ihre Fassung entscheidet, ob sie mit dem Agent
+          überhaupt noch reden kann. */}
+      <AppUpdateView />
       <AgentUpdateCard agent={agent} deviceName={deviceName} onError={onError} />
 
       {pending !== undefined && (

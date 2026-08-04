@@ -44,6 +44,11 @@ public sealed class SettingsWindow : Form
 
     private readonly Dictionary<AutostartMode, RadioButton> _modes = new();
 
+    private readonly ClientUpdate _update = new();
+    private readonly Label _updateState = new() { Dock = DockStyle.Fill, AutoSize = false };
+    private readonly Button _updateAct = new() { AutoSize = true };
+    private ReleaseOffer? _offer;
+
     public SettingsWindow(ISetupProbe probe, IAutostartHost autostart, Selection selection)
     {
         _probe = probe;
@@ -52,7 +57,7 @@ public sealed class SettingsWindow : Form
 
         Text = "RemoteDesktop — Einrichtung";
         Width = 640;
-        Height = 620;
+        Height = 700;
         StartPosition = FormStartPosition.CenterScreen;
         MinimizeBox = false;
 
@@ -69,17 +74,19 @@ public sealed class SettingsWindow : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 4,
             Padding = new Padding(12)
         };
 
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         layout.Controls.Add(BuildSetupBox(), 0, 0);
         layout.Controls.Add(BuildAutostartBox(), 0, 1);
-        layout.Controls.Add(BuildCoordinatorBox(), 0, 2);
+        layout.Controls.Add(BuildUpdateBox(), 0, 2);
+        layout.Controls.Add(BuildCoordinatorBox(), 0, 3);
 
         return layout;
     }
@@ -156,6 +163,97 @@ public sealed class SettingsWindow : Form
         box.Controls.Add(inner);
 
         return box;
+    }
+
+    /// <summary>
+    /// Agent und Client zusammen erneuern — über den Installer, nicht über
+    /// einzeln kopierte Dateien. Beide stecken in demselben Paket, deshalb steht
+    /// der Knopf auch nur einmal da.
+    /// </summary>
+    private Control BuildUpdateBox()
+    {
+        var box = new GroupBox { Text = "Updates", Dock = DockStyle.Fill, AutoSize = true };
+        var inner = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            AutoSize = true,
+            Padding = new Padding(8)
+        };
+
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        _updateState.Text = $"Fassung {ClientUpdate.InstalledVersion()}";
+        _updateAct.Text = "Nach Updates suchen";
+        _updateAct.Click += async (_, _) => await UpdateStepAsync();
+
+        inner.Controls.Add(_updateState, 0, 0);
+        inner.Controls.Add(_updateAct, 1, 0);
+
+        box.Controls.Add(inner);
+
+        return box;
+    }
+
+    /// <summary>
+    /// Ein Knopf mit zwei Bedeutungen: erst suchen, dann — wenn etwas dalag —
+    /// installieren. Zwei Knöpfe, von denen einer fast immer nutzlos ist, wären
+    /// die schlechtere Antwort.
+    /// </summary>
+    private async Task UpdateStepAsync()
+    {
+        _updateAct.Enabled = false;
+
+        try
+        {
+            if (_offer is null)
+            {
+                _updateState.Text = "Suche…";
+                _offer = await _update.CheckAsync(CancellationToken.None);
+
+                if (_offer is null)
+                {
+                    _updateState.Text =
+                        $"Fassung {ClientUpdate.InstalledVersion()} — das ist die neueste.";
+                    _updateAct.Text = "Nach Updates suchen";
+                    return;
+                }
+
+                _updateState.Text = $"Fassung {_offer.Version} liegt bereit.";
+                _updateAct.Text = "Jetzt installieren";
+                return;
+            }
+
+            _updateState.Text = "Wird geladen…";
+            await _update.InstallAsync(_offer, CancellationToken.None);
+
+            // Der Installer läuft jetzt und will diese .exe ersetzen. Eine
+            // laufende Datei lässt sich nicht überschreiben, also geht das
+            // Fenster von selbst — und der Installer startet es danach wieder.
+            Application.Exit();
+        }
+        catch (Exception failure)
+        {
+            _updateState.Text = $"Nicht geklappt: {failure.Message}";
+            _offer = null;
+            _updateAct.Text = "Nach Updates suchen";
+        }
+        finally
+        {
+            _updateAct.Enabled = true;
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _update.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 
     private Control BuildCoordinatorBox()

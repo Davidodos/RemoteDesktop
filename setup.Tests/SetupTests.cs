@@ -278,3 +278,78 @@ public class CoordinatorConfigTests
         Assert.True(CoordinatorConfig.Read(null).IsTailscale);
     }
 }
+
+public class ReleaseCheckTests
+{
+    private const string Release = """
+        {
+          "tag_name": "v1.2.0",
+          "assets": [
+            { "name": "remotedesktop.apk", "browser_download_url": "https://example.org/apk" },
+            { "name": "RemoteDesktop-Setup-1.2.0.exe",
+              "browser_download_url": "https://example.org/setup.exe" }
+          ]
+        }
+        """;
+
+    [Fact]
+    public void Findet_den_Installer_zwischen_den_anderen_Anhaengen()
+    {
+        var offer = ReleaseCheck.Find(Release);
+
+        Assert.Equal("1.2.0", offer?.Version);
+        Assert.Equal("https://example.org/setup.exe", offer?.Url);
+    }
+
+    [Fact]
+    public void Ohne_Installer_im_Release_gibt_es_kein_Angebot()
+    {
+        // Ein Release, das nur den Agent und die APK enthält — dann gibt es für
+        // Windows nichts zu holen, und das ist kein Fehler.
+        var ohne = """
+            { "tag_name": "v1.2.0", "assets": [
+              { "name": "remotedesktop.apk", "browser_download_url": "https://example.org/apk" } ] }
+            """;
+
+        Assert.Null(ReleaseCheck.Find(ohne));
+    }
+
+    [Fact]
+    public void Was_kein_Release_ist_bleibt_folgenlos()
+    {
+        Assert.Null(ReleaseCheck.Find("kein JSON"));
+        Assert.Null(ReleaseCheck.Find("{}"));
+        Assert.Null(ReleaseCheck.Find(""));
+        Assert.Null(ReleaseCheck.Find(null));
+    }
+
+    [Fact]
+    public void Dieselbe_Fassung_wird_nicht_angeboten()
+    {
+        Assert.False(ReleaseCheck.IsWorthInstalling(ReleaseCheck.Find(Release), "1.2.0"));
+        Assert.False(ReleaseCheck.IsWorthInstalling(ReleaseCheck.Find(Release), "v1.2.0"));
+    }
+
+    [Fact]
+    public void Eine_andere_Fassung_wird_angeboten()
+    {
+        Assert.True(ReleaseCheck.IsWorthInstalling(ReleaseCheck.Find(Release), "1.1.0"));
+    }
+
+    [Fact]
+    public void Ohne_bekannte_eigene_Fassung_wird_angeboten()
+    {
+        // Verschweigen wäre die schlechtere Antwort als einmal zu viel fragen.
+        Assert.True(ReleaseCheck.IsWorthInstalling(ReleaseCheck.Find(Release), null));
+        Assert.True(ReleaseCheck.IsWorthInstalling(ReleaseCheck.Find(Release), "  "));
+    }
+
+    [Fact]
+    public void Der_Installer_laeuft_leise_aber_nicht_unsichtbar()
+    {
+        // Einen Fortschrittsbalken darf man sehen, wenn gerade der eigene
+        // Rechner umgebaut wird.
+        Assert.Contains("/SILENT", ReleaseCheck.InstallArguments());
+        Assert.DoesNotContain("/VERYSILENT", ReleaseCheck.InstallArguments());
+    }
+}
