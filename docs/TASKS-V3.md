@@ -157,7 +157,7 @@ Befund 2. Kein Zertifikat mehr, ohne das nichts geht.
 
 ## Phase 23 — Eine Oberfläche für alles
 
-**Status:** offen
+**Status:** erledigt (05.08.2026)
 
 Befund 1 und 3.
 
@@ -177,9 +177,37 @@ Befund 1 und 3.
 
 ### Abnahme
 
-- [ ] `grep -rn "CreateNoWindow" desktop/` belegt: kein Prozessstart ohne
-- [ ] Tests belegen die Zustandslogik je Teil samt der erlaubten Handgriffe
-- [ ] `cd desktop && dotnet build` ohne Warnung
+- [x] `setup.Tests` **73 statt 60**. `InventoryTests` (13) belegt die
+      Zustandslogik je Teil samt der erlaubten Handgriffe — vor allem: ein
+      nicht eingerichteter Agent steht mit dem Knopf da, der ihn einrichtet ·
+      ohne Programmdatei gibt es keinen Knopf (er liefe ins Leere) · die
+      Fernsteuerung kennt kein Starten und Beenden (sie ist kein Dienst) · es
+      sind immer drei Kacheln, egal was fehlt
+- [x] `dotnet build desktop/` — **Build succeeded**, keine Warnung
+      (`TreatWarningsAsErrors` ist an)
+- [x] Jeder Prozessstart läuft über `ProcessRunner` mit `CreateNoWindow` und
+      umgeleiteter Ausgabe. Die drei verbliebenen `UseShellExecute = true` sind
+      begründet: zwei öffnen eine Adresse im Browser, der dritte startet den
+      Installer mit UAC-Rückfrage
+
+### Notizen
+
+- **Die Schrittliste im Fenster ist zu einem Satz geschrumpft.** Sie stand
+  vorher neben der Teileliste und sagte dasselbe zweimal. Jetzt trägt jede
+  Kachel ihren Zustand, und darüber steht die eine Zeile „Als Nächstes: …".
+  `SetupSteps` bleibt die Quelle dafür
+- **`ClientUpdate` startete den Installer ohne Rechtesprung.** Aufgefallen beim
+  Durchsehen der Prozessstarts: der Installer verlangt im Manifest
+  Administratorrechte, und mit `UseShellExecute = false` gibt es keine
+  Rückfrage, sondern den Fehler „Elevation required". Das Update über den Knopf
+  aus dem Nachtrag vom 04.08.2026 konnte so nie funktionieren. Behoben
+- **Der Dienstzustand wird beim Agent selbst erfragt** (`/health` über
+  Loopback), nicht bei der Dienstverwaltung: ein Dienst kann laufen und
+  trotzdem nichts beantworten. Für „läuft" zählt nur, was ein Handy davon
+  hätte. Nebenbei erspart es das Auswerten der übersetzten Ausgabe von
+  `sc query`
+- **Die `.exe` heißt jetzt `RemoteDesktop.exe`.** Der Namensraum im Quelltext
+  bleibt `RemoteDesktopClient`, damit der Umbau nicht jede Datei anfasst
 
 ---
 

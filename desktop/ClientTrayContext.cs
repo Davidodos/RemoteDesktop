@@ -3,32 +3,50 @@ namespace RemoteDesktopClient;
 /// <summary>
 /// Das Tray-Icon — der eigentliche Sitz des Programms.
 ///
-/// Das Fenster ist nur eine Ansicht davon und startet nicht mit: wer den
-/// Rechner hochfährt, will meist nicht sofort ein Fenster, sondern nur, dass
-/// der Client bereitsteht. Damit ist zugleich der offene Punkt aus Phase 1
-/// erledigt.
+/// Die Fenster sind nur Ansichten davon und starten nicht mit: wer den Rechner
+/// hochfährt, will meist nicht sofort ein Fenster, sondern nur, dass alles
+/// bereitsteht.
+///
+/// Seit V3 hängen hier auch die beiden Handgriffe, die man wirklich unterwegs
+/// braucht: den Agent anhalten und wieder anwerfen, ohne dafür ein Fenster zu
+/// öffnen.
 /// </summary>
 public sealed class ClientTrayContext : ApplicationContext
 {
     private readonly NotifyIcon _tray;
     private readonly LocalAgent _agent = new(LocalAgent.ConfiguredPort());
-    private readonly string _appDirectory;
+    private readonly WindowsProbe _probe = new();
+    private readonly string? _appDirectory;
 
-    private MainWindow? _window;
+    private readonly ToolStripMenuItem _startAgent = new("Agent starten");
+    private readonly ToolStripMenuItem _stopAgent = new("Agent beenden");
+
+    private MainWindow? _remote;
     private PairingWindow? _pairing;
-    private SettingsWindow? _settings;
+    private ControlPanel? _panel;
 
-    public ClientTrayContext(string appDirectory)
+    public ClientTrayContext(string? appDirectory)
     {
         _appDirectory = appDirectory;
 
         var menu = new ContextMenuStrip();
 
-        menu.Items.Add("Fenster öffnen", image: null, async (_, _) => await ShowWindowAsync());
+        menu.Items.Add("RemoteDesktop öffnen", image: null, async (_, _) => await ShowPanelAsync());
+        menu.Items.Add("Fernsteuerung öffnen", image: null, async (_, _) => await ShowRemoteAsync());
         menu.Items.Add("Geräte koppeln…", image: null, (_, _) => ShowPairing());
-        menu.Items.Add("Einrichtung…", image: null, (_, _) => ShowSettings());
+        menu.Items.Add(new ToolStripSeparator());
+
+        _startAgent.Click += async (_, _) => await ServiceAsync(AdminTask.StartService);
+        _stopAgent.Click += async (_, _) => await ServiceAsync(AdminTask.StopService);
+
+        menu.Items.Add(_startAgent);
+        menu.Items.Add(_stopAgent);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Beenden", image: null, (_, _) => Quit());
+
+        // Erst beim Aufklappen fragen: der Zustand des Dienstes ändert sich, und
+        // ein Menü, das den Stand von vorhin zeigt, führt in die Irre.
+        menu.Opening += async (_, _) => await RefreshMenuAsync();
 
         _tray = new NotifyIcon
         {
@@ -40,32 +58,68 @@ public sealed class ClientTrayContext : ApplicationContext
             ContextMenuStrip = menu
         };
 
-        _tray.DoubleClick += async (_, _) => await ShowWindowAsync();
+        _tray.DoubleClick += async (_, _) => await ShowPanelAsync();
     }
 
-    private async Task ShowWindowAsync()
+    /// <summary>
+    /// Das gemeinsame Fenster. Es zeigt alle Teile, auch die auf diesem Rechner
+    /// nicht eingerichteten — der Punkt des ganzen Umbaus.
+    /// </summary>
+    private async Task ShowPanelAsync()
     {
-        if (_window is null || _window.IsDisposed)
+        if (_panel is null || _panel.IsDisposed)
         {
-            _window = new MainWindow(_appDirectory);
+            _panel = new ControlPanel(
+                _probe,
+                new WindowsAutostart(Environment.ProcessPath ?? string.Empty),
+                _appDirectory,
+                ShowRemoteAsync);
         }
 
-        _window.Show();
-        _window.BringToFront();
+        _panel.Show();
+        _panel.BringToFront();
+
+        await _panel.RefreshAsync();
+    }
+
+    /// <summary>Das Fenster, mit dem man andere Rechner steuert.</summary>
+    private async Task ShowRemoteAsync()
+    {
+        if (_appDirectory is null)
+        {
+            MessageBox.Show(
+                WebAppLocator.MissingMessage, "RemoteDesktop",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            return;
+        }
+
+        if (WebView2Runtime.InstalledVersion() is null)
+        {
+            MessageBox.Show(
+                WebView2Runtime.MissingMessage, "RemoteDesktop",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            return;
+        }
+
+        if (_remote is null || _remote.IsDisposed)
+        {
+            _remote = new MainWindow(_appDirectory);
+        }
+
+        _remote.Show();
+        _remote.BringToFront();
 
         try
         {
-            await _window.LoadAsync();
+            await _remote.LoadAsync();
         }
         catch (Exception ex)
         {
-            // Bis hierher ist die Runtime schon geprüft worden; scheitert es
-            // trotzdem, ist es kein Fall für einen stillen Absturz.
             MessageBox.Show(
                 $"Die Oberfläche ließ sich nicht laden.\n\n{ex.Message}",
-                "RemoteDesktop",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
+                "RemoteDesktop", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
@@ -80,46 +134,33 @@ public sealed class ClientTrayContext : ApplicationContext
         _pairing.BringToFront();
     }
 
-    /// <summary>
-    /// Das gemeinsame Fenster für Agent und Client. Welche Teile auf diesem
-    /// Rechner überhaupt liegen, liest es selbst — der Installer hat es
-    /// hinterlassen, und was fehlt, wird gar nicht erst angeboten.
-    /// </summary>
-    private void ShowSettings()
+    private async Task ServiceAsync(AdminTask task)
     {
-        if (_settings is null || _settings.IsDisposed)
-        {
-            var probe = new WindowsProbe();
+        var result = await Task.Run(() => Elevation.Run(task));
 
-            _settings = new SettingsWindow(
-                probe,
-                new WindowsAutostart(Environment.ProcessPath ?? string.Empty),
-                InstalledSelection(probe));
+        if (!result.Ok)
+        {
+            MessageBox.Show(
+                result.Message, "RemoteDesktop", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
-        _settings.Show();
-        _settings.BringToFront();
+        if (_panel is { IsDisposed: false })
+        {
+            await _panel.RefreshAsync();
+        }
     }
 
     /// <summary>
-    /// Was hier installiert ist: der Client ist es offensichtlich — er zeigt
-    /// gerade dieses Menü —, der Agent nur, wenn sein Dienst existiert.
+    /// Nur anbieten, was gerade geht: einen nicht eingetragenen Dienst kann man
+    /// weder starten noch beenden, und ein laufender braucht keinen Startknopf.
     /// </summary>
-    private static RemoteDesktopSetup.Selection InstalledSelection(RemoteDesktopSetup.ISetupProbe probe)
+    private async Task RefreshMenuAsync()
     {
-        var components = RemoteDesktopSetup.SetupComponent.Client;
+        var installed = AgentService.Installed;
+        var running = installed && await AgentService.RespondsAsync();
 
-        if (probe.HasService)
-        {
-            components |= RemoteDesktopSetup.SetupComponent.Agent;
-        }
-
-        if (probe.HasTailscale)
-        {
-            components |= RemoteDesktopSetup.SetupComponent.Tailscale;
-        }
-
-        return new RemoteDesktopSetup.Selection(components, RemoteDesktopSetup.AutostartMode.None);
+        _startAgent.Enabled = installed && !running;
+        _stopAgent.Enabled = installed && running;
     }
 
     private void Quit()
@@ -137,9 +178,9 @@ public sealed class ClientTrayContext : ApplicationContext
         {
             _tray.Dispose();
             _agent.Dispose();
-            _window?.Dispose();
+            _remote?.Dispose();
             _pairing?.Dispose();
-            _settings?.Dispose();
+            _panel?.Dispose();
         }
 
         base.Dispose(disposing);

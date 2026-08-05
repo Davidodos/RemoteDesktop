@@ -7,7 +7,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>RemoteDesktopClient</RootNamespace>
-    <AssemblyName>RemoteDesktopClient</AssemblyName>
+    <!-- Die eine .exe, die ein Mensch startet. Sie hiess bis V3
+         "RemoteDesktopClient" - ein Name, der so klang, als gaebe es daneben
+         noch etwas anderes zu starten. Der Namensraum bleibt, damit der Umbau
+         nicht jede Datei anfasst. -->
+    <AssemblyName>RemoteDesktop</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- Erlaubt das Bauen auf dem Linux-Container, genau wie im Agent. -->

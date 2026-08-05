@@ -592,3 +592,159 @@ public class SetupStepsProfileTests
         }
     }
 }
+
+/// <summary>
+/// Alle Teile auf einen Blick — auch die, die es hier nicht gibt.
+///
+/// Der Befund dahinter: bis Release v1.0.0 wurde ausgeblendet, was fehlte.
+/// Genau das nahm dem Nutzer den Weg, es nachzuholen.
+/// </summary>
+public class InventoryTests
+{
+    private static readonly Machine Vollstaendig = new(
+        AgentBinary: true, AgentService: true, AgentRunning: true,
+        ClientFiles: true, WebView2: true,
+        Tailscale: true, TailscaleConnected: true, Certificate: true);
+
+    private static Part Teil(Machine machine, string titel, NetworkProfile? profil = null) =>
+        Inventory.For(machine, profil ?? NetworkProfile.Default)
+            .Single(part => part.Title == titel);
+
+    [Fact]
+    public void Auch_ein_nicht_eingerichteter_Agent_steht_da()
+    {
+        var agent = Teil(Vollstaendig with { AgentService = false, AgentRunning = false },
+            Inventory.AgentTitle);
+
+        Assert.True(agent.Missing);
+        Assert.Contains("nicht eingerichtet", agent.State);
+
+        // Und zwar mit dem Knopf, der ihn einrichtet. Ohne den wäre die Anzeige
+        // nur eine Auskunft über etwas, das man anderswo erledigen muss.
+        Assert.Contains(PartAction.Install, agent.Actions);
+    }
+
+    [Fact]
+    public void Ohne_Programmdatei_gibt_es_nichts_einzurichten()
+    {
+        // Ein Knopf „Einrichten" liefe hier ins Leere: `sc create` zeigte auf
+        // eine Datei, die es nicht gibt, und der Dienst startete nie.
+        var agent = Teil(new Machine(), Inventory.AgentTitle);
+
+        Assert.Empty(agent.Actions);
+        Assert.Contains("fehlt", agent.State);
+    }
+
+    [Fact]
+    public void Ein_laufender_Agent_laesst_sich_beenden_und_ein_gestoppter_starten()
+    {
+        Assert.Contains(PartAction.Stop, Teil(Vollstaendig, Inventory.AgentTitle).Actions);
+        Assert.DoesNotContain(PartAction.Start, Teil(Vollstaendig, Inventory.AgentTitle).Actions);
+
+        var gestoppt = Teil(Vollstaendig with { AgentRunning = false }, Inventory.AgentTitle);
+
+        Assert.Contains(PartAction.Start, gestoppt.Actions);
+        Assert.DoesNotContain(PartAction.Stop, gestoppt.Actions);
+        Assert.False(gestoppt.Ok);
+    }
+
+    [Fact]
+    public void Entfernen_gibt_es_nur_wo_etwas_eingetragen_ist()
+    {
+        Assert.Contains(PartAction.Remove, Teil(Vollstaendig, Inventory.AgentTitle).Actions);
+        Assert.DoesNotContain(
+            PartAction.Remove,
+            Teil(Vollstaendig with { AgentService = false }, Inventory.AgentTitle).Actions);
+    }
+
+    [Fact]
+    public void Ohne_WebView2_wird_das_Fenster_nicht_angeboten()
+    {
+        // Es ginge auf und bliebe leer — das sähe aus wie ein Absturz.
+        var client = Teil(Vollstaendig with { WebView2 = false }, Inventory.ClientTitle);
+
+        Assert.Empty(client.Actions);
+        Assert.Contains("WebView2", client.State);
+    }
+
+    [Fact]
+    public void Die_Fernsteuerung_kennt_kein_Starten_und_kein_Beenden()
+    {
+        // Sie ist kein Dienst. Knöpfe dafür wären eine Verwechslung mit dem
+        // Agent, und die kostete beim ersten Fehlgriff die eigene Sitzung.
+        var client = Teil(Vollstaendig, Inventory.ClientTitle);
+
+        Assert.Equal([PartAction.Open], client.Actions);
+    }
+
+    [Fact]
+    public void Im_Heimnetz_gibt_es_am_Netz_nichts_zu_installieren()
+    {
+        var netz = Teil(
+            new Machine(AgentBinary: true, AgentService: true, ClientFiles: true, WebView2: true),
+            Inventory.NetworkTitle,
+            new NetworkProfile(NetworkKind.Lan, "192.168.178.20", Coordinator.Default));
+
+        Assert.Empty(netz.Actions);
+        Assert.True(netz.Ok);
+        Assert.Contains("192.168.178.20", netz.State);
+    }
+
+    [Fact]
+    public void Im_Heimnetz_ohne_Adresse_fehlt_noch_etwas()
+    {
+        var netz = Teil(
+            Vollstaendig,
+            Inventory.NetworkTitle,
+            new NetworkProfile(NetworkKind.Lan, "", Coordinator.Default));
+
+        Assert.False(netz.Ok);
+    }
+
+    [Fact]
+    public void Ein_fehlendes_Tailscale_Zertifikat_ist_kein_Fehler_mehr()
+    {
+        // Der Agent stellt sich sonst selbst eins aus. Angeboten wird es
+        // trotzdem: ein Zertifikat von Tailscale kennt jeder Browser bereits.
+        var netz = Teil(Vollstaendig with { Certificate = false }, Inventory.NetworkTitle);
+
+        Assert.True(netz.Ok);
+        Assert.Contains(PartAction.Certificate, netz.Actions);
+    }
+
+    [Fact]
+    public void Ohne_Tailscale_fuehrt_der_Weg_zum_Herunterladen()
+    {
+        var netz = Teil(new Machine(), Inventory.NetworkTitle);
+
+        Assert.Equal([PartAction.Download], netz.Actions);
+        Assert.True(netz.Missing);
+    }
+
+    [Fact]
+    public void Es_sind_immer_drei_Teile_egal_was_fehlt()
+    {
+        Assert.Equal(3, Inventory.For(new Machine(), NetworkProfile.Default).Count);
+        Assert.Equal(3, Inventory.For(Vollstaendig, NetworkProfile.Default).Count);
+    }
+
+    [Fact]
+    public void Jeder_Handgriff_hat_einen_Satz_statt_eines_Namens()
+    {
+        foreach (var action in Enum.GetValues<PartAction>())
+        {
+            Assert.NotEmpty(Inventory.Describe(action));
+            Assert.DoesNotContain("Action", Inventory.Describe(action));
+        }
+    }
+
+    [Fact]
+    public void Jedes_Teil_sagt_wofuer_es_da_ist()
+    {
+        foreach (var part in Inventory.For(new Machine(), NetworkProfile.Default))
+        {
+            Assert.NotEmpty(part.Purpose);
+            Assert.NotEmpty(part.State);
+        }
+    }
+}

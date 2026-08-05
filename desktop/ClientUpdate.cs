@@ -89,7 +89,11 @@ public sealed class ClientUpdate : IDisposable
             await source.CopyToAsync(file, cancellationToken);
         }
 
-        var info = new ProcessStartInfo(target) { UseShellExecute = false };
+        // Über die Shell und nicht direkt: der Installer verlangt in seinem
+        // Manifest Administratorrechte. Mit `UseShellExecute = false` gibt es
+        // keine Rückfrage von Windows, sondern den Fehler „Elevation required" —
+        // und das Update endete, bevor es anfing.
+        var info = new ProcessStartInfo(target) { UseShellExecute = true, Verb = "runas" };
 
         foreach (var argument in ReleaseCheck.InstallArguments())
         {

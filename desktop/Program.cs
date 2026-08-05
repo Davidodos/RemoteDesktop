@@ -1,18 +1,33 @@
 namespace RemoteDesktopClient;
 
 /// <summary>
-/// Der Windows-Client: ein Tray-Programm mit einem WebView2-Fenster, in dem
-/// dieselbe React-App läuft wie auf dem Handy.
+/// Die eine <c>.exe</c>, die ein Mensch startet.
 ///
-/// Der Agent bleibt davon unberührt — er ist ein eigener Dienst und wird von
-/// hier aus nur über die Loopback-Adresse angesprochen, für Kopplungscode und
-/// Widerruf.
+/// <para>
+/// Sie ist Tray-Programm, Einrichtung und Fernsteuerfenster in einem. Der Agent
+/// bleibt ein eigener Dienst mit eigener Programmdatei — er läuft unter SYSTEM,
+/// und der soll weder WinForms noch eine Anzeigekomponente mit sich tragen. Von
+/// hier aus wird er über die Dienstverwaltung angesprochen, nie direkt gestartet.
+/// </para>
+///
+/// <para>
+/// Ein zweiter Aufrufweg führt an der Oberfläche vorbei: mit
+/// <c>--admin-task</c> ruft sich dieses Programm selbst erhöht auf, erledigt
+/// genau einen Handgriff und beendet sich. Siehe <see cref="Elevation"/>.
+/// </para>
 /// </summary>
 internal static class Program
 {
     [STAThread]
-    private static void Main()
+    private static int Main(string[] args)
     {
+        // Der erhöhte Aufruf: kein Fenster, kein Tray, keine Einmaligkeitssperre.
+        // Er tut eine Sache und geht wieder.
+        if (args.Contains(Elevation.TaskSwitch))
+        {
+            return Elevation.Execute(args);
+        }
+
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
@@ -26,30 +41,16 @@ internal static class Program
 
         if (!first)
         {
-            return;
+            return 0;
         }
 
-        if (WebView2Runtime.InstalledVersion() is null)
-        {
-            Fail(WebView2Runtime.MissingMessage);
-            return;
-        }
+        // Fehlende Teile sind seit V3 kein Grund mehr, gar nicht erst zu starten:
+        // genau dann braucht man die Oberfläche am dringendsten, weil sie sagt,
+        // was fehlt, und den Knopf dazu hat. Früher endete das Programm hier mit
+        // einer Meldung, und wer nur den Agent installiert hatte, sah nie ein
+        // Fenster.
+        Application.Run(new ClientTrayContext(WebAppLocator.Locate(AppContext.BaseDirectory)));
 
-        var appDirectory = WebAppLocator.Locate(AppContext.BaseDirectory);
-
-        if (appDirectory is null)
-        {
-            Fail(WebAppLocator.MissingMessage);
-            return;
-        }
-
-        Application.Run(new ClientTrayContext(appDirectory));
+        return 0;
     }
-
-    /// <summary>
-    /// Ein Fenster, das gar nicht erst aufgeht, wirkt wie ein Absturz. Deshalb
-    /// endet jeder Abbruch beim Start mit einem Satz, der sagt, was fehlt.
-    /// </summary>
-    private static void Fail(string message) =>
-        MessageBox.Show(message, "RemoteDesktop", MessageBoxButtons.OK, MessageBoxIcon.Error);
 }

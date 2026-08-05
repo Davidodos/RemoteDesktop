@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.Win32;
 using RemoteDesktopSetup;
 
@@ -27,12 +26,25 @@ public sealed class WindowsAutostart : IAutostartHost
     /// Dienstmanager merkt sich mehr als einen Schlüssel, und wer daran vorbei
     /// schreibt, bekommt einen Zustand, den die Dienstverwaltung anders sieht als
     /// er ist.
+    ///
+    /// Er verlangt Adminrechte — deshalb der Sprung. Ist der Dienst gar nicht
+    /// eingetragen, gibt es nichts umzustellen; eine Nachfrage nach Rechten für
+    /// nichts wäre eine Zumutung.
     /// </summary>
     public void SetServiceStart(ServiceStart start)
     {
-        var value = start == ServiceStart.Automatic ? "auto" : "demand";
+        if (!AgentService.Installed)
+        {
+            return;
+        }
 
-        Run("sc.exe", ["config", Autostart.ServiceName, $"start={value}"]);
+        var result = Elevation.Run(
+            AdminTask.ServiceStartType, start == ServiceStart.Automatic ? "auto" : "demand");
+
+        if (!result.Ok)
+        {
+            throw new InvalidOperationException(result.Message);
+        }
     }
 
     public void SetClientEntry(bool enabled)
@@ -75,50 +87,92 @@ public sealed class WindowsAutostart : IAutostartHost
 
         return key?.GetValue(Autostart.ClientEntryName) is not null;
     }
+}
+
+/// <summary>Wo <c>tailscale.exe</c> liegt, wenn es liegt.</summary>
+public static class Tailscale
+{
+    public const string Download = "https://tailscale.com/download/windows";
 
     /// <summary>
-    /// Argumente einzeln, nie als eine Zeile — dieselbe Regel wie bei den
-    /// Aktionen aus Phase 13. Es gibt hier keine Stelle, an der Windows
-    /// entscheidet, was eine Zeichenkette bedeutet.
+    /// Der volle Pfad statt bloß <c>tailscale.exe</c>: ob das Programm im
+    /// Suchpfad steht, hängt daran, wann der Rechner zuletzt neu gestartet
+    /// wurde. Ein Aufruf, der davon abhängt, schlägt genau nach der Installation
+    /// fehl — also dann, wenn ihn jemand zum ersten Mal braucht.
     /// </summary>
-    internal static void Run(string file, IReadOnlyList<string> arguments)
-    {
-        var info = new ProcessStartInfo(file) { UseShellExecute = false };
+    public static string Executable { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+        "Tailscale",
+        "tailscale.exe");
 
-        foreach (var argument in arguments)
+    public static bool Installed => File.Exists(Executable);
+
+    /// <summary>
+    /// Der eigene Name im Netz, den auch das Handy sieht. Er kommt von
+    /// <c>tailscale status</c>, weil der Rechnername ein anderer sein kann.
+    /// </summary>
+    public static string Name()
+    {
+        if (!Installed)
         {
-            info.ArgumentList.Add(argument);
+            return string.Empty;
         }
 
-        using var process = Process.Start(info);
-        process?.WaitForExit(TimeSpan.FromSeconds(30));
+        var result = ProcessRunner.Run(
+            Executable, ["status", "--json"], TimeSpan.FromSeconds(10));
+
+        if (!result.Ok)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(result.Output);
+
+            return document.RootElement.TryGetProperty("Self", out var self)
+                   && self.TryGetProperty("DNSName", out var dns)
+                ? dns.GetString()?.TrimEnd('.') ?? string.Empty
+                : string.Empty;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Tailscale nicht gestartet, kein Netz, unerwartetes JSON — für die
+            // Frage „gehört dieser Rechner schon dazu?" ist das alles ein Nein.
+            return string.Empty;
+        }
+    }
+}
+
+/// <summary>Wo die Programmdatei des Agents liegt.</summary>
+public static class AgentBinary
+{
+    public const string FileName = "RemoteDesktopAgent.exe";
+
+    /// <summary>
+    /// Neben dem Fenster oder ein Verzeichnis darüber. Zwei Orte, weil der
+    /// Installer beides nebeneinanderlegt, der Entwicklungsbau aber getrennte
+    /// Ausgabeordner hat.
+    /// </summary>
+    public static string? Locate()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, FileName),
+            Path.Combine(Directory.GetParent(AppContext.BaseDirectory)?.FullName ?? ".", FileName)
+        };
+
+        return candidates.FirstOrDefault(File.Exists);
     }
 }
 
 /// <summary>
-/// Was auf diesem Rechner schon steht. Alles hier sind Abfragen — Dateien,
-/// Registry, ein Aufruf von <c>tailscale status</c>. Ohne Windows sagt davon
-/// nichts etwas aus, deshalb liegt hier auch keine Entscheidung.
+/// Der Dienst — ob er eingetragen ist und ob er antwortet.
 /// </summary>
-public sealed class WindowsProbe : ISetupProbe
+public static class AgentService
 {
-    private const string TailscalePath = @"C:\Program Files\Tailscale\tailscale.exe";
-
-    private static readonly string CertificateDirectory =
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "RemoteDesktopAgent");
-
-    public bool HasTailscale => File.Exists(TailscalePath);
-
-    public bool IsConnected => TailnetName.Length > 0;
-
-    public string TailnetName => _name ??= ReadTailnetName();
-
-    public bool HasCertificate => File.Exists(Path.Combine(CertificateDirectory, "cert.crt"))
-                                  && File.Exists(Path.Combine(CertificateDirectory, "cert.key"));
-
-    public bool HasService
+    /// <summary>Ob Windows ihn kennt.</summary>
+    public static bool Installed
     {
         get
         {
@@ -129,52 +183,80 @@ public sealed class WindowsProbe : ISetupProbe
         }
     }
 
-    private string? _name;
-
     /// <summary>
-    /// Der eigene Name im Netz, den auch das Handy sieht. Er kommt von
-    /// <c>tailscale status</c>, weil der Rechnername ein anderer sein kann.
+    /// Ob er tatsächlich bedient.
+    ///
+    /// Gefragt wird der Agent selbst und nicht die Dienstverwaltung: ein Dienst
+    /// kann laufen und trotzdem nichts beantworten. Für die Anzeige „läuft"
+    /// zählt nur, was ein Handy davon hätte.
     /// </summary>
-    private string ReadTailnetName()
+    public static async Task<bool> RespondsAsync()
     {
-        if (!HasTailscale)
+        using var handler = new HttpClientHandler
         {
-            return string.Empty;
-        }
+            // Das Zertifikat lautet auf den Netznamen dieses Rechners, nicht auf
+            // „localhost". Vertretbar ist das nur, weil die Verbindung den
+            // Rechner nicht verlässt.
+            ServerCertificateCustomValidationCallback = (message, _, _, _) =>
+                message.RequestUri?.IsLoopback == true
+        };
+
+        using var http = new HttpClient(handler)
+        {
+            BaseAddress = new Uri($"https://localhost:{LocalAgent.ConfiguredPort()}"),
+
+            // Kurz: die Antwort steht in Millisekunden da oder gar nicht, und das
+            // Fenster wartet darauf.
+            Timeout = TimeSpan.FromSeconds(2)
+        };
 
         try
         {
-            var info = new ProcessStartInfo(TailscalePath)
-            {
-                UseShellExecute = false,
-                RedirectStandardOutput = true
-            };
-
-            info.ArgumentList.Add("status");
-            info.ArgumentList.Add("--json");
-
-            using var process = Process.Start(info);
-
-            if (process is null)
-            {
-                return string.Empty;
-            }
-
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(TimeSpan.FromSeconds(10));
-
-            using var document = System.Text.Json.JsonDocument.Parse(output);
-
-            return document.RootElement.TryGetProperty("Self", out var self)
-                   && self.TryGetProperty("DNSName", out var dns)
-                ? dns.GetString()?.TrimEnd('.') ?? string.Empty
-                : string.Empty;
+            return (await http.GetAsync("/health")).IsSuccessStatusCode;
         }
         catch (Exception)
         {
-            // Tailscale nicht gestartet, kein Netz, unerwartetes JSON — für die
-            // Frage „gehört dieser Rechner schon dazu?" ist das alles ein Nein.
-            return string.Empty;
+            return false;
         }
     }
+}
+
+/// <summary>
+/// Was auf diesem Rechner schon steht. Alles hier sind Abfragen — Dateien,
+/// Registry, ein Aufruf von <c>tailscale status</c>. Ohne Windows sagt davon
+/// nichts etwas aus, deshalb liegt hier auch keine Entscheidung.
+/// </summary>
+public sealed class WindowsProbe : ISetupProbe
+{
+    private static readonly string CertificateDirectory = Elevation.DataDirectory;
+
+    private string? _name;
+
+    public bool HasTailscale => Tailscale.Installed;
+
+    public bool IsConnected => TailnetName.Length > 0;
+
+    public string TailnetName => _name ??= Tailscale.Name();
+
+    public bool HasCertificate => File.Exists(Path.Combine(CertificateDirectory, "cert.crt"))
+                                  && File.Exists(Path.Combine(CertificateDirectory, "cert.key"));
+
+    public bool HasService => AgentService.Installed;
+
+    /// <summary>
+    /// Der Zustand aller Teile in einem Zug — die Vorlage für das, was das
+    /// Fenster anzeigt.
+    /// </summary>
+    public async Task<Machine> SnapshotAsync(string? appDirectory) => new(
+        AgentBinary: AgentBinary.Locate() is not null,
+        AgentService: HasService,
+        AgentRunning: HasService && await AgentService.RespondsAsync(),
+        ClientFiles: appDirectory is not null,
+        WebView2: WebView2Runtime.InstalledVersion() is not null,
+        Tailscale: HasTailscale,
+        TailscaleConnected: IsConnected,
+        Certificate: HasCertificate);
+
+    /// <summary>Nach einem Handgriff neu fragen, statt den alten Stand zu zeigen.</summary>
+    public void Forget() => _name = null;
 }
