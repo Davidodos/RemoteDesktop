@@ -31,7 +31,7 @@ dotnet publish -c Release -r win-x64 --self-contained \
 
 rm -rf /volume1/docker/remotedesktop/dist/client
 mkdir -p /volume1/docker/remotedesktop/dist/client
-cp bin/Release/net8.0-windows/win-x64/publish/RemoteDesktopClient.exe \
+cp bin/Release/net8.0-windows/win-x64/publish/RemoteDesktop.exe \
    /volume1/docker/remotedesktop/dist/client/
 cp -r bin/Release/net8.0-windows/win-x64/publish/app \
    /volume1/docker/remotedesktop/dist/client/

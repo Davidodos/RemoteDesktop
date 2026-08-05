@@ -1,9 +1,15 @@
 ; Installer für RemoteDesktop — Inno Setup 6.
 ;
-; Modular: Agent, Client und Tailscale lassen sich einzeln wählen. Das ist keine
-; Spielerei — ein Rechner im Keller braucht nur den Agent und nie ein Fenster,
-; ein Arbeitslaptop nur den Client und niemals einen Dienst, der Fremdzugriff
-; erlaubt.
+; Seit V3 legt er **immer alles** ab: die Oberfläche, den Agent und die
+; Weboberfläche. Das ist keine Bequemlichkeit, sondern die Antwort auf einen
+; Befund aus dem ersten Durchlauf — wer nur den Agent gewählt hatte, saß ohne
+; Fenster da und hatte keinen Weg, den Rest nachzuholen, außer den Installer
+; wiederzufinden. Was auf diesem Rechner *aktiv* ist, entscheidet danach die
+; Oberfläche; sie kann den Dienst eintragen, starten und wieder entfernen.
+;
+; Übrig bleibt eine einzige echte Wahl: ob Tailscale mitinstalliert werden soll.
+; Es ist ein fremdes Programm mit eigenem Aktualisierungsweg — und seit V3 auch
+; gar nicht mehr nötig, wenn Handy und Rechner im selben Netz hängen.
 ;
 ; Gebaut wird er unter Windows mit `iscc installer\RemoteDesktop.iss`, nachdem
 ; `publish\` aus dem Release-Workflow daliegt. Auf dem Linux-Container ist er
@@ -14,6 +20,7 @@
 #define Publisher "RemoteDesktop"
 #define Url "https://github.com/Davidodos/RemoteDesktop"
 #define Service "RemoteDesktopAgent"
+#define Exe "RemoteDesktop.exe"
 
 ; Beim Bauen mit /DVersion=1.2.0 aus dem Git-Tag übergeben.
 #ifndef Version
@@ -32,9 +39,8 @@ OutputBaseFilename=RemoteDesktop-Setup-{#Version}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-; Der Agent wird als Dienst eingetragen — das geht nur mit Adminrechten. Der
-; Client allein käme ohne aus; zwei Installer dafür wären dem Nutzer gegenüber
-; die schlechtere Antwort als eine Rückfrage.
+; Der Agent kann als Dienst eingetragen werden — das geht nur mit Adminrechten.
+; Die Oberfläche selbst braucht sie nicht und läuft später ohne.
 PrivilegesRequired=admin
 ArchitecturesInstallIn64BitMode=x64compatible
 LicenseFile=..\LICENSE
@@ -42,82 +48,88 @@ LicenseFile=..\LICENSE
 [Languages]
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
-[Types]
-Name: "full"; Description: "Agent und Client (empfohlen)"
-Name: "agent"; Description: "Nur Agent — dieser Rechner soll fernsteuerbar sein"
-Name: "client"; Description: "Nur Client — von diesem Rechner aus andere steuern"
-Name: "custom"; Description: "Eigene Auswahl"; Flags: iscustom
-
-[Components]
-Name: "agent"; Description: "Agent — macht diesen Rechner fernsteuerbar"; Types: full agent
-Name: "client"; Description: "Client — Fenster, mit dem du andere Rechner steuerst"; Types: full client
-; Tailscale ist ein fremdes Programm mit eigenem Aktualisierungsweg. Deshalb
-; wird es heruntergeladen und nicht mitgeliefert: eine mitgelieferte Fassung
-; veraltet im Paket, und niemand merkt es.
-Name: "tailscale"; Description: "Tailscale mitinstallieren (nötig, wenn es noch nicht da ist)"; Types: full agent client
-
 [Tasks]
-Name: "autostartagent"; Description: "Agent beim Hochfahren starten"; Components: agent
-Name: "autostartclient"; Description: "Client beim Anmelden starten"; Components: client
+; Tailscale wird heruntergeladen und nicht mitgeliefert: eine mitgelieferte
+; Fassung veraltet im Paket, und niemand merkt es. Standardmäßig **aus** — wer
+; den Rechner nur aus dem eigenen WLAN steuert, braucht es nicht.
+Name: "tailscale"; Description: "Tailscale mitinstallieren (nur nötig, wenn du von unterwegs ranwillst)"; \
+    Flags: unchecked; Check: NeedsTailscale
+
+Name: "agentservice"; Description: "Diesen Rechner fernsteuerbar machen (Agent als Dienst eintragen)"
+Name: "autostartagent"; Description: "Agent beim Hochfahren starten"; Tasks: agentservice
+Name: "autostartclient"; Description: "RemoteDesktop beim Anmelden starten"
 
 [Files]
-Source: "..\publish\release\RemoteDesktopAgent.exe"; DestDir: "{app}"; Components: agent; Flags: ignoreversion
-Source: "..\agent\appsettings.json"; DestDir: "{app}"; Components: agent; Flags: onlyifdoesntexist
-Source: "..\publish\client\*"; DestDir: "{app}\client"; Components: client; Flags: ignoreversion recursesubdirs
+; Alles nebeneinander in einem Ordner. Die Oberfläche sucht die Programmdatei des
+; Agents genau dort (siehe desktop/WindowsSetup.cs, AgentBinary.Locate).
+Source: "..\publish\client\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
+Source: "..\publish\release\RemoteDesktopAgent.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\agent\appsettings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
+
+[InstallDelete]
+; Bis V2 lag die Oberfläche in einem Unterordner und hieß anders. Bleibt sie
+; liegen, startet nach einem Update womöglich die alte Fassung aus dem
+; Autostart — und niemand sieht, warum sich nichts geändert hat.
+Type: filesandordirs; Name: "{app}\client"
 
 [Dirs]
-; Zertifikat, privater Schlüssel und die gekoppelten Geräte. Nur Administratoren
-; und das System dürfen hinein — der Schlüssel des Agents liegt im Klartext, und
-; wer ihn hat, ist der Agent.
-Name: "{commonappdata}\RemoteDesktopAgent"; Components: agent; Permissions: admins-full system-full
+; Zertifikate, privater Schlüssel, gekoppelte Geräte und das Netzprofil. Nur
+; Administratoren und das System dürfen hinein — der Schlüssel des Agents liegt
+; im Klartext, und wer ihn hat, ist der Agent.
+Name: "{commonappdata}\RemoteDesktopAgent"; Permissions: admins-full system-full
 
 [Icons]
-Name: "{group}\RemoteDesktop"; Filename: "{app}\client\RemoteDesktopClient.exe"; Components: client
+Name: "{group}\RemoteDesktop"; Filename: "{app}\{#Exe}"
 Name: "{group}\RemoteDesktop deinstallieren"; Filename: "{uninstallexe}"
 
 [Run]
 ; Reihenfolge mit Absicht: erst Tailscale, dann der Dienst, dann das Fenster.
-; Der Agent braucht ein Zertifikat, und das stellt Tailscale aus.
 ; Tailscale kommt als MSI, also über msiexec und nicht direkt. /qn installiert
 ; ohne weitere Rückfragen — die eine Frage, ob es überhaupt soll, ist auf der
-; Komponentenseite schon gestellt worden.
+; Aufgabenseite schon gestellt worden.
 Filename: "{sys}\msiexec.exe"; Parameters: "/i ""{tmp}\tailscale-setup.msi"" /qn /norestart"; \
-    Components: tailscale; Check: NeedsTailscale and TailscaleDownloaded; \
+    Tasks: tailscale; Check: NeedsTailscale and TailscaleDownloaded; \
     StatusMsg: "Tailscale wird installiert…"; Flags: runhidden waituntilterminated
 
 ; Beim ersten Mal anlegen, danach nur den Starttyp nachziehen. Ein zweites
 ; `sc create` schlüge fehl, und der Fehler wäre für den Nutzer nicht von einem
 ; echten zu unterscheiden.
 Filename: "{sys}\sc.exe"; Parameters: "create {#Service} binPath= ""{app}\RemoteDesktopAgent.exe"" start= {code:AgentStartType} DisplayName= ""RemoteDesktop Agent"""; \
-    Components: agent; Check: not ServiceExists; Flags: runhidden waituntilterminated
+    Tasks: agentservice; Check: not ServiceExists; Flags: runhidden waituntilterminated
 
 Filename: "{sys}\sc.exe"; Parameters: "config {#Service} binPath= ""{app}\RemoteDesktopAgent.exe"" start= {code:AgentStartType}"; \
-    Components: agent; Check: ServiceExists; Flags: runhidden waituntilterminated
+    Check: ServiceExists; Flags: runhidden waituntilterminated
 
 Filename: "{sys}\sc.exe"; Parameters: "description {#Service} ""Macht diesen Rechner über RemoteDesktop fernsteuerbar."""; \
-    Components: agent; Flags: runhidden waituntilterminated
+    Tasks: agentservice; Flags: runhidden waituntilterminated
 
 ; Nach einem Update wieder anwerfen — sonst wäre der Rechner nach jeder
 ; Aktualisierung stumm, bis jemand ihn neu startet. Nur, wenn er auch von allein
 ; starten soll.
 Filename: "{sys}\sc.exe"; Parameters: "start {#Service}"; \
-    Components: agent; Tasks: autostartagent; Flags: runhidden waituntilterminated
+    Tasks: autostartagent; Flags: runhidden waituntilterminated
 
-Filename: "{app}\client\RemoteDesktopClient.exe"; Description: "Einrichtung jetzt abschließen"; \
-    Components: client; Flags: postinstall nowait skipifsilent
+Filename: "{app}\{#Exe}"; Description: "Einrichtung jetzt abschließen"; \
+    Flags: postinstall nowait skipifsilent
 
 [Registry]
-; Der Autostart des Clients hängt am angemeldeten Benutzer, nicht am Rechner:
-; das Fenster gehört einem Menschen. Derselbe Schlüssel, den das
-; Einstellungsfenster später umschaltet (siehe setup/Autostart.cs).
+; Der Autostart hängt am angemeldeten Benutzer, nicht am Rechner: das Fenster
+; gehört einem Menschen. Derselbe Schlüssel, den die Oberfläche später
+; umschaltet (siehe setup/Autostart.cs).
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
     ValueType: string; ValueName: "RemoteDesktopClient"; \
-    ValueData: """{app}\client\RemoteDesktopClient.exe"""; \
+    ValueData: """{app}\{#Exe}"""; \
     Tasks: autostartclient; Flags: uninsdeletevalue
 
+; Ohne das Häkchen den alten Eintrag entfernen — er zeigte auf die Datei, die es
+; seit V3 nicht mehr gibt, und Windows meldete bei jeder Anmeldung einen Fehler.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
+    ValueType: none; ValueName: "RemoteDesktopClient"; \
+    Tasks: not autostartclient; Flags: deletevalue
+
 [UninstallRun]
-Filename: "{sys}\sc.exe"; Parameters: "stop {#Service}"; Components: agent; Flags: runhidden
-Filename: "{sys}\sc.exe"; Parameters: "delete {#Service}"; Components: agent; Flags: runhidden
+Filename: "{sys}\sc.exe"; Parameters: "stop {#Service}"; Check: ServiceExists; Flags: runhidden
+Filename: "{sys}\sc.exe"; Parameters: "delete {#Service}"; Check: ServiceExists; Flags: runhidden
 
 [Code]
 var
@@ -173,16 +185,14 @@ begin
     Result := 'demand';
 end;
 
-{ Tailscale wird zur Laufzeit geholt, nicht mitgepackt: eine mitgelieferte
-  Fassung veraltet im Paket, und niemand merkt es.
+{ Tailscale wird zur Laufzeit geholt, nicht mitgepackt.
 
-  Scheitert der Download, bricht die Installation *nicht* ab. Agent und Client
-  sind dann installiert und die Einrichtung im Fenster führt zum fehlenden
-  Schritt hin — das ist ungleich besser, als wegen eines fremden Servers alles
-  zurückzurollen. }
+  Scheitert der Download, bricht die Installation *nicht* ab. Alles andere ist
+  dann installiert und die Oberfläche führt zum fehlenden Schritt hin — das ist
+  ungleich besser, als wegen eines fremden Servers alles zurückzurollen. }
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if (CurStep = ssInstall) and WizardIsComponentSelected('tailscale') and NeedsTailscale then
+  if (CurStep = ssInstall) and WizardIsTaskSelected('tailscale') and NeedsTailscale then
   begin
     try
       DownloadTemporaryFile(

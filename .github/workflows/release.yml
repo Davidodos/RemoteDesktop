@@ -56,10 +56,12 @@ jobs:
             -p:Version=${{ steps.version.outputs.value }} \
             -o publish/agent
 
-      # ---- Windows-Client ------------------------------------------------
-      # Er baut auch auf Linux (EnableWindowsTargeting), nur laufen tut er dort
-      # nicht. Der Installer packt genau diesen Ordner ein.
-      - name: Client bauen
+      # ---- Windows-Oberfläche ---------------------------------------------
+      # Die eine .exe, die ein Mensch startet: Tray, Einrichtung und
+      # Fernsteuerfenster in einem. Sie baut auch auf Linux
+      # (EnableWindowsTargeting), nur laufen tut sie dort nicht. Der Installer
+      # packt genau diesen Ordner ein.
+      - name: Oberfläche für Windows bauen
         run: |
           dotnet publish desktop/RemoteDesktopClient.csproj \
             -c Release -r win-x64 --self-contained false \

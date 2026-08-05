@@ -39,19 +39,18 @@ offene Tür ins Internet, die jemand ausprobieren könnte.
 Lade `RemoteDesktop-Setup.exe` aus den
 [Releases](https://github.com/Davidodos/RemoteDesktop/releases) und starte sie.
 
-Der Installer fragt, was du haben willst:
+Es wird immer alles abgelegt — die Oberfläche, der Agent und die Weboberfläche.
+Der Installer fragt nur, was davon auch *laufen* soll:
 
 | | wofür |
 |---|---|
-| **Agent** | Macht *diesen* Rechner fernsteuerbar. Läuft im Hintergrund. |
-| **Client** | Das Fenster, mit dem du *andere* Rechner steuerst. |
-| **Tailscale** | Wird mitinstalliert, wenn es noch nicht da ist. |
+| **Diesen Rechner fernsteuerbar machen** | Trägt den Agent als Dienst ein. Auf einem Arbeitslaptop, der nur steuern und nie gesteuert werden soll, lässt du das Häkchen weg — dann läuft dort kein Dienst, der Zugriff erlaubt. |
+| **Autostart** | Agent beim Hochfahren, Fenster beim Anmelden. |
+| **Tailscale mitinstallieren** | Nur nötig, wenn du auch von unterwegs ranwillst. |
 
-Auf dem Rechner, den du fernsteuern willst, brauchst du den **Agent**. Wenn du
-denselben Rechner auch als Fernbedienung für einen zweiten benutzen willst,
-nimm beides. Auf einem Arbeitslaptop, der nur steuern und nie gesteuert werden
-soll, reicht der **Client** — dann läuft dort auch kein Dienst, der Zugriff
-erlaubt.
+Alles davon lässt sich später im Fenster umstellen: der Agent kann dort
+eingerichtet, gestartet, beendet und wieder entfernt werden. Du musst den
+Installer nie wieder suchen.
 
 ### 2. Einrichtung abschließen
 

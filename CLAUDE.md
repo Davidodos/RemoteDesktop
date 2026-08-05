@@ -5,7 +5,12 @@ Handy-App (Android) zur Fernsteuerung von PC und Laptop (beide Windows 10/11).
 Veröffentlichen und Updates: **`docs/RELEASE.md`**
 Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
 
-**V2-Umbau zur echten App (läuft):** Begründungen in **`docs/PLAN-V2.md`**,
+**V3 (läuft):** gemeinsame Oberfläche für alle Teile, Tailscale optional.
+Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 05.08.2026: Phasen 21–23 und
+25 erledigt, Phase 24 (Clients nehmen das selbst ausgestellte Zertifikat an)
+offen.
+
+**V2-Umbau zur echten App (abgeschlossen):** Begründungen in **`docs/PLAN-V2.md`**,
 Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:
 `/naechste-phase`. Stand 04.08.2026: **Phasen 9–16 erledigt** — der V2-Umbau ist
 durch. Phasen 9–13 sind am echten Gerät durchgeprüft; offen sind nur noch
@@ -31,16 +36,18 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 | `agent/` | C# / .NET 8, Windows-Dienst | PC + Laptop, Port 8443 |
 | `setup/` | C# / .NET 8, Klassenbibliothek | Einrichtungslogik für Installer **und** Fenster |
 | `installer/` | Inno Setup 6 | modularer Installer (Agent · Client · Tailscale) |
-| `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop, zeigt `app/dist` |
+| `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop — `RemoteDesktop.exe`, die einzige .exe, die ein Mensch startet |
 | `waker/` | Node/TS + Express, Docker | NAS, Port 3080 |
 | `app/` | React + Vite, PWA | Handy (Browser/Homescreen) |
 | `clients/android/` | Capacitor + Java, APK | Handy, zeigt `app/dist` |
 
 ## Konventionen
 
-- Netzwerk läuft **ausschließlich über Tailscale**. Keine LAN-IPs im Code,
-  keine Fallunterscheidung „zuhause vs. unterwegs", kein Port-Forwarding.
-  Immer MagicDNS-Namen verwenden.
+- Netzwerk: **drei Modi, keine Fallunterscheidung im Code** (`setup/NetworkProfile.cs`
+  — Heimnetz · Tailscale · eigenes VPN). Keine Adresse steht im Quelltext; sie
+  kommt aus `setup.json`. Kein Port-Forwarding, keine Sonderbehandlung
+  „zuhause vs. unterwegs" — der Modus entscheidet, nicht der Ort. Anleitung:
+  `docs/NETZ.md`.
 - Der Agent hat volle Kontrolle über den PC. Jeder neue Endpoint braucht
   Token-Auth — keine Ausnahmen, auch nicht „nur zum Testen".
 - Input-Events laufen über einen **eigenen** WebSocket, getrennt vom
