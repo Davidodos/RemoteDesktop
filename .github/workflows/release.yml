@@ -114,6 +114,11 @@ jobs:
           npm ci
           npx cap sync android
           cd android
+          # Sicherheitsnetz: das Repository liegt auf einem CIFS-Mount, auf dem
+          # `core.fileMode=false` gilt — Git legt dort jede Datei als 644 ab,
+          # auch die mit Shebang. Lokal fällt das nie auf, weil der Mount alles
+          # als 777 zeigt; auf dem Runner endet `./gradlew` dann mit 126.
+          chmod +x ./gradlew
           ./gradlew assembleRelease \
             -PversionName="${{ steps.version.outputs.value }}" \
             -PversionCode="$GITHUB_RUN_NUMBER" \

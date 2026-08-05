@@ -130,6 +130,7 @@ weggelassen hat.
 | Agent lehnt das Update ab | Manifest mit einem anderen Schlüssel unterschrieben als dem einkompilierten. Nach einem Schlüsselwechsel muss jeder Agent einmal von Hand auf die neue Fassung |
 | Android sagt „App nicht installiert" | Die installierte Fassung trägt eine andere Signatur — siehe Schritt 5 |
 | Windows-Client findet nichts | Das Release hat keinen Anhang, der mit `RemoteDesktop-Setup` beginnt. Der Installer-Job im Workflow ist fehlgeschlagen |
+| Ein Skript im CI endet mit „Permission denied" (Exit 126) | Das Ausführbar-Bit fehlt in Git. In diesem Repository gilt `core.fileMode=false` (CIFS-Mount), deshalb landet alles als 644 — und lokal sieht man es nicht, weil der Mount 777 zeigt. Heilung: `git update-index --chmod=+x <datei>` |
 | Update bricht mit Dateizugriffsfehler ab | Der Agent-Dienst lief noch. Der Installer stoppt ihn (`PrepareToInstall`); schlägt das fehl, hilft `sc stop RemoteDesktopAgent` von Hand |
 
 Was zu tun ist, wenn der Release-Schlüssel abhandenkommt, steht in
