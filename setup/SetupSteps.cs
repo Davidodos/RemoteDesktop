@@ -43,30 +43,40 @@ public sealed record SetupStep(string Title, string Explanation, bool Done, bool
 /// </summary>
 public static class SetupSteps
 {
-    public static IReadOnlyList<SetupStep> For(Selection selection, ISetupProbe probe)
-    {
-        var steps = new List<SetupStep>
-        {
-            new(
-                "Tailscale installieren",
-                "Tailscale verbindet deine Geräte direkt miteinander — ohne dass du am Router "
-                + "etwas freigeben musst. Ohne diesen Schritt findet dein Handy den Rechner nicht.",
-                probe.HasTailscale),
+    /// <summary>Der Titel des Schritts, an dem die Adresse eingetragen wird.</summary>
+    public const string AddressStep = "Adresse festlegen";
 
-            new(
-                "Bei Tailscale anmelden",
-                "Einmal im Browser anmelden, damit dieser Rechner zu deinem Netz gehört. "
-                + "Ein bestehendes Konto bei Google, Microsoft oder GitHub genügt.",
-                probe.IsConnected)
-        };
+    /// <summary>Der Titel des Schritts, der das Zertifikat von Tailscale holt.</summary>
+    public const string CertificateStep = "Zertifikat holen";
+
+    public static IReadOnlyList<SetupStep> For(Selection selection, ISetupProbe probe) =>
+        For(selection, probe, NetworkProfile.Default);
+
+    /// <summary>
+    /// Die Schrittliste für dieses Profil.
+    ///
+    /// Sie hängt seit V3 am Netzmodus und nicht mehr allein an der Auswahl:
+    /// Wer den Rechner nur aus dem eigenen WLAN steuert, soll nicht durch zwei
+    /// Tailscale-Schritte laufen, die er nie braucht — genau das war die Hürde,
+    /// an der die Einrichtung ohne VPN scheiterte.
+    /// </summary>
+    public static IReadOnlyList<SetupStep> For(
+        Selection selection, ISetupProbe probe, NetworkProfile profile)
+    {
+        var steps = profile.NeedsTailscale
+            ? TailscaleSteps(probe)
+            : AddressSteps(profile);
 
         if (selection.Has(SetupComponent.Agent))
         {
-            steps.Add(new SetupStep(
-                "Zertifikat holen",
-                "Damit die Verbindung zu diesem Rechner verschlüsselt ist. Tailscale stellt es "
-                + "kostenlos aus; du musst nichts kaufen und nichts eintragen.",
-                probe.HasCertificate));
+            if (profile.NeedsTailscale)
+            {
+                steps.Add(new SetupStep(
+                    CertificateStep,
+                    "Damit die Verbindung zu diesem Rechner verschlüsselt ist. Tailscale stellt "
+                    + "es kostenlos aus; du musst nichts kaufen und nichts eintragen.",
+                    probe.HasCertificate));
+            }
 
             steps.Add(new SetupStep(
                 "Agent einrichten",
@@ -88,6 +98,47 @@ public static class SetupSteps
 
         return steps;
     }
+
+    /// <summary>
+    /// Der Weg über Tailscale: erst das Programm, dann die Anmeldung. Beides
+    /// fremde Schritte, die RemoteDesktop nur anstößt.
+    /// </summary>
+    private static List<SetupStep> TailscaleSteps(ISetupProbe probe) =>
+    [
+        new(
+            "Tailscale installieren",
+            "Tailscale verbindet deine Geräte direkt miteinander — ohne dass du am Router "
+            + "etwas freigeben musst. Es ist der bequemste Weg, wenn du den Rechner auch von "
+            + "unterwegs erreichen willst.",
+            probe.HasTailscale),
+
+        new(
+            "Bei Tailscale anmelden",
+            "Einmal im Browser anmelden, damit dieser Rechner zu deinem Netz gehört. "
+            + "Ein bestehendes Konto bei Google, Microsoft oder GitHub genügt.",
+            probe.IsConnected)
+    ];
+
+    /// <summary>
+    /// Der Weg ohne Tailscale: es genügt zu wissen, wie dieser Rechner heißt.
+    ///
+    /// Im Heimnetz ist das die Adresse, die der Router vergeben hat; bei einem
+    /// eigenen VPN die, die dort gilt. Verbinden und Einrichten des VPN bleibt
+    /// Sache dessen, der es betreibt — RemoteDesktop startet fremde Programme
+    /// nicht und prüft sie nicht.
+    /// </summary>
+    private static List<SetupStep> AddressSteps(NetworkProfile profile) =>
+    [
+        new(
+            AddressStep,
+            profile.Kind == NetworkKind.Lan
+                ? "Unter welcher Adresse dein Handy diesen Rechner im Heimnetz findet. "
+                  + "Meistens steht sie schon da — du musst sie nur bestätigen."
+                : "Trage die Adresse ein, unter der dieser Rechner in deinem VPN erreichbar "
+                  + "ist. Wie du das herausfindest, steht in der Anleitung „Anderes VPN "
+                  + "benutzen“.",
+            profile.AdvertisedAddress is not null)
+    ];
 
     /// <summary>
     /// Der erste Schritt, der noch aussteht — <c>null</c>, wenn alles steht.

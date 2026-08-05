@@ -16,11 +16,18 @@ Mitte, der mitliest. Die Verbindung geht direkt von deinem Handy zu deinem PC.
 
 - Einen **Windows-10-** oder **Windows-11-Rechner**, den du steuern willst
 - Ein **Android-Handy** (ab Android 8)
-- Ein kostenloses **Tailscale-Konto** — die Anmeldung geht mit einem Konto, das
-  du schon hast (Google, Microsoft, GitHub). Der Installer bringt dich hin.
+- Einen Weg, auf dem das Handy den Rechner erreicht. Du hast die Wahl:
 
-Tailscale ist das, was deine Geräte einander finden lässt. Du musst nichts davon
-verstehen; wichtig ist nur: **von außen ist nichts erreichbar**. Es gibt keine
+| | Wann | Von unterwegs |
+|---|---|---|
+| **Heimnetz** | Handy und Rechner hängen am selben Router. Kein VPN, kein Konto, nichts einzurichten | nein |
+| **Tailscale** | Du willst auch aus dem Mobilfunknetz ran. Kostenlos, Anmeldung mit einem Konto, das du schon hast | ja |
+| **Eigenes VPN** | Du betreibst schon WireGuard, OpenVPN, ZeroTier … — dann behältst du es | ja |
+
+Das Fenster fragt dich beim Einrichten danach und führt dich durch den Rest.
+Ausführlich steht das in [`docs/NETZ.md`](docs/NETZ.md).
+
+Wichtig in allen drei Fällen: **von außen ist nichts erreichbar**. Es gibt keine
 offene Tür ins Internet, die jemand ausprobieren könnte.
 
 ---
@@ -49,13 +56,20 @@ erlaubt.
 ### 2. Einrichtung abschließen
 
 Nach der Installation öffnet sich das RemoteDesktop-Fenster und zeigt, was noch
-fehlt. Es sind drei bis vier Schritte, und jeder hat einen Knopf:
+fehlt. Zuerst fragt es, wie dein Handy den Rechner erreichen soll.
+
+**Im Heimnetz** sind es zwei Schritte:
+
+1. **Adresse festlegen** — sie steht meist schon da, du bestätigst sie nur
+2. **Handy koppeln** — dazu gleich mehr
+
+**Über Tailscale** sind es vier:
 
 1. **Tailscale installieren** — falls es noch nicht da ist
 2. **Bei Tailscale anmelden** — einmal im Browser
 3. **Zertifikat holen** — damit die Verbindung verschlüsselt ist. Kostenlos,
    ein Knopfdruck
-4. **Handy koppeln** — dazu gleich mehr
+4. **Handy koppeln**
 
 Abgehakte Schritte verschwinden nicht, sie werden grau. Wer Tailscale schon
 benutzt, fängt einfach weiter hinten an.
@@ -116,7 +130,7 @@ deshalb ist der Zugang eng:
 - **Jedes Gerät einzeln.** Es gibt kein Geheimnis, das für alle Rechner
   zugleich gilt. Ein verlorenes Handy wird an jedem Rechner einzeln
   widerrufen — sofort wirksam, auch mitten in einer Sitzung.
-- **Nichts aus dem Internet erreichbar.** Alles läuft über Tailscale.
+- **Nichts aus dem Internet erreichbar.** Alles läuft im Heimnetz oder im VPN.
 - **Aktionen werden am Rechner festgelegt**, nie vom Handy geschickt. Die App
   kennt nur Kennungen wie `spotify`, keine Befehlszeilen. Es gibt keinen Weg
   über das Netz, diese Liste zu ändern.
@@ -134,7 +148,7 @@ sagt in drei Schritten, was zu tun ist.
 
 | Was du siehst | Was dahintersteckt |
 |---|---|
-| „… nicht erreichbar" | Der Rechner schläft, oder Tailscale läuft auf einem der beiden Geräte nicht. Im Fenster unter *Einrichtung* nachsehen. |
+| „… nicht erreichbar" | Der Rechner schläft, hat eine andere Adresse bekommen, oder das VPN läuft auf einem der beiden Geräte nicht. Im Fenster unter *Netz* nachsehen. |
 | „… kennt dieses Gerät nicht mehr" | Die Kopplung wurde widerrufen oder der Rechner neu aufgesetzt. Einmal neu koppeln. |
 | Der Weckknopf ist grau | Im Netz jenes Rechners ist gerade niemand wach, der ihn wecken könnte. Der Knopf sagt es beim Draufzeigen. |
 | Das Fenster sagt, die Oberfläche fehle | Bei einer selbst gebauten Fassung: `cd app && npm run build` vergessen. |

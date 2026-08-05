@@ -488,3 +488,107 @@ public class NetworkConfigTests
         Assert.Equal(NetworkKind.Tailscale, NetworkConfig.Read("""{ "network": "quatsch" }""").Kind);
     }
 }
+
+/// <summary>
+/// Dieselbe Schrittliste, aber je nach Netzmodus eine andere.
+/// </summary>
+public class SetupStepsProfileTests
+{
+    private sealed record Probe(
+        bool HasTailscale = false,
+        bool IsConnected = false,
+        string TailnetName = "",
+        bool HasCertificate = false,
+        bool HasService = false) : ISetupProbe;
+
+    private static NetworkProfile Heimnetz(string address = "192.168.178.20") =>
+        new(NetworkKind.Lan, address, Coordinator.Default);
+
+    [Fact]
+    public void Im_Heimnetz_kommt_Tailscale_nicht_vor()
+    {
+        // Der Kern des Befunds: wer den Rechner nur aus dem eigenen WLAN
+        // steuert, lief bisher durch zwei Schritte für ein Programm, das er nie
+        // braucht — und blieb am dritten hängen.
+        var steps = SetupSteps.For(Selection.Default, new Probe(), Heimnetz());
+
+        Assert.All(steps, step =>
+        {
+            Assert.DoesNotContain("Tailscale", step.Title);
+            Assert.DoesNotContain("Tailscale", step.Explanation);
+        });
+    }
+
+    [Fact]
+    public void Ohne_Tailscale_gibt_es_auch_nichts_abzuholen()
+    {
+        // Das Zertifikat stellt sich der Agent selbst aus. Ein Schritt „holen"
+        // zeigte auf ein Programm, das gar nicht installiert ist.
+        var steps = SetupSteps.For(Selection.Default, new Probe(), Heimnetz());
+
+        Assert.DoesNotContain(steps, step => step.Title == SetupSteps.CertificateStep);
+        Assert.Contains(steps, step => step.Title == "Agent einrichten");
+    }
+
+    [Fact]
+    public void Eine_eingetragene_Adresse_hakt_den_ersten_Schritt_ab()
+    {
+        var offen = SetupSteps.For(Selection.Default, new Probe(), Heimnetz(""));
+        var fertig = SetupSteps.For(Selection.Default, new Probe(), Heimnetz());
+
+        Assert.Equal(SetupSteps.AddressStep, SetupSteps.Next(offen)?.Title);
+        Assert.Equal("Agent einrichten", SetupSteps.Next(fertig)?.Title);
+    }
+
+    [Fact]
+    public void Im_Heimnetz_ist_es_bereit_sobald_der_Dienst_steht()
+    {
+        var steps = SetupSteps.For(
+            Selection.Default, new Probe(HasService: true), Heimnetz());
+
+        Assert.True(SetupSteps.Ready(steps));
+        Assert.Equal("Handy koppeln", SetupSteps.Next(steps)?.Title);
+    }
+
+    [Fact]
+    public void Beim_eigenen_VPN_wird_auf_die_Anleitung_verwiesen()
+    {
+        // RemoteDesktop richtet fremde VPN nicht ein. Dann muss wenigstens
+        // dastehen, wo es erklärt ist.
+        var steps = SetupSteps.For(
+            Selection.Default,
+            new Probe(),
+            new NetworkProfile(NetworkKind.Vpn, "", Coordinator.Default));
+
+        Assert.Contains("Anleitung", steps[0].Explanation);
+    }
+
+    [Fact]
+    public void Ohne_Profil_bleibt_alles_wie_bisher()
+    {
+        // Bestehende Installationen laufen über Tailscale. Ein Update darf ihre
+        // Einrichtung nicht umschreiben.
+        Assert.Equal(
+            SetupSteps.For(Selection.Default, new Probe()).Select(step => step.Title),
+            SetupSteps.For(Selection.Default, new Probe(), NetworkProfile.Default)
+                .Select(step => step.Title));
+    }
+
+    [Fact]
+    public void Auch_die_neuen_Schritte_kommen_ohne_Fachwort_aus()
+    {
+        var verboten = new[] { "Tailnet", "MagicDNS", "Zertifikatskette", "Endpoint", "Scope", "SAN" };
+
+        foreach (var profil in new[]
+                 {
+                     Heimnetz(""), new NetworkProfile(NetworkKind.Vpn, "", Coordinator.Default)
+                 })
+        {
+            foreach (var step in SetupSteps.For(Selection.Default, new Probe(), profil))
+            {
+                Assert.NotEmpty(step.Explanation);
+                Assert.All(verboten, wort => Assert.DoesNotContain(wort, step.Explanation));
+            }
+        }
+    }
+}

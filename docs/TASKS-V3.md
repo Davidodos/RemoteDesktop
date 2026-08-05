@@ -117,7 +117,7 @@ Befund 2. Kein Zertifikat mehr, ohne das nichts geht.
 
 ## Phase 22 — Drei Netzmodi und die Anleitung
 
-**Status:** offen
+**Status:** erledigt (05.08.2026)
 
 ### Umfang
 
@@ -130,9 +130,28 @@ Befund 2. Kein Zertifikat mehr, ohne das nichts geht.
 
 ### Abnahme
 
-- [ ] Tests belegen: im Heimnetz-Modus enthält die Schrittliste kein
-      „Tailscale" · eine Adresse ohne Schema und ohne Port wird angenommen,
-      `https://…` und `host:8443` werden abgelehnt
+- [x] `setup.Tests` **60 statt 53**, kein bestehender Test geändert. Die alte
+      Überladung `SetupSteps.For(selection, probe)` gibt es weiter und liefert
+      dieselbe Liste wie vorher — ein Test hält genau das fest, damit ein Update
+      bestehende Installationen nicht stumm umschreibt
+- [x] `SetupStepsProfileTests` belegt: im Heimnetz-Modus enthält **kein**
+      Schritt das Wort „Tailscale", weder im Titel noch in der Erklärung · ohne
+      Tailscale entfällt „Zertifikat holen" (der Agent stellt es selbst aus) ·
+      eine eingetragene Adresse hakt den ersten Schritt ab · beim eigenen VPN
+      wird auf die Anleitung verwiesen
+- [x] Adressprüfung in `NetworkProfileTests` (Phase 21): `192.168.178.20`,
+      `pc.fritz.box` und `[fd7a::1]` werden angenommen, `https://…`,
+      `…:8443` und `…/pfad` abgelehnt
+
+### Notizen
+
+- **`docs/NETZ.md` sagt auch, was nicht geht:** ein kommerzieller VPN-Dienst
+  (NordVPN, Mullvad …) leitet nur den Internetverkehr um — die eigenen Geräte
+  sehen sich dort nicht. Das ist der Fehlschlag, den sonst niemand einordnen
+  kann
+- **RemoteDesktop startet fremde VPN nicht und prüft sie nicht.** Das wäre eine
+  Fläche für konfigurierbare Kommandozeilen, und genau die gibt es im Agent
+  bewusst nirgends (Regel aus Phase 13)
 
 ---
 
