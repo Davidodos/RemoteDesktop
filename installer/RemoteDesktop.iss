@@ -56,7 +56,10 @@ Name: "tailscale"; Description: "Tailscale mitinstallieren (nur nötig, wenn du 
     Flags: unchecked; Check: NeedsTailscale
 
 Name: "agentservice"; Description: "Diesen Rechner fernsteuerbar machen (Agent als Dienst eintragen)"
-Name: "autostartagent"; Description: "Agent beim Hochfahren starten"; Tasks: agentservice
+; Als untergeordnete Aufgabe geschrieben (Backslash im Namen) und nicht mit
+; einem `Tasks:`-Verweis — den gibt es in dieser Sektion nicht. Inno rückt sie
+; dadurch ein und lässt sie nur ankreuzen, solange die übergeordnete steht.
+Name: "agentservice\autostart"; Description: "Agent beim Hochfahren starten"
 Name: "autostartclient"; Description: "RemoteDesktop beim Anmelden starten"
 
 [Files]
@@ -107,7 +110,7 @@ Filename: "{sys}\sc.exe"; Parameters: "description {#Service} ""Macht diesen Rec
 ; Aktualisierung stumm, bis jemand ihn neu startet. Nur, wenn er auch von allein
 ; starten soll.
 Filename: "{sys}\sc.exe"; Parameters: "start {#Service}"; \
-    Tasks: autostartagent; Flags: runhidden waituntilterminated
+    Tasks: agentservice\autostart; Flags: runhidden waituntilterminated
 
 Filename: "{app}\{#Exe}"; Description: "Einrichtung jetzt abschließen"; \
     Flags: postinstall nowait skipifsilent
@@ -179,7 +182,7 @@ end;
   Begründung in setup/Autostart.cs. }
 function AgentStartType(Param: string): String;
 begin
-  if WizardIsTaskSelected('autostartagent') then
+  if WizardIsTaskSelected('agentservice\autostart') then
     Result := 'auto'
   else
     Result := 'demand';

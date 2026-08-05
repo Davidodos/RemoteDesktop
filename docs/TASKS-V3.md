@@ -290,6 +290,13 @@ verbindet sich zu ihm.
 - **Der alte Autostart-Eintrag wird auch entfernt**, wenn das Häkchen weg ist.
   Er zeigte sonst nach dem Update auf eine Datei, die es nicht mehr gibt, und
   Windows meldete bei jeder Anmeldung einen Fehler
+- **`Tasks:` gibt es in der `[Tasks]`-Sektion nicht.** Beim ersten Tag-Lauf
+  (v1.1.0, 05.08.2026) brach `iscc` mit „Unrecognized parameter name Tasks" ab.
+  Eine Aufgabe, die eine andere voraussetzt, wird über einen **verschachtelten
+  Namen** geschrieben (`agentservice\autostart`); Inno rückt sie dann ein und
+  lässt sie nur ankreuzen, solange die übergeordnete steht. Verweise darauf —
+  in `[Run]` und in `WizardIsTaskSelected` — tragen den vollen Namen mit
+  Backslash
 - **Offen für die Hardware-Prüfung:** den Installer mit `iscc` übersetzen und
   einmal durchspielen — Erstinstallation, Update über eine V2-Installation
   hinweg, Deinstallation
