@@ -1,5 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
+import { noTrust } from './index.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
@@ -157,5 +158,6 @@ export function webview2Platform(host: WebView2Host): Platform {
     // Kacheln im Startmenü wären das Windows-Gegenstück; sie gehören nicht zu
     // dieser Phase, und niemand hat danach gefragt.
     surfaces: noSurfaces,
+    trust: noTrust,
   }
 }

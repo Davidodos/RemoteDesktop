@@ -35,6 +35,17 @@ public sealed class ControlPanel : Form
     };
 
     private readonly Label _next = new() { Dock = DockStyle.Fill, AutoSize = false, Height = 44 };
+
+    /// <summary>
+    /// Der Fingerabdruck der eigenen Zertifizierungsstelle. Er steht hier, weil
+    /// ihn jemand ablesen muss: am Handy und am anderen Rechner wird genau
+    /// dieser Wert zum Vergleich angezeigt, bevor dort irgendetwas bestätigt
+    /// wird. Ohne den Vergleich wäre das Bestätigen wertlos.
+    /// </summary>
+    private readonly TextBox _fingerprint = new()
+    {
+        Dock = DockStyle.Fill, ReadOnly = true, BorderStyle = BorderStyle.None
+    };
     private readonly Label _status = new() { Dock = DockStyle.Bottom, AutoSize = false, Height = 40 };
 
     private readonly NetworkView _network;
@@ -85,15 +96,17 @@ public sealed class ControlPanel : Form
 
     private Control BuildOverview()
     {
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
 
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         _next.Font = new Font(Font, FontStyle.Bold);
 
         layout.Controls.Add(_next, 0, 0);
         layout.Controls.Add(_parts, 0, 1);
+        layout.Controls.Add(_fingerprint, 0, 2);
 
         return layout;
     }
@@ -118,6 +131,7 @@ public sealed class ControlPanel : Form
         }
 
         _next.Text = NextLine(machine, profile);
+        _fingerprint.Text = OwnFingerprint();
 
         _network.Show(profile);
         _options.ShowCurrent();
@@ -144,6 +158,38 @@ public sealed class ControlPanel : Form
         return next is null
             ? "Alles steht. Zum Koppeln eines weiteren Geräts unten auf „Geräte koppeln…“."
             : $"Als Nächstes: {next.Title} — {next.Explanation}";
+    }
+
+    /// <summary>
+    /// Der Fingerabdruck der eigenen Stelle, oder ein Satz darüber, dass es
+    /// keine gibt. Bei einem Zertifikat von Tailscale ist Letzteres der
+    /// Normalfall — dann kennt jeder Browser den Aussteller ohnehin.
+    /// </summary>
+    private static string OwnFingerprint()
+    {
+        var file = Path.Combine(Elevation.DataDirectory, "agentca.crt");
+
+        if (!File.Exists(file))
+        {
+            return "Dieser Rechner weist sich (noch) nicht mit einer eigenen Stelle aus.";
+        }
+
+        try
+        {
+            var raw = File.ReadAllBytes(file);
+
+            var hex = Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(raw)).ToLowerInvariant();
+
+            var readable = string.Join(':', Enumerable.Range(0, hex.Length / 2)
+                .Select(index => hex.Substring(index * 2, 2)));
+
+            return $"Fingerabdruck dieses Rechners: {readable}";
+        }
+        catch (IOException failure)
+        {
+            return $"Fingerabdruck nicht lesbar: {failure.Message}";
+        }
     }
 
     /// <summary>Ein Teil als Kachel: Zustand, Zweck und die passenden Knöpfe.</summary>

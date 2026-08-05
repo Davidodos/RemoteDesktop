@@ -4,6 +4,7 @@ import android.os.Bundle;
 
 import com.getcapacitor.BridgeActivity;
 
+import app.remotedesktop.client.surfaces.CertificateTrustPlugin;
 import app.remotedesktop.client.surfaces.SurfacesPlugin;
 
 public class MainActivity extends BridgeActivity {
@@ -16,6 +17,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SessionServicePlugin.class);
         registerPlugin(AppUpdatePlugin.class);
         registerPlugin(SurfacesPlugin.class);
+        registerPlugin(CertificateTrustPlugin.class);
 
         super.onCreate(savedInstanceState);
     }

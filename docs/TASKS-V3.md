@@ -213,7 +213,7 @@ Befund 1 und 3.
 
 ## Phase 24 — Clients nehmen das eigene Zertifikat an
 
-**Status:** offen
+**Status:** erledigt (05.08.2026), Hardware-Prüfung offen
 
 Ohne diese Phase startet der Agent zwar ohne Tailscale, aber kein Client
 verbindet sich zu ihm.
@@ -229,8 +229,38 @@ verbindet sich zu ihm.
 
 ### Abnahme
 
-- [ ] Tests belegen: ein Zertifikat mit falschem Fingerabdruck wird abgelehnt
-- [ ] `./gradlew testDebugUnitTest` grün
+- [x] App-Tests **314 statt 306** (`certificateTrust.test.ts`, 8),
+      Kotlin-Tests **16 statt 9** (`CertificateTrustTest`, 7).
+      `npx tsc -b --force` sauber, `./gradlew testDebugUnitTest` grün
+- [x] Beide Seiten belegen: ein Zertifikat mit falschem Fingerabdruck wird
+      abgelehnt · ohne Fingerabdruck wird gar nicht erst geholt (die App fragt
+      den Rechner nicht einmal) · was kein X.509-Zertifikat ist, wird abgelehnt,
+      auch wenn sein Fingerabdruck stimmt · ein Serverzertifikat ohne
+      `CA:true` wird abgelehnt, weil es im Speicher wirkungslos wäre
+
+### Notizen
+
+- **Geprüft wird zweimal, in der App und nativ.** Kein Versehen: die
+  Weboberfläche ist austauschbar, und was über das Vertrauen des ganzen Geräts
+  entscheidet, soll nicht allein an ihr hängen
+- **`cleartextTrafficPermitted="true"` im Android-Netzprofil.** Es gilt für
+  genau eine Datei — das öffentliche Zertifikat auf Port 8442. Über eine
+  verschlüsselte Verbindung wäre es nicht zu holen; das ist ja gerade die, die
+  ohne dieses Zertifikat nicht zustande kommt. Bild, Eingabe und Sitzungstoken
+  laufen unverändert ausschließlich über `https`/`wss`, und die App baut
+  nirgends eine `http`-Adresse zu einem Agent zusammen
+- **Warum eine CA im Systemspeicher und nicht `onReceivedSslError`.** Letzteres
+  greift bei Chromium nicht für WebSocket-Verbindungen — Bild und Eingabe
+  wären stumm ausgefallen, während die REST-Aufrufe funktionieren. Der Weg über
+  den Speicher des Systems gilt für alles
+- **Der Windows-Client hat denselben Weg**, nur ohne Systemdialog: Adresse
+  eintragen, Zertifikat holen, Fingerabdruck vergleichen, bestätigen. Es landet
+  im Speicher **dieses Benutzers**, nicht des Rechners — eine Stelle, der man
+  vertraut, gilt für alles, was danach kommt, und diese Entscheidung darf einer
+  für sich treffen und nicht für alle
+- **Offen für die Hardware-Prüfung:** ob Android den Dialog aus
+  `KeyChain.createInstallIntent` wie erwartet zeigt und die Stelle danach für
+  `wss` gilt. Das lässt sich hier nicht ausführen
 
 ---
 

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Wem diese App beim Verbinden traut.
+
+  Zwei Abweichungen von der Vorgabe, beide nötig, seit Tailscale nicht mehr
+  Voraussetzung ist:
+
+  1. `certificates src="user"` — Zertifizierungsstellen, die der Besitzer des
+     Geräts selbst bestätigt hat. Genau eine davon ist gemeint: die, die sich
+     ein Agent ohne Tailscale selbst ausstellt (siehe
+     `agent/Services/SelfSignedCertificate.cs`). Ohne diesen Eintrag hülfe die
+     Bestätigung im System nichts — seit Android 7 ignorieren Apps vom Benutzer
+     installierte Stellen, solange sie es nicht ausdrücklich anders sagen.
+
+  2. `cleartextTrafficPermitted="true"` — **nicht** für die Fernsteuerung. Bild,
+     Eingabe und Sitzungstoken laufen ausnahmslos über `https` und `wss`; die
+     App baut nirgends eine `http`-Adresse zu einem Agent zusammen. Gebraucht
+     wird es für genau eine Datei: das öffentliche Zertifikat unter
+     `http://<adresse>:8442/ca.crt`. Über eine verschlüsselte Verbindung wäre es
+     nicht zu holen — das ist ja gerade die Verbindung, die ohne dieses
+     Zertifikat nicht zustande kommt. Die Datei enthält kein Geheimnis, und die
+     App nimmt sie nur an, wenn ihr Fingerabdruck zu dem aus der Kopplung passt
+     (`app/src/lib/certificateTrust.ts`). Passt er nicht, wird nichts
+     installiert.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

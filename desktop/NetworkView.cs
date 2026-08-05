@@ -23,6 +23,7 @@ public sealed class NetworkView : UserControl
     private readonly TextBox _coordinator = new() { Dock = DockStyle.Fill };
     private readonly Label _hint = new() { Dock = DockStyle.Fill, AutoSize = false, Height = 64 };
     private readonly Button _suggest = new() { Text = "Vorschlag", AutoSize = true };
+    private readonly TextBox _trustHost = new() { Dock = DockStyle.Fill };
 
     private bool _loading;
 
@@ -32,9 +33,10 @@ public sealed class NetworkView : UserControl
 
         var layout = new TableLayoutPanel
         {
-            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, AutoScroll = true
+            Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, AutoScroll = true
         };
 
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -45,7 +47,8 @@ public sealed class NetworkView : UserControl
         layout.Controls.Add(BuildAddress(), 0, 1);
         layout.Controls.Add(BuildCoordinator(), 0, 2);
         layout.Controls.Add(BuildActions(), 0, 3);
-        layout.Controls.Add(_hint, 0, 4);
+        layout.Controls.Add(BuildTrust(), 0, 4);
+        layout.Controls.Add(_hint, 0, 5);
 
         Controls.Add(layout);
     }
@@ -162,6 +165,85 @@ public sealed class NetworkView : UserControl
         row.Controls.Add(guide);
 
         return row;
+    }
+
+    /// <summary>
+    /// Einem anderen Rechner vertrauen, der sich sein Zertifikat selbst
+    /// ausgestellt hat.
+    ///
+    /// Es steht hier und nicht bei den Teilen: es geht nicht um diesen Rechner,
+    /// sondern um einen, den man von hier aus steuern will.
+    /// </summary>
+    private Control BuildTrust()
+    {
+        var box = new GroupBox
+        {
+            Text = "Einem anderen Rechner vertrauen", Dock = DockStyle.Fill, AutoSize = true
+        };
+
+        var inner = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, AutoSize = true,
+            Padding = new Padding(8)
+        };
+
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+
+        var button = new Button { Text = "Zertifikat holen", AutoSize = true };
+        button.Click += async (_, _) => await TrustAsync(_trustHost.Text);
+
+        inner.Controls.Add(_trustHost, 0, 0);
+        inner.Controls.Add(button, 1, 0);
+
+        box.Controls.Add(inner);
+
+        return box;
+    }
+
+    /// <summary>
+    /// Holen, zeigen, fragen — in dieser Reihenfolge. Der Fingerabdruck steht in
+    /// der Rückfrage, weil er das Einzige ist, was den Schritt sicher macht:
+    /// derselbe Wert steht am anderen Rechner im Fenster. Stimmen sie nicht
+    /// überein, sitzt jemand dazwischen.
+    /// </summary>
+    private async Task TrustAsync(string host)
+    {
+        if (host.Trim().Length == 0)
+        {
+            _report("Trage die Adresse des Rechners ein, dem du vertrauen willst.");
+
+            return;
+        }
+
+        try
+        {
+            var fetched = await TrustImport.FetchAsync(host);
+
+            var answer = MessageBox.Show(
+                $"Dieses Zertifikat gehört angeblich zu „{host.Trim()}“:\n\n"
+                + $"{fetched.Readable}\n\n"
+                + "Vergleiche es mit dem Wert, der am anderen Rechner im Fenster steht. "
+                + "Nur wenn beide übereinstimmen, gehört es dorthin.\n\n"
+                + "Jetzt vertrauen?",
+                "RemoteDesktop",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (answer != DialogResult.Yes)
+            {
+                _report("Nichts geändert.");
+
+                return;
+            }
+
+            TrustImport.Trust(fetched.Certificate);
+            _report($"„{host.Trim()}“ wird jetzt vertraut.");
+        }
+        catch (Exception failure)
+        {
+            _report($"Nicht geklappt: {failure.Message}");
+        }
     }
 
     /// <summary>Zeigt, was gespeichert ist.</summary>

@@ -83,6 +83,44 @@ export interface QrScanner {
   scan(): Promise<string>
 }
 
+/**
+ * Einer Zertifizierungsstelle vertrauen, die sich ein Agent selbst ausgestellt
+ * hat.
+ *
+ * Das kann keine Weboberfläche selbst — es ist eine Angelegenheit des Geräts,
+ * nicht der Seite. Android bringt dafür einen Systemdialog mit, im Browser
+ * bleibt nur die Warnung, die man einmal wegklickt. Deshalb steht hier eine
+ * Schnittstelle und keine Umsetzung: die Oberfläche fragt vorher, ob es geht,
+ * und bietet den Knopf sonst gar nicht erst an.
+ */
+export interface TrustService {
+  /** Ob dieses Gerät überhaupt einen Weg dafür hat. */
+  readonly available: boolean
+
+  /**
+   * Übergibt das geprüfte Zertifikat dem System. Was danach passiert, gehört
+   * dem System — es fragt selbst nach und kann abgelehnt werden.
+   *
+   * @param certificateBase64 Das Zertifikat.
+   * @param fingerprint Der erwartete Fingerabdruck aus der Kopplung. Er geht
+   *   mit, obwohl `lib/certificateTrust.ts` bereits verglichen hat: die
+   *   Weboberfläche ist austauschbar, und eine Prüfung, die nur an einer Stelle
+   *   steht, ist eine, die beim nächsten Umbau verschwindet.
+   */
+  install(certificateBase64: string, fingerprint: string): Promise<void>
+}
+
+/** Für Umgebungen, die es nicht können — der Browser vor allem. */
+export const noTrust: TrustService = {
+  available: false,
+  install: () =>
+    Promise.reject(
+      new Error(
+        'Auf diesem Gerät lässt sich das Zertifikat nicht aus der App heraus bestätigen.',
+      ),
+    ),
+}
+
 
 export interface Platform {
   readonly name: 'web' | 'capacitor' | 'webview2'
@@ -107,6 +145,11 @@ export interface Platform {
    * Steckbrief (siehe `lib/surfaceBoard.ts`).
    */
   readonly surfaces: SurfaceBoardPublisher
+  /**
+   * Der Weg, einem selbst ausgestellten Agent-Zertifikat zu vertrauen. Nötig
+   * überall dort, wo kein Tailscale läuft — also im Heimnetz und im eigenen VPN.
+   */
+  readonly trust: TrustService
 }
 
 export { PlatformError } from './errors.ts'

@@ -25,6 +25,12 @@ interface PairResponse {
   scopes?: string[]
   hostname?: string
   agentFingerprint?: string
+  /**
+   * Fingerabdruck der Zertifizierungsstelle, mit der sich der Agent ausweist.
+   * Fehlt bei einem Agent mit Zertifikat von Tailscale — dann gibt es nichts zu
+   * bestätigen.
+   */
+  caFingerprint?: string
   /** `waker` bei einem Knoten, der nur wecken kann. */
   role?: string
   siteId?: string
@@ -97,6 +103,9 @@ export async function pairWithAgent(target: PairTarget): Promise<Device> {
     ...(response.agentFingerprint === undefined
       ? {}
       : { fingerprint: response.agentFingerprint }),
+    ...(response.caFingerprint === undefined
+      ? {}
+      : { caFingerprint: response.caFingerprint }),
     ...(waker ? { waker: true } : {}),
     ...(response.siteId === undefined ? {} : { siteId: response.siteId }),
     // Jeder Agent kann seit Phase 14 Nachbarn wecken, ein Waker kann sonst
@@ -120,8 +129,8 @@ function describeFailure(cause: unknown, host: string): string {
 
   if (cause.status === undefined) {
     return (
-      `${host} antwortet nicht. Läuft der Rechner, und ist Tailscale auf beiden ` +
-      'Geräten an? Der Name muss genau so lauten wie im Fenster am Rechner.'
+      `${host} antwortet nicht. Läuft der Rechner, und sind beide Geräte im ` +
+      'selben Netz? Die Adresse muss genau so lauten wie im Fenster am Rechner.'
     )
   }
 

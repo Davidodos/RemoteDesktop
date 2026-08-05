@@ -22,6 +22,15 @@ export interface Device {
    */
   fingerprint?: string
   /**
+   * Fingerabdruck der Zertifizierungsstelle des Agents, aus der Kopplung.
+   *
+   * Steht er hier, hat sich der Rechner sein Zertifikat selbst ausgestellt —
+   * dann muss dieses Gerät der Stelle einmal vertrauen. Fehlt er, kommt das
+   * Zertifikat von einer öffentlichen Stelle (Tailscale), und es gibt nichts
+   * zu bestätigen. Siehe `lib/certificateTrust.ts`.
+   */
+  caFingerprint?: string
+  /**
    * Ob dieser Knoten seinerseits andere wecken kann. Jeder Agent kann das, ein
    * Waker kann sonst nichts. Nicht zu verwechseln mit „lässt sich wecken" —
    * dafür braucht es {@link Device.mac} und {@link Device.siteId}.

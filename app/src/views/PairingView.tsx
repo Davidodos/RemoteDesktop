@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CertificateTrustStep } from './CertificateTrustStep.tsx'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
 import { pairWithAgent } from '../lib/pairing.ts'
 import { DEFAULT_AGENT_PORT, parsePairingUri } from '../lib/pairingUri.ts'
@@ -26,6 +27,16 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
 
+  /**
+   * Gekoppelt, aber noch nicht fertig: ein Rechner ohne Tailscale weist sich
+   * mit einem selbst ausgestellten Zertifikat aus, und dem muss dieses Gerät
+   * erst vertrauen. Ohne diesen Zwischenschritt stünde er in der Liste und
+   * ließe sich nicht verbinden — ohne dass irgendwo steht, warum.
+   */
+  const [awaitingTrust, setAwaitingTrust] = useState<
+    { device: Device; devices: Device[] } | undefined
+  >(undefined)
+
   const platform = getPlatform()
 
   const submit = async (): Promise<void> => {
@@ -40,7 +51,15 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
         label: label.trim(),
       })
 
-      onPaired(saveLocalDevice(device), device)
+      const devices = saveLocalDevice(device)
+
+      if (device.caFingerprint === undefined) {
+        onPaired(devices, device)
+
+        return
+      }
+
+      setAwaitingTrust({ device, devices })
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))
     } finally {
@@ -69,6 +88,15 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
   }
 
   const ready = host.trim().length > 0 && code.trim().length === 6 && label.trim().length > 0
+
+  if (awaitingTrust !== undefined) {
+    return (
+      <CertificateTrustStep
+        device={awaitingTrust.device}
+        onDone={() => onPaired(awaitingTrust.devices, awaitingTrust.device)}
+      />
+    )
+  }
 
   return (
     <form

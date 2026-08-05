@@ -1,5 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
+import { noTrust } from './index.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
@@ -139,4 +140,5 @@ export const webPlatform: Platform = {
   // Ein Widget auf dem Startbildschirm ist nichts, was eine Seite vergeben
   // könnte — dafür braucht es die APK.
   surfaces: noSurfaces,
+  trust: noTrust,
 }

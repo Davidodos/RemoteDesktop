@@ -2,12 +2,14 @@ import type { SurfaceBoard } from '../lib/surfaceBoard.ts'
 import { findLatestApk, isDifferentVersion } from './appUpdate.ts'
 import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
+import { noTrust } from './index.ts'
 import type {
   Capabilities,
   ClipboardAccess,
   KeyValueStore,
   Platform,
   QrScanner,
+  TrustService,
   UpdateInfo,
   UpdateService,
 } from './index.ts'
@@ -22,6 +24,11 @@ import type { SessionKeepAlive } from './session.ts'
  * für die QR-Kopplung und ein Speicher, der beim Löschen der Browserdaten nicht
  * mitverschwindet.
  */
+
+/** Übergibt ein geprüftes Zertifikat an den Systemdialog von Android. */
+interface TrustPlugin {
+  install(options: { certificate: string; fingerprint: string }): Promise<void>
+}
 
 /** Die vier Plugin-Methoden, die diese App benutzt — mehr nicht. */
 interface PreferencesPlugin {
@@ -76,6 +83,8 @@ export interface CapacitorPlugins {
   appUpdate?: AppUpdatePlugin
   /** Ebenfalls freiwillig, aus demselben Grund wie {@link CapacitorPlugins.appUpdate}. */
   surfaces?: SurfacesPlugin
+  /** Ebenso freiwillig: eine ältere APK kennt das Plugin nicht. */
+  trust?: TrustPlugin
 }
 
 /**
@@ -338,6 +347,31 @@ export function capacitorPlatform(
     qr: qrScanner(plugins),
     session: sessionKeepAlive(plugins),
     surfaces: surfaceBoardPublisher(plugins),
+    trust: certificateTrust(plugins),
+  }
+}
+
+/**
+ * Zertifikate landen im Speicher des Systems, nicht in dem der App: nur so
+ * gelten sie auch für die WebSocket-Verbindungen, über die Bild und Eingabe
+ * laufen. Android fragt dabei selbst nach — die App kann das weder umgehen noch
+ * heimlich tun, und das ist richtig so.
+ */
+function certificateTrust(plugins: CapacitorPlugins): TrustService {
+  const plugin = plugins.trust
+
+  if (plugin === undefined) {
+    // Eine APK von vor V3. Sie soll weiterlaufen und dann eben sagen, dass es
+    // hier nicht geht — statt beim Start an einem fehlenden Plugin zu
+    // scheitern.
+    return noTrust
+  }
+
+  return {
+    available: true,
+    install: async (certificateBase64, fingerprint) => {
+      await plugin.install({ certificate: certificateBase64, fingerprint })
+    },
   }
 }
 
@@ -364,6 +398,7 @@ async function registerCapacitorPlugins(): Promise<CapacitorPlugins> {
     session: registerPlugin<SessionServicePlugin>('SessionService'),
     appUpdate: registerPlugin<AppUpdatePlugin>('AppUpdate'),
     surfaces: registerPlugin<SurfacesPlugin>('Surfaces'),
+    trust: registerPlugin<TrustPlugin>('CertificateTrust'),
   }
 }
 
