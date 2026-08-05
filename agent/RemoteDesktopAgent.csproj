@@ -17,6 +17,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Das Netzprofil (Heimnetz · Tailscale · eigenes VPN) liest der Agent aus
+         derselben Datei wie die Oberfläche. Die Logik dafür liegt in einem
+         Projekt ohne Windows-Bezug und ist dort geprüft — zwei Leser derselben
+         Datei mit je eigener Auslegung wären eine Falle. -->
+    <ProjectReference Include="..\setup\RemoteDesktopSetup.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
     <PackageReference Include="SIPSorcery" Version="10.0.12" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.11" />

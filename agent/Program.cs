@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using RemoteDesktopAgent.Actions;
 using RemoteDesktopAgent.Api;
 using RemoteDesktopAgent.Auth;
@@ -24,13 +25,49 @@ builder.Host.UseWindowsService(options => options.ServiceName = "RemoteDesktopAg
 
 var settings = AgentSettings.Load(builder.Configuration);
 
-// Einmal geladen und dann zweifach gebraucht: Kestrel zeigt es vor, und der
-// QR-Code der Kopplung liest den Namen daraus, auf den es lautet.
-var certificate = CertificateLoader.Load(settings.CertificatePath, settings.KeyPath);
+// Wie dieser Rechner erreichbar sein soll: im Heimnetz, über Tailscale oder
+// über ein fremdes VPN. Aus derselben Datei, die auch die Oberfläche schreibt.
+var profile = RemoteDesktopSetup.NetworkConfig.Read(
+    File.Exists(settings.NetworkConfigPath)
+        ? File.ReadAllText(settings.NetworkConfigPath)
+        : null);
+
+// Einmal geladen und dann dreifach gebraucht: Kestrel zeigt es vor, der QR-Code
+// der Kopplung liest den Namen daraus, und die eigene CA — falls es eine gibt —
+// wird zum Abholen bereitgelegt.
+var chosen = CertificateLoader.LoadOrCreate(
+    settings.CertificatePath,
+    settings.KeyPath,
+    new CertificateVault(settings.DataDirectory),
+    Environment.MachineName,
+    CertificateLoader.Names(
+        profile.AdvertisedAddress, Environment.MachineName, LocalAddresses.List()));
+
+var certificate = chosen.Certificate;
+
+// Nur wenn der Agent sich selbst beglaubigt hat, gibt es überhaupt etwas
+// abzuholen: ein Zertifikat von Tailscale kennt jeder Browser bereits.
+var authority = chosen.Authority is null
+    ? null
+    : new
+    {
+        Fingerprint = SelfSignedCertificate.Fingerprint(chosen.Authority),
+        Der = chosen.Authority.Export(X509ContentType.Cert)
+    };
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
     kestrel.ListenAnyIP(settings.Port, listen => listen.UseHttps(certificate));
+
+    // Der zweite, unverschlüsselte Port trägt genau eine Datei: das eigene
+    // CA-Zertifikat. Ohne ihn gäbe es ein Henne-Ei-Problem — ein Client kann
+    // die Datei nicht über eine Verbindung holen, der er noch nicht traut.
+    // Vertretbar ist das, weil dort ausschließlich ein öffentliches Zertifikat
+    // liegt und der Client es gegen den Fingerabdruck aus der Kopplung prüft.
+    if (authority is not null)
+    {
+        kestrel.ListenAnyIP(settings.TrustPort);
+    }
 });
 
 // Die PWA wird vom Hub auf der NAS ausgeliefert, spricht den Agent aber direkt
@@ -102,13 +139,48 @@ builder.Services.AddSingleton<WebRtcRegistry>();
 
 var app = builder.Build();
 
+// Der unverschlüsselte Port, noch vor allem anderen: was dort hereinkommt,
+// bekommt das CA-Zertifikat oder gar nichts. Er darf unter keinen Umständen
+// dieselben Endpunkte bedienen wie der verschlüsselte — deshalb steht die
+// Weiche hier oben und nicht als Route weiter unten, wo sie jemand übersehen
+// könnte.
+app.Use(async (context, next) =>
+{
+    if (authority is null || context.Connection.LocalPort != settings.TrustPort)
+    {
+        await next();
+        return;
+    }
+
+    if (context.Request.Path == "/ca.crt" && HttpMethods.IsGet(context.Request.Method))
+    {
+        // Kopfzeilen vor dem Rumpf: danach sind sie hinaus und jede Zuweisung
+        // wäre wirkungslos.
+        context.Response.ContentType = "application/x-x509-ca-cert";
+        context.Response.Headers.Append("X-Certificate-Fingerprint", authority.Fingerprint);
+
+        await context.Response.Body.WriteAsync(authority.Der);
+
+        return;
+    }
+
+    context.Response.StatusCode = StatusCodes.Status404NotFound;
+});
+
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 app.UseCors();
 app.UseClientAuth();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapPairingEndpoints(CertificateLoader.DnsName(certificate), settings.Port);
+// Die eingetragene Adresse schlägt den Namen im Zertifikat: bei einem selbst
+// ausgestellten Zertifikat steht dort zwar dasselbe, aber wer im Heimnetz eine
+// IP einträgt, soll genau diese im QR-Code wiederfinden. Nur wo nichts
+// eingetragen ist — also bei Tailscale —, bleibt das Zertifikat die Quelle.
+app.MapPairingEndpoints(
+    profile.AdvertisedAddress ?? CertificateLoader.DnsName(certificate),
+    settings.Port,
+    authority?.Fingerprint);
 app.MapActionEndpoints();
 app.MapWakeEndpoints();
 app.MapUpdateEndpoints();
@@ -148,6 +220,12 @@ app.MapGet("/api/info", (InputExecutor executor) =>
 
         // Dieser Rechner kann seinerseits Nachbarn wecken.
         canWake = true,
+
+        // Womit dieser Rechner sich ausweist. Steht hier ein Fingerabdruck, hat
+        // er sich selbst beglaubigt — der Client weiß dann, dass er die CA
+        // einmal bestätigen muss, und woran er die richtige erkennt.
+        caFingerprint = authority?.Fingerprint,
+        trustPort = authority is null ? (int?)null : settings.TrustPort,
         monitors = monitors.Select(m => new
         {
             index = m.Index,
@@ -346,6 +424,15 @@ app.Logger.LogInformation(
     "RemoteDesktop-Agent lauscht auf Port {Port} als {Host}", settings.Port, Environment.MachineName);
 
 app.Logger.LogInformation(
+    authority is null
+        ? "Zertifikat von Tailscale, ausgestellt auf {Name}. Nichts zu bestätigen."
+        : "Selbst ausgestelltes Zertifikat für {Name}. Die eigene CA hat den Fingerabdruck "
+          + "{Fingerprint} und liegt unter http://<adresse>:{TrustPort}/ca.crt bereit.",
+    profile.AdvertisedAddress ?? CertificateLoader.DnsName(certificate) ?? "unbekannt",
+    authority?.Fingerprint ?? string.Empty,
+    settings.TrustPort);
+
+app.Logger.LogInformation(
     "Gekoppelte Clients: {Count}. Altes Sammel-Token: {Legacy}.",
     app.Services.GetRequiredService<ClientStore>().List().Count,
     settings.Token is null ? "abgeschaltet" : "noch gültig");
@@ -383,11 +470,28 @@ internal sealed record MediaRequest(string Action, int? Repeat, string? Session)
 /// Wo die Releases liegen, als <c>owner/repo</c>. Konfigurierbar, damit ein
 /// Fork sich aus seinem eigenen Repo aktualisiert statt aus dem fremden.
 /// </param>
+/// <param name="CertificatePath">
+/// Das Zertifikat von <c>tailscale cert</c>. Seit V3 freiwillig: liegt keins da,
+/// stellt sich der Agent selbst eins aus. Vorher war ein fehlender Eintrag der
+/// Grund, gar nicht erst zu starten — und damit die Hürde, an der jeder hing,
+/// der ohne VPN auskommen wollte.
+/// </param>
+/// <param name="DataDirectory">
+/// Wo die selbst ausgestellten Zertifikate liegen. Vorgabe ist der Ordner des
+/// konfigurierten Zertifikats, sonst <c>C:\ProgramData\RemoteDesktopAgent</c>.
+/// </param>
+/// <param name="TrustPort">
+/// Der unverschlüsselte Port, auf dem ausschließlich das eigene CA-Zertifikat
+/// abzuholen ist. Er wird nur geöffnet, wenn es eins gibt.
+/// </param>
 internal sealed record AgentSettings(
     string? Token,
     int Port,
-    string CertificatePath,
-    string KeyPath,
+    int TrustPort,
+    string? CertificatePath,
+    string? KeyPath,
+    string DataDirectory,
+    string NetworkConfigPath,
     string FfmpegPath,
     string ClientsPath,
     string IdentityPath,
@@ -401,13 +505,24 @@ internal sealed record AgentSettings(
                     ?? Environment.GetEnvironmentVariable("REMOTEDESKTOP_TOKEN");
 
         var port = configuration.GetValue("Agent:Port", 8443);
+        var trustPort = configuration.GetValue("Agent:TrustPort", 8442);
 
-        var certificatePath = configuration["Agent:CertificatePath"]
-                              ?? throw new InvalidOperationException(
-                                  "Agent:CertificatePath fehlt (Ausgabe von 'tailscale cert').");
+        // Beide dürfen fehlen. Genau das war bis V3 ein Abbruch beim Start —
+        // und von außen sah ein Rechner ohne Tailscale-Zertifikat aus wie einer,
+        // der gar nicht läuft.
+        var certificatePath = configuration["Agent:CertificatePath"];
+        var keyPath = configuration["Agent:KeyPath"];
 
-        var keyPath = configuration["Agent:KeyPath"]
-                      ?? throw new InvalidOperationException("Agent:KeyPath fehlt.");
+        var dataDirectory = configuration["Agent:DataDirectory"]
+                            ?? (certificatePath is null
+                                ? DefaultDataDirectory
+                                : Path.GetDirectoryName(certificatePath) is { Length: > 0 } folder
+                                    ? folder
+                                    : DefaultDataDirectory);
+
+        var networkConfigPath = configuration["Agent:NetworkConfigPath"]
+                                ?? Path.Combine(
+                                    dataDirectory, RemoteDesktopSetup.NetworkConfig.FileName);
 
         // Ohne ffmpeg gibt es kein H.264 — der Agent läuft dann trotzdem, nur
         // eben mit dem JPEG-Stream. Deshalb hier kein Abbruch.
@@ -423,9 +538,18 @@ internal sealed record AgentSettings(
         var updateRepository = configuration["Agent:UpdateRepository"] ?? "Davidodos/RemoteDesktop";
 
         return new AgentSettings(
-            token, port, certificatePath, keyPath, ffmpegPath, clientsPath, identityPath,
-            actionsPath, broadcastAddress, updateRepository);
+            token, port, trustPort, certificatePath, keyPath, dataDirectory, networkConfigPath,
+            ffmpegPath, clientsPath, identityPath, actionsPath, broadcastAddress,
+            updateRepository);
     }
+
+    /// <summary>
+    /// Dorthin legt der Installer die Daten des Agents, und nur Administratoren
+    /// und das System dürfen hinein.
+    /// </summary>
+    private static string DefaultDataDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "RemoteDesktopAgent");
 
     private static string Resolve(string path) =>
         Path.IsPathRooted(path) ? path : Path.Combine(AppContext.BaseDirectory, path);

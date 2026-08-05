@@ -91,30 +91,13 @@ public static class CoordinatorConfig
     /// Liest die Adresse. Alles, was nicht lesbar ist, ergibt die Vorgabe: eine
     /// beschädigte Konfigurationsdatei darf die Einrichtung nicht verhindern,
     /// sondern nur die Abweichung von der Vorgabe kosten.
+    ///
+    /// Seit V3 steht in derselben Datei mehr als nur der Koordinator; gelesen
+    /// wird sie deshalb an einer Stelle (<see cref="NetworkConfig"/>) und hier
+    /// nur noch der Teil herausgegriffen, den ältere Aufrufer erwarten.
     /// </summary>
-    public static Coordinator Read(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return Coordinator.Default;
-        }
-
-        try
-        {
-            using var document = System.Text.Json.JsonDocument.Parse(json);
-
-            return document.RootElement.TryGetProperty("coordinator", out var value)
-                ? Coordinator.From(value.GetString())
-                : Coordinator.Default;
-        }
-        catch (System.Text.Json.JsonException)
-        {
-            return Coordinator.Default;
-        }
-    }
+    public static Coordinator Read(string? json) => NetworkConfig.Read(json).Coordinator;
 
     public static string Write(Coordinator coordinator) =>
-        System.Text.Json.JsonSerializer.Serialize(
-            new Dictionary<string, string> { ["coordinator"] = coordinator.Address },
-            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        NetworkConfig.Write(NetworkProfile.Default with { Coordinator = coordinator });
 }

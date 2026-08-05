@@ -21,7 +21,14 @@ public static class PairingEndpoints
     /// Gegenseite ihn nicht raten muss — bei einem abweichenden Port liefe sie
     /// sonst still in die Vorgabe 8443.
     /// </param>
-    public static void MapPairingEndpoints(this WebApplication app, string? hostName, int port)
+    /// <param name="caFingerprint">
+    /// Der Fingerabdruck der eigenen CA — <c>null</c>, wenn das Zertifikat von
+    /// Tailscale kommt und es also nichts zu bestätigen gibt. Er geht bei der
+    /// Kopplung mit, weil das der eine Weg ist, auf dem ein Angreifer im Netz
+    /// nicht mitliest: der Code steht auf dem Bildschirm des Rechners.
+    /// </param>
+    public static void MapPairingEndpoints(
+        this WebApplication app, string? hostName, int port, string? caFingerprint = null)
     {
         // Nur vom Rechner selbst erreichbar (siehe ClientAuthMiddleware). Ab
         // Phase 11 drückt darauf ein Knopf im Fenster; bis dahin ist es der Weg,
@@ -72,7 +79,12 @@ public static class PairingEndpoints
                 scopes = result.Client.Scopes,
                 hostname = Environment.MachineName,
                 agentPublicKey = identity.PublicKey,
-                agentFingerprint = identity.Fingerprint
+                agentFingerprint = identity.Fingerprint,
+
+                // Womit sich der Rechner beim Verbinden ausweist. Ohne diesen
+                // Wert kann ein Client ein selbst ausgestelltes Zertifikat nicht
+                // von einem untergeschobenen unterscheiden.
+                caFingerprint
             });
         });
 

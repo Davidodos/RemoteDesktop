@@ -353,3 +353,138 @@ public class ReleaseCheckTests
         Assert.DoesNotContain("/VERYSILENT", ReleaseCheck.InstallArguments());
     }
 }
+
+/// <summary>
+/// Die drei Netzmodi. Sie sind der Kern des Befunds „der Agent startet nicht
+/// ohne Tailscale": bis Release v1.0.0 gab es genau einen Weg, und wer ihn nicht
+/// gehen wollte, bekam einen Dienst, der sich sofort wieder beendete.
+/// </summary>
+public class NetworkProfileTests
+{
+    private static NetworkProfile Lan(string address) =>
+        new(NetworkKind.Lan, address, Coordinator.Default);
+
+    [Fact]
+    public void Im_Heimnetz_braucht_es_kein_Tailscale()
+    {
+        Assert.False(Lan("192.168.178.20").NeedsTailscale);
+        Assert.False(new NetworkProfile(NetworkKind.Vpn, "10.8.0.3", Coordinator.Default)
+            .NeedsTailscale);
+        Assert.True(NetworkProfile.Default.NeedsTailscale);
+    }
+
+    [Fact]
+    public void Bei_Tailscale_wird_keine_Adresse_verlangt()
+    {
+        // Sie steht im Zertifikat. Eine zweite, von Hand gepflegte Quelle wäre
+        // eine, die irgendwann abweicht.
+        Assert.False(NetworkProfile.Default.NeedsOwnAddress);
+        Assert.Null(NetworkProfile.Default.Rejection);
+        Assert.Null(NetworkProfile.Default.AdvertisedAddress);
+    }
+
+    [Theory]
+    [InlineData("192.168.178.20")]
+    [InlineData("pc.fritz.box")]
+    [InlineData("laptop")]
+    [InlineData("10.8.0.3")]
+    [InlineData("[fd7a::1]")]
+    public void Ein_Name_oder_eine_IP_genuegt(string address)
+    {
+        Assert.Null(Lan(address).Rejection);
+    }
+
+    [Fact]
+    public void Die_ganze_Adresse_mit_Schema_wird_abgelehnt()
+    {
+        // Genau das trägt man ein, wenn man es nicht besser weiß. Als
+        // Zertifikatsname ergäbe es einen, den kein Client je vorzeigt — und der
+        // Fehler fiele erst beim Verbinden auf.
+        Assert.Contains("https://", Lan("https://192.168.178.20").Rejection);
+        Assert.Contains("Port", Lan("192.168.178.20:8443").Rejection);
+        Assert.NotNull(Lan("192.168.178.20/steuern").Rejection);
+    }
+
+    [Fact]
+    public void Ohne_Adresse_steht_da_was_fehlt()
+    {
+        var rejection = Lan("   ").Rejection;
+
+        Assert.NotNull(rejection);
+        Assert.Contains("192.168", rejection);
+    }
+
+    [Fact]
+    public void Die_Adresse_wird_kleingeschrieben_und_entklammert()
+    {
+        // Kleinbuchstaben, weil der Name so ins Zertifikat und in den QR-Code
+        // geht. Wer „PC.Fritz.Box" einträgt, soll nicht daran scheitern.
+        Assert.Equal("pc.fritz.box", Lan("  PC.Fritz.Box ").Normalized().Address);
+        Assert.Equal("fd7a::1", Lan("[fd7a::1]").Normalized().Address);
+    }
+
+    [Fact]
+    public void Jeder_Modus_erklaert_sich_ohne_Fachwort()
+    {
+        foreach (var kind in Enum.GetValues<NetworkKind>())
+        {
+            var satz = new NetworkProfile(kind, "pc", Coordinator.Default).Describe();
+
+            Assert.NotEmpty(satz);
+            Assert.All(
+                new[] { "Tailnet", "MagicDNS", "SAN", "Endpoint" },
+                wort => Assert.DoesNotContain(wort, satz));
+        }
+    }
+
+    [Fact]
+    public void Ein_kaputter_Koordinator_stoert_nur_bei_Tailscale()
+    {
+        // Im Heimnetz wird er nie benutzt. Eine Fehlermeldung über einen
+        // Koordinator, den niemand fragt, hielte die Einrichtung grundlos auf.
+        var kaputt = Coordinator.From("http://headscale.example.org");
+
+        Assert.NotNull(new NetworkProfile(NetworkKind.Tailscale, "", kaputt).Rejection);
+        Assert.Null(new NetworkProfile(NetworkKind.Lan, "pc", kaputt).Rejection);
+    }
+}
+
+public class NetworkConfigTests
+{
+    [Fact]
+    public void Was_geschrieben_wurde_wird_wieder_gelesen()
+    {
+        var profil = new NetworkProfile(
+            NetworkKind.Vpn, "10.8.0.3", Coordinator.From("https://headscale.example.org"));
+
+        Assert.Equal(profil, NetworkConfig.Read(NetworkConfig.Write(profil)));
+    }
+
+    [Fact]
+    public void Eine_Datei_aus_der_Zeit_davor_meint_Tailscale()
+    {
+        // Sie führt nur den Koordinator. Ein Update darf den Modus nicht stumm
+        // wechseln — der Rechner wäre danach über Tailscale nicht mehr
+        // erreichbar und niemand wüsste warum.
+        var alt = NetworkConfig.Read("""{ "coordinator": "https://headscale.example.org" }""");
+
+        Assert.Equal(NetworkKind.Tailscale, alt.Kind);
+        Assert.Equal("https://headscale.example.org", alt.Coordinator.Address);
+    }
+
+    [Fact]
+    public void Eine_beschaedigte_Datei_kostet_nur_die_Abweichung()
+    {
+        Assert.Equal(NetworkProfile.Default, NetworkConfig.Read("{ kein JSON"));
+        Assert.Equal(NetworkProfile.Default, NetworkConfig.Read("{}"));
+        Assert.Equal(NetworkProfile.Default, NetworkConfig.Read(null));
+    }
+
+    [Fact]
+    public void Ein_unbekannter_Modus_ist_kein_Fehler()
+    {
+        // Die Datei darf von Hand bearbeitet werden. Ein Tippfehler kostet die
+        // Abweichung, nicht den Dienst.
+        Assert.Equal(NetworkKind.Tailscale, NetworkConfig.Read("""{ "network": "quatsch" }""").Kind);
+    }
+}

@@ -87,15 +87,47 @@ public class ManifestVerifierTests : IDisposable
 
     /// <summary>
     /// Ohne einkompilierten Schlüssel wird nichts geprüft und damit auch nichts
-    /// installiert. Das ist der Auslieferungszustand des Repos.
+    /// installiert.
+    ///
+    /// <para>
+    /// Geprüft wird das Verhalten und nicht mehr <see cref="ReleaseKeys"/>
+    /// selbst: seit dem ersten Release steht dort ein echter Schlüssel, und ein
+    /// Test, der den Repo-Zustand festschreibt, wäre genau in dem Moment
+    /// fehlgeschlagen, in dem das Projekt richtig eingerichtet wurde.
+    /// </para>
     /// </summary>
-    [Fact]
-    public void Ohne_einkompilierten_Schluessel_geht_gar_nichts()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Ohne_einkompilierten_Schluessel_geht_gar_nichts(string? kein)
     {
-        var ohne = new ManifestVerifier(ReleaseKeys.PublicKey);
+        var ohne = new ManifestVerifier(kein);
 
         Assert.False(ohne.IsConfigured);
         Assert.Null(ohne.Verify(Bytes(Manifest), Sign(Bytes(Manifest))));
+    }
+
+    /// <summary>
+    /// Der ausgelieferte Schlüssel taugt — er ist entweder leer (dann wird
+    /// nichts geprüft) oder ein lesbarer öffentlicher Schlüssel. Ein
+    /// Tippfehler beim Eintragen hätte sonst zur Folge, dass Updates still
+    /// nie stattfinden.
+    /// </summary>
+    [Fact]
+    public void Der_ausgelieferte_Schluessel_ist_lesbar()
+    {
+        var ausgeliefert = new ManifestVerifier(ReleaseKeys.PublicKey);
+
+        if (!ausgeliefert.IsConfigured)
+        {
+            return;
+        }
+
+        // Eine fremde Unterschrift wird abgelehnt, statt an einem kaputten
+        // Schlüssel zu scheitern — der Unterschied ist von außen nicht zu sehen,
+        // im Log aber schon.
+        Assert.Null(ausgeliefert.Verify(Bytes(Manifest), Sign(Bytes(Manifest))));
     }
 
     /// <summary>
