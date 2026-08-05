@@ -42,13 +42,21 @@ Let's-Encrypt-Zertifikat für ihren `*.ts.net`-Namen → die App darf ohne
 Mixed-Content-Block direkt per WSS zum Agent verbinden. Im LAN routet Tailscale
 direkt, ohne Umweg über die Cloud.
 
-## Netzwerk: LAN und unterwegs sind derselbe Code
+## Netzwerk: drei Modi, ein Code
 
-Tailscale auf Handy, PC, Laptop und NAS. Die App spricht ausschließlich
-MagicDNS-Namen (`pc.<tailnet>.ts.net`) an. Tailscale wählt automatisch die
-direkte LAN-Route, wenn beide im selben Netz sind. Es gibt **keine**
-Fallunterscheidung „zuhause vs. unterwegs" im Code, und **kein**
-Port-Forwarding an der FritzBox.
+Seit V3 (`setup/NetworkProfile.cs`) gibt es drei Wege, und der Code kennt den
+Unterschied nicht: er benutzt die Adresse aus `setup.json`, sonst nichts.
+
+| Modus | Adresse | Zertifikat |
+|---|---|---|
+| **Heimnetz** | die LAN-Adresse dieses Rechners | selbst ausgestellt |
+| **Tailscale** | der MagicDNS-Name aus dem Zertifikat | von Tailscale |
+| **Eigenes VPN** | was der Nutzer einträgt | selbst ausgestellt |
+
+Es gibt **keine** Fallunterscheidung „zuhause vs. unterwegs" im Code und **kein**
+Port-Forwarding. Wer Tailscale benutzt, bekommt die direkte LAN-Route
+automatisch, wenn beide Geräte im selben Netz stehen. Die Anleitung für Nutzer
+steht in `docs/NETZ.md`.
 
 ## Komponenten
 

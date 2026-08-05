@@ -9,8 +9,12 @@ erreicht und das Token kennt, sitzt praktisch am Rechner.
 
 ## Schutzschichten
 
-1. **Tailscale.** Nichts ist aus dem Internet erreichbar. Kein Port-Forwarding,
-   keine öffentliche IP. Ein Angreifer muss zuerst im Tailnet sein.
+1. **Das Netz.** Nichts ist aus dem Internet erreichbar. Kein Port-Forwarding,
+   keine öffentliche IP. Ein Angreifer muss zuerst im selben Netz sein — im
+   Heimnetz also im WLAN, bei Tailscale im Tailnet, bei einem eigenen VPN
+   darin. Seit V3 ist das eine Wahl (`setup/NetworkProfile.cs`) und keine
+   Voraussetzung mehr; die Schutzwirkung ist im Heimnetz naturgemäß geringer
+   als in einem VPN — wer im WLAN steht, ist schon drin.
 2. **Kopplung pro Gerät.** Seit Phase 10 gibt es kein geteiltes Token mehr:
    jeder Client hat ein eigenes Schlüsselpaar, der Agent kennt nur den
    öffentlichen Teil (`clients.json`), und angemeldet wird per
@@ -20,8 +24,21 @@ erreicht und das Token kennt, sitzt praktisch am Rechner.
 3. **Rechte pro Client.** `screen`, `input`, `media`, `power`, `actions`,
    `wake` — als Whitelist. Ein Pfad, der nicht zugeordnet ist, wird abgelehnt
    statt durchgelassen.
-4. **TLS.** Agent und Waker bedienen ausschließlich HTTPS mit einem echten
-   Tailscale-Zertifikat. Die WebSockets laufen darüber.
+4. **TLS.** Agent und Waker bedienen ausschließlich HTTPS; die WebSockets
+   laufen darüber. Wo Tailscale läuft, kommt das Zertifikat von dort und ist
+   öffentlich anerkannt. Sonst stellt sich der Agent seit V3 selbst eins aus
+   (`agent/Services/SelfSignedCertificate.cs`): eine eigene Stelle mit zehn
+   Jahren Laufzeit, die ein Serverzertifikat über 825 Tage unterschreibt und
+   still erneuert. Ein Client nimmt sie erst an, nachdem ein Mensch ihren
+   Fingerabdruck bestätigt hat — der kommt über die Kopplung, also über den
+   Bildschirm des Rechners.
+5. **Der Vertrauens-Port (8442).** Er wird nur geöffnet, wenn es eine eigene
+   Stelle gibt, und trägt genau eine Datei: `/ca.crt`, das öffentliche
+   Zertifikat. Alles andere dort ist 404. Unverschlüsselt, weil es anders nicht
+   geht — die verschlüsselte Verbindung ist ja gerade die, die ohne dieses
+   Zertifikat nicht zustande kommt. Ein Angreifer, der die Datei austauscht,
+   scheitert am Fingerabdruck; einer, der sie mitliest, erfährt nichts, was
+   nicht ohnehin jeder Verbindungsaufbau preisgibt.
 
 ## Befunde
 

@@ -6,9 +6,9 @@ Veröffentlichen und Updates: **`docs/RELEASE.md`**
 Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
 
 **V3 (läuft):** gemeinsame Oberfläche für alle Teile, Tailscale optional.
-Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 05.08.2026: Phasen 21–23 und
-25 erledigt, Phase 24 (Clients nehmen das selbst ausgestellte Zertifikat an)
-offen.
+Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 05.08.2026: **Phasen 21–25
+erledigt**; offen ist nur noch die Prüfung am echten Gerät. Netzmodi und die
+VPN-Anleitung stehen in **`docs/NETZ.md`**.
 
 **V2-Umbau zur echten App (abgeschlossen):** Begründungen in **`docs/PLAN-V2.md`**,
 Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:

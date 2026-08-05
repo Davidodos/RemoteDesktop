@@ -52,10 +52,10 @@ nachweisen (Tests laufen lassen, Ausgabe zeigen) → eintragen → committen.
 
 | | |
 |---|---|
-| App-Tests | `cd app && npm test` — Stand 05.08.2026: **306 grün** |
-| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 05.08.2026: **310, davon 1 rot** (siehe Phase 21) |
-| Einrichtungs-Tests | `cd setup.Tests && dotnet test` — Stand 05.08.2026: **37 grün** |
-| Kotlin-Tests | `cd clients/android/android && ./gradlew testDebugUnitTest` — **9 grün** |
+| App-Tests | `cd app && npm test` — Stand 05.08.2026: **314 grün** (vorher 306) |
+| Agent-Tests | `cd agent.Tests && dotnet test` — Stand 05.08.2026: **336 grün** (vorher 310, davon 1 rot) |
+| Einrichtungs-Tests | `cd setup.Tests && dotnet test` — Stand 05.08.2026: **73 grün** (vorher 37) |
+| Kotlin-Tests | `cd clients/android/android && ./gradlew testDebugUnitTest` — **16 grün** (vorher 9) |
 | Windows-Client | `cd desktop && dotnet build` — baut auch auf Linux, läuft dort nicht |
 
 ---
@@ -266,7 +266,7 @@ verbindet sich zu ihm.
 
 ## Phase 25 — Installer, Release, Doku
 
-**Status:** offen
+**Status:** erledigt (05.08.2026)
 
 ### Umfang
 
@@ -278,5 +278,36 @@ verbindet sich zu ihm.
 
 ### Abnahme
 
-- [ ] Kein Verweis mehr auf `RemoteDesktopClient.exe` außer dort, wo die
-      Verträglichkeit mit alten Installationen es verlangt
+- [x] `grep -rn "RemoteDesktopClient.exe"` findet nur noch den Namen des
+      Autostart-Eintrags in der Registry — der bleibt absichtlich, sonst
+      entstünde bei einem Update ein zweiter Eintrag neben dem alten
+- [x] Der Installer legt immer alle Dateien ab und räumt den alten
+      `client\`-Unterordner weg. Gefragt wird nur noch, was laufen soll
+
+### Notizen
+
+- **Der alte Autostart-Eintrag wird auch entfernt**, wenn das Häkchen weg ist.
+  Er zeigte sonst nach dem Update auf eine Datei, die es nicht mehr gibt, und
+  Windows meldete bei jeder Anmeldung einen Fehler
+- **Offen für die Hardware-Prüfung:** den Installer mit `iscc` übersetzen und
+  einmal durchspielen — Erstinstallation, Update über eine V2-Installation
+  hinweg, Deinstallation
+
+---
+
+## Was am echten Gerät noch geprüft werden muss
+
+Hier nicht ausführbar, deshalb gesammelt:
+
+- **Der Agent ohne Tailscale.** Dienst einrichten, starten, und im Log
+  nachsehen: „Selbst ausgestelltes Zertifikat für …" mit Fingerabdruck. Danach
+  `https://<adresse>:8443/health` vom Handy aus
+- **Das Zertifikat am Handy bestätigen.** Ob Android den Dialog aus
+  `KeyChain.createInstallIntent` zeigt und die Stelle danach auch für die
+  WebSocket-Verbindungen gilt (Bild und Eingabe, nicht nur `/api/*`)
+- **„Zertifikat holen" unter Tailscale** — jetzt ohne aufblitzendes Terminal,
+  mit UAC-Rückfrage, und danach müssen `cert.crt` und `cert.key` in
+  `C:\ProgramData\RemoteDesktopAgent\` liegen
+- **Agent einrichten, starten, beenden, entfernen** aus dem Fenster und aus dem
+  Tray-Menü
+- **Der Installer** mit `iscc`, samt Update über eine V2-Installation hinweg
