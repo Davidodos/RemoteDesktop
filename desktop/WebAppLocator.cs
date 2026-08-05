@@ -51,5 +51,5 @@ public static class WebAppLocator
     public const string MissingMessage =
         "Die Oberfläche wurde nicht gefunden.\n\n" +
         "Sie entsteht mit 'npm run build' im Ordner 'app' und muss als " +
-        "Unterordner 'app' neben RemoteDesktopClient.exe liegen.";
+        "Unterordner 'app' neben RemoteDesktop.exe liegen.";
 }

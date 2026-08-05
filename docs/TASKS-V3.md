@@ -278,9 +278,10 @@ verbindet sich zu ihm.
 
 ### Abnahme
 
-- [x] `grep -rn "RemoteDesktopClient.exe"` findet nur noch den Namen des
-      Autostart-Eintrags in der Registry — der bleibt absichtlich, sonst
-      entstünde bei einem Update ein zweiter Eintrag neben dem alten
+- [x] `grep -rn "RemoteDesktopClient.exe"` findet außerhalb dieser Datei nichts
+      mehr. Der Registry-Wert heißt weiterhin `RemoteDesktopClient` — der Name
+      bleibt absichtlich, sonst entstünde bei einem Update ein zweiter
+      Autostart-Eintrag neben dem alten
 - [x] Der Installer legt immer alle Dateien ab und räumt den alten
       `client\`-Unterordner weg. Gefragt wird nur noch, was laufen soll
 
