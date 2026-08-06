@@ -7,6 +7,20 @@
 #
 # Der private Signaturschlüssel liegt ausschließlich als Repository-Secret.
 # Erzeugt wird das Paar einmal mit `node scripts/release-key.mjs`.
+#
+# Zu den Fassungen der Aktionen: alle laufen auf Node 24. Node 20 ist seit
+# September 2025 abgekündigt, und die Runner zwangen die alten Fassungen zuletzt
+# nur noch mit einer Warnung auf die neue Laufzeit — irgendwann ist das ein
+# Abbruch statt einer Warnung. Zwei Entscheidungen darin sind nicht die neueste
+# Zahl, sondern Absicht:
+#
+#   download-artifact bleibt auf v7, obwohl es v8 gibt. v8 entpackt nicht mehr
+#   pauschal, sondern nach Content-Type, und bricht bei abweichender Prüfsumme
+#   ab. Hoch- und Herunterladen auf derselben Hauptfassung zu halten ist hier
+#   die einfachere Zusage.
+#
+#   setup-node bekommt `package-manager-cache: false` — Begründung unten am
+#   Schritt.
 
 name: Release
 
@@ -34,13 +48,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
+          # Seit v5 schaltet setup-node von sich aus ein Abhängigkeits-Caching
+          # ein. Hier wäre es bestenfalls wirkungslos: die Paketdateien liegen
+          # in `app/` und `clients/android/`, im Wurzelverzeichnis gibt es
+          # keine. Ausdrücklich aus, statt sich darauf zu verlassen, dass die
+          # Suche ins Leere läuft.
+          package-manager-cache: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -102,7 +122,7 @@ jobs:
             publish/release
 
       # ---- Android -------------------------------------------------------
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
@@ -153,14 +173,14 @@ jobs:
 
       # Für den zweiten Job, der den Installer baut — der braucht Windows.
       - name: Artefakte weiterreichen
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: publish
           path: publish/
           retention-days: 1
 
       - name: Release anlegen
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             publish/release/RemoteDesktopAgent.exe
@@ -177,7 +197,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Fassung aus dem Tag lesen
         id: version
@@ -185,7 +205,7 @@ jobs:
         run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Artefakte holen
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: publish
           path: publish
@@ -198,6 +218,6 @@ jobs:
           iscc installer\RemoteDesktop.iss /DVersion=${{ steps.version.outputs.value }}
 
       - name: An das Release hängen
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: installer/Output/RemoteDesktop-Setup-${{ steps.version.outputs.value }}.exe
