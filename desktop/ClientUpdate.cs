@@ -35,6 +35,13 @@ public sealed class ClientUpdate : IDisposable
     /// Die Fassung, die gerade läuft. Sie kommt beim Release aus dem Git-Tag
     /// (siehe <c>.github/workflows/release.yml</c>); in einem selbst gebauten
     /// Stand steht dort die Vorgabe aus der Projektdatei.
+    ///
+    /// <para>
+    /// Durch <see cref="ReleaseCheck.Normalize"/>, weil im Dateikopf seit
+    /// .NET&#160;8 die Commit-Kennung mit drinsteht: dort steht nicht
+    /// <c>1.1.0</c>, sondern <c>1.1.0+435992d47c60…</c>. Das gehört weder in den
+    /// Vergleich mit dem Release noch ins Fenster.
+    /// </para>
     /// </summary>
     public static string InstalledVersion()
     {
@@ -47,7 +54,9 @@ public sealed class ClientUpdate : IDisposable
 
         var info = FileVersionInfo.GetVersionInfo(path);
 
-        return info.ProductVersion ?? info.FileVersion ?? "0.0.0";
+        return ReleaseCheck.Normalize(info.ProductVersion ?? info.FileVersion) is { Length: > 0 } version
+            ? version
+            : "0.0.0";
     }
 
     /// <summary><c>null</c> heißt: es gibt nichts Neues. Kein Fehler.</summary>

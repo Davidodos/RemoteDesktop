@@ -303,6 +303,99 @@ verbindet sich zu ihm.
 
 ---
 
+## Phase 26 — Ein Fenster, ein Zeichen, ein Fassungsvergleich
+
+**Status:** erledigt (06.08.2026), Hardware-Prüfung offen
+
+Drei Befunde aus dem ersten Durchlauf von v1.1.0.
+
+### Befund 1 — es waren immer noch drei Fenster
+
+Phase 23 hat die *Einrichtung* zusammengelegt, aber `MainWindow` (Fernsteuerung)
+und `PairingWindow` (Kopplung) blieben eigene Fenster daneben. Wer ein Gerät
+koppeln wollte, während er einen Rechner steuerte, schob Fenster.
+
+- `desktop/ShellWindow.cs`: **ein** Fenster mit Seitenleiste und fünf Seiten
+  (Übersicht · Fernsteuerung · Geräte · Netz · Einstellungen)
+- `desktop/Pages/`: aus jedem alten Fenster wird eine Seite. `ControlPanel`,
+  `MainWindow`, `PairingWindow`, `NetworkView` und `OptionsView` sind weg
+- Die Reiter sind weg. Reiter sagen „diese drei Dinge gehören zusammen"; die
+  Fernsteuerung ist aber keine Einstellung
+- **F11** schaltet die Fernsteuerung randlos auf den ganzen Bildschirm. Der
+  Tastendruck kommt über eine Nachricht aus der Seite (`WebMessageReceived`) —
+  die WebView ist ein eigenes Fenster, Tastendrücke darin erreichen WinForms
+  nie
+- Die beiden Meldungsfenster (Widerruf, Zertifikat bestätigen) sind
+  Rückfragen *in* der Karte geworden. Ein Fenster über dem Fenster ist die
+  Bauweise, von der dieser Umbau wegwill
+
+### Befund 2 — es sah aus wie ein Konfigurationsdialog
+
+- `desktop/Ui/`: Palette, Karten, Knöpfe, Auswahlflächen, Rollbalken und
+  Statuszeile selbst gezeichnet
+- Die Farben sind **nicht erfunden**: es sind dieselben aus
+  `app/src/styles.css`. Deshalb sitzt das eingebettete Fernsteuerbild nicht als
+  Fremdkörper im Fenster
+- Der Rollbalken ist selbst gezeichnet, weil Windows seinen nicht einfärben
+  lässt — er wäre der eine helle Streifen, an dem man sieht, dass hier nur
+  Farben überschrieben wurden
+- Der **Fensterrahmen bleibt der von Windows** und wird nur dunkel gefärbt
+  (`DwmSetWindowAttribute`). Ein selbst gezeichneter Rahmen müsste Andocken,
+  Aufteilungsvorschläge und den Wechsel der Bildschirmskalierung nachbauen
+
+### Befund 3 — die Updatesuche bot ewig dieselbe Fassung an
+
+Gemessen an der echten Release-Datei von v1.1.0: in `RemoteDesktop.exe` steht als
+ProductVersion nicht `1.1.0`, sondern
+`1.1.0+435992d47c60e8d9890ee4e4a00aa1025499ffad`. Seit .NET 8 hängt der Build die
+Commit-Kennung an die InformationalVersion. Verglichen wurde das gegen den nackten
+Git-Tag — beide sind nie gleich, also bot die App bei **jeder** Suche ein Update
+auf genau die Fassung an, die schon lief.
+
+- `setup/ReleaseCheck.Normalize`: schneidet `v` vorne und alles ab dem
+  Pluszeichen ab. Nach SemVer ist alles hinter dem Plus ausdrücklich *kein*
+  Unterschied in der Fassung
+- `ClientUpdate.InstalledVersion` geht durch dieselbe Stelle — damit im Fenster
+  „Fassung 1.1.0" steht und nicht die Commit-Kennung
+
+### Das Zeichen
+
+Das Launcher-Symbol der APK war noch das Standardbild von Capacitor (blaues „X"
+auf weißem Karo) — mit dem Monitor-Symbol der PWA hatte es nie etwas zu tun.
+
+- `assets/icon.svg` ist ab jetzt die einzige Quelle, `assets/icon-small.svg`
+  dasselbe Motiv für 16 bis 32 Pixel (bei 16 entfallen auf den Zeiger noch drei
+  Bildpunkte)
+- `node scripts/icons.mjs` erzeugt daraus: `desktop/RemoteDesktop.ico`
+  (9 Größen, bis 64 als DIB, darüber als PNG), die Android-Mipmaps samt
+  Vordergrundebene für adaptive Symbole, und `app/public/icon-{192,512}.png`
+- Die Hintergrundfarbe des adaptiven Symbols ist jetzt die Kachelfarbe und
+  nicht mehr Weiß. Die beiden ungenutzten Vorlagen-Vektoren von Android Studio
+  sind weg
+
+### Abnahme
+
+- [x] `setup.Tests` **75 statt 73** — zwei Tests zum Fassungsvergleich, davon
+      einer mit genau der Zeichenkette aus der ausgelieferten v1.1.0
+- [x] `dotnet build desktop/` — **Build succeeded**, keine Warnung
+- [x] `agent.Tests` 336, `app` 314 — unberührt
+- [x] Kein `MessageBox.Show` mehr in `desktop/`
+- [x] Die .ico wurde nach dem Erzeugen zerlegt und je Größe gegen das SVG
+      geprüft — Reihenfolge der Bildzeilen, Farbkanäle und Alphakanal stimmen
+
+### Notizen
+
+- **`Stack.Clear()` entsorgt seine Kinder.** Das ist richtig für Karten, die
+  bei jedem Anzeigen neu entstehen, und falsch für Felder, in die jemand gerade
+  getippt hat. Deshalb bauen die Geräte- und die Netzseite ihre Karten **einmal**
+  und füllen nur den Teil neu, der sich ändert
+- **Die Fernsteuerung wird erst beim ersten Anzeigen aufgebaut.** Der Aufbau der
+  WebView dauert eine knappe Sekunde; wer nur etwas einstellen will, soll nicht
+  darauf warten. Danach bleibt sie stehen — ein Seitenwechsel darf keine
+  laufende Sitzung abbrechen
+
+---
+
 ## Was am echten Gerät noch geprüft werden muss
 
 Hier nicht ausführbar, deshalb gesammelt:
@@ -319,3 +412,11 @@ Hier nicht ausführbar, deshalb gesammelt:
 - **Agent einrichten, starten, beenden, entfernen** aus dem Fenster und aus dem
   Tray-Menü
 - **Der Installer** mit `iscc`, samt Update über eine V2-Installation hinweg
+- **Das neue Fenster** (Phase 26): ob die Titelzeile auf diesem Windows dunkel
+  wird, ob die Seiten bei 125 % und 150 % Skalierung noch stimmen, ob der
+  selbst gezeichnete Rollbalken sich anfassen lässt, und ob F11 die
+  Fernsteuerung wirklich randlos schaltet — auch aus der WebView heraus
+- **Das Symbol** in Taskleiste, Infobereich und Explorer, und die APK auf dem
+  Homescreen. Hier ist beides nur als Bilddatei prüfbar, nicht in Windows
+- **Die Updatesuche** auf der v1.1.0-Installation: sie muss jetzt „das ist die
+  neueste" sagen statt eine Neuinstallation anzubieten

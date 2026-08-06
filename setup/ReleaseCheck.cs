@@ -65,7 +65,7 @@ public static class ReleaseCheck
 
                 if (!string.IsNullOrEmpty(url))
                 {
-                    return new ReleaseOffer(StripTagPrefix(tag.GetString()), url);
+                    return new ReleaseOffer(Normalize(tag.GetString()), url);
                 }
             }
 
@@ -84,21 +84,51 @@ public static class ReleaseCheck
     /// kommen aus Git-Tags, und ein Zurückrollen auf eine ältere ist ein
     /// legitimer Vorgang. Ist die eigene Fassung unbekannt, wird angeboten —
     /// eine angebotene Aktualisierung ist harmloser als eine verschwiegene.
+    ///
+    /// Verglichen werden die **aufgeräumten** Fassungen (siehe
+    /// <see cref="Normalize"/>). Ohne das meldete die App auf einem frisch
+    /// installierten Rechner ein Update auf genau die Fassung, die schon lief.
     /// </summary>
     public static bool IsWorthInstalling(ReleaseOffer? offer, string? installed) =>
         offer is not null
         && (string.IsNullOrWhiteSpace(installed)
             || !string.Equals(
-                StripTagPrefix(installed),
-                StripTagPrefix(offer.Version),
+                Normalize(installed),
+                Normalize(offer.Version),
                 StringComparison.OrdinalIgnoreCase));
 
-    /// <summary><c>v1.2.0</c> und <c>1.2.0</c> sollen dasselbe bedeuten.</summary>
-    private static string StripTagPrefix(string? value)
+    /// <summary>
+    /// Eine Fassungsangabe auf ihren Kern zurückschneiden.
+    ///
+    /// <para>
+    /// Zwei Dinge kommen weg. Das <c>v</c> vorne, weil Git-Tags es tragen und
+    /// die Projektdatei nicht — <c>v1.2.0</c> und <c>1.2.0</c> sind dieselbe
+    /// Fassung.
+    /// </para>
+    ///
+    /// <para>
+    /// **Und alles ab dem Pluszeichen.** Das ist der eigentliche Befund: seit
+    /// .NET&#160;8 hängt der Build die Commit-Kennung an die Fassung im
+    /// Dateikopf, also steht in der installierten <c>RemoteDesktop.exe</c> nicht
+    /// <c>1.1.0</c>, sondern <c>1.1.0+435992d47c60…</c>. Im Release steht
+    /// dagegen der nackte Tag. Beide sind nie gleich, und die App bot deshalb
+    /// bei jeder Suche ein Update auf die laufende Fassung an — samt
+    /// Neuinstallation, die nichts änderte. Nach SemVer ist alles hinter dem
+    /// Pluszeichen ausdrücklich <em>kein</em> Unterschied in der Fassung.
+    /// </para>
+    /// </summary>
+    public static string Normalize(string? value)
     {
         var trimmed = (value ?? string.Empty).Trim();
 
-        return trimmed.StartsWith('v') ? trimmed[1..] : trimmed;
+        if (trimmed.StartsWith('v') || trimmed.StartsWith('V'))
+        {
+            trimmed = trimmed[1..];
+        }
+
+        var build = trimmed.IndexOf('+');
+
+        return build < 0 ? trimmed : trimmed[..build];
     }
 
     /// <summary>

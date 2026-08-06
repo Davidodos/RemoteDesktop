@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Dasselbe Zeichen für kleine Größen — 16 bis 32 Pixel, also Taskleiste,
+  Titelzeile und Infobereich.
+
+  Warum eine zweite Datei: bei 16 Pixeln entfallen auf den Zeiger noch drei
+  Bildpunkte, und aus dem Bildschirm wird ein Fleck. Deshalb wächst hier der
+  Bildschirm in die Kachel hinein, der Rahmen wird dicker, und der Zeiger ist
+  massiver gezeichnet. Es ist dasselbe Motiv, nur so gebaut, dass es die
+  Auflösung übersteht.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#121821"/>
+
+  <rect x="212" y="336" width="88" height="52" fill="#4a9eff"/>
+  <rect x="132" y="376" width="248" height="44" rx="22" fill="#4a9eff"/>
+
+  <rect x="52" y="92" width="408" height="268" rx="40" fill="#4a9eff"/>
+  <rect x="100" y="140" width="312" height="172" rx="16" fill="#0d1117"/>
+
+  <path fill="#e8edf2"
+        d="M196 168 L196 288 L228 258 L250 300 L288 282 L265 241 L308 236 Z"/>
+</svg>

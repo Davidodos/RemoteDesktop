@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Das Zeichen von RemoteDesktop. Ein Bildschirm mit einem Zeiger darauf: der
+  Rechner steht hier, bedient wird er von woanders.
+
+  Die Farben sind nicht frei gewählt, sondern dieselben, die die App benutzt
+  (app/src/styles.css): der Fensterton für die Kachel, die Akzentfarbe für den
+  Rahmen, die Schriftfarbe für den Zeiger. Deshalb sieht das Symbol auf dem
+  Homescreen aus wie das, was sich danach öffnet.
+
+  Diese Datei ist die Quelle. Alles andere — .ico, die Android-Mipmaps, die
+  PWA-Icons — entsteht daraus mit `node scripts/icons.mjs`.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Die Kachel. Der Radius ist der von Android für Legacy-Icons erwartete
+       Anteil; iOS und Windows runden ohnehin selbst nach. -->
+  <rect width="512" height="512" rx="112" fill="#121821"/>
+
+  <!-- Fuß zuerst, damit der Rahmen darüber liegt und die Naht verdeckt. -->
+  <rect x="228" y="330" width="56" height="46" fill="#4a9eff"/>
+  <rect x="166" y="368" width="180" height="30" rx="15" fill="#4a9eff"/>
+
+  <!-- Der Bildschirm: Rahmen in der Akzentfarbe, Fläche in der Fensterfarbe.
+       Der Rahmen ist mit Absicht dick — bei 16 px bleibt sonst nur ein Strich. -->
+  <rect x="96" y="106" width="320" height="240" rx="30" fill="#4a9eff"/>
+  <rect x="126" y="136" width="260" height="180" rx="14" fill="#0d1117"/>
+
+  <!-- Der Zeiger. Klassische Form, leicht aus der Mitte nach links oben
+       versetzt — mittig gesetzt wirkt er wie ein Dreieck, versetzt wie ein
+       Mauszeiger. -->
+  <path fill="#e8edf2"
+        d="M212 168 L212 276 L240 250 L258 292 L286 279 L267 238 L305 234 Z"/>
+</svg>

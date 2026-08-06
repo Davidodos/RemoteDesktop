@@ -1,0 +1,342 @@
+using RemoteDesktopClient.Pages;
+using RemoteDesktopClient.Ui;
+using RemoteDesktopSetup;
+
+namespace RemoteDesktopClient;
+
+/// <summary>
+/// Das Fenster. Es gibt nur dieses eine.
+///
+/// <para>
+/// **Der Befund dahinter:** bis V3 waren es drei — Einstellungen, Fernsteuerung
+/// und Kopplung, jedes mit eigener Titelzeile, eigenem Platz auf der Taskleiste
+/// und eigener Vorstellung davon, wie ein Knopf aussieht. Wer ein Gerät koppeln
+/// wollte, während er einen Rechner steuerte, schob Fenster hin und her. Jetzt
+/// sind es Seiten, und der Wechsel ist ein Klick in der Leiste links.
+/// </para>
+///
+/// <para>
+/// Das Fenster schließt nie wirklich: das Kreuz versteckt es, weil das Programm
+/// im Infobereich weiterläuft. Beendet wird dort und nur dort — sonst wäre eine
+/// laufende Sitzung mit einem Fehlklick weg.
+/// </para>
+/// </summary>
+public sealed class ShellWindow : Form
+{
+    private readonly WindowsProbe _probe;
+    private readonly NavigationRail _rail = new() { Dock = DockStyle.Left };
+    private readonly StatusLine _status = new() { Dock = DockStyle.Bottom };
+    private readonly Panel _host = new() { Dock = DockStyle.Fill, BackColor = Theme.Window };
+
+    private readonly Dictionary<Page, Control> _pages = [];
+    private readonly RemotePage _remote;
+
+    private Page _current = Page.Overview;
+    private bool _fullscreen;
+    private FormWindowState _beforeFullscreen = FormWindowState.Normal;
+    private bool _busy;
+
+    public ShellWindow(
+        WindowsProbe probe, LocalAgent agent, IAutostartHost autostart, string? appDirectory)
+    {
+        _probe = probe;
+
+        Text = "RemoteDesktop";
+        BackColor = Theme.Window;
+        ForeColor = Theme.Text;
+        Font = Theme.Body;
+        Icon = Brand.Load(32);
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(900, 620);
+        Size = new Size(1120, 760);
+        KeyPreview = true;
+
+        _remote = new RemotePage(appDirectory);
+        _remote.FullscreenToggled += ToggleFullscreen;
+
+        Register(Page.Overview, new OverviewPage(probe, appDirectory, PerformAsync));
+        Register(Page.Remote, _remote);
+        Register(Page.Devices, new DevicesPage(agent));
+        Register(Page.Network, new NetworkPage());
+        Register(Page.Settings, new SettingsPage(autostart));
+
+        _rail.Picked += page => _ = ShowPageAsync(page);
+
+        Controls.Add(_host);
+        Controls.Add(_rail);
+        Controls.Add(_status);
+
+        _rail.Highlight(Page.Overview);
+    }
+
+    private void Register(Page page, Control view)
+    {
+        view.Dock = DockStyle.Fill;
+        view.Visible = page == Page.Overview;
+
+        if (view is PageView typed)
+        {
+            typed.Reporter = Say;
+        }
+
+        _pages[page] = view;
+        _host.Controls.Add(view);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        WindowChrome.Darken(Handle);
+    }
+
+    /// <summary>
+    /// Vor das Fenster holen und den Zustand neu erfragen. Wird vom Infobereich
+    /// gerufen — auch dann, wenn es schon offen ist.
+    /// </summary>
+    public async Task SurfaceAsync()
+    {
+        Show();
+
+        if (WindowState == FormWindowState.Minimized)
+        {
+            WindowState = FormWindowState.Normal;
+        }
+
+        Activate();
+        BringToFront();
+
+        await RefreshAsync();
+    }
+
+    public async Task ShowPageAsync(Page page)
+    {
+        if (_fullscreen && page != Page.Remote)
+        {
+            ToggleFullscreen();
+        }
+
+        foreach (var (key, view) in _pages)
+        {
+            view.Visible = key == page;
+        }
+
+        _current = page;
+        _rail.Highlight(page);
+
+        if (page == Page.Remote)
+        {
+            Say("Fernsteuerung — F11 schaltet auf Vollbild.");
+            await _remote.ShowRemoteAsync();
+
+            return;
+        }
+
+        if (_pages[page] is PageView view2)
+        {
+            await view2.RefreshAsync();
+        }
+
+        await ShowAgentStateAsync();
+    }
+
+    /// <summary>
+    /// Alles neu erfragen. Nach jedem Handgriff, weil ein Fenster, das noch den
+    /// Stand von vorhin zeigt, schlimmer ist als eines, das kurz leer aussieht.
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        if (_pages[_current] is PageView view)
+        {
+            await view.RefreshAsync();
+        }
+
+        await ShowAgentStateAsync();
+    }
+
+    /// <summary>
+    /// Der Zustand des Agents steht unten in der Leiste und damit auf jeder
+    /// Seite. Es ist die eine Angabe, wegen der man sonst zurückwechseln müsste.
+    /// </summary>
+    private async Task ShowAgentStateAsync()
+    {
+        if (!AgentService.Installed)
+        {
+            _rail.ShowAgent("Agent nicht eingerichtet", Theme.TextDim);
+
+            return;
+        }
+
+        var running = await AgentService.RespondsAsync();
+
+        _rail.ShowAgent(
+            running ? "Agent läuft" : "Agent gestoppt",
+            running ? Theme.Online : Theme.Danger);
+    }
+
+    private void Say(string message, Tone tone = Tone.Neutral) => _status.Say(message, tone);
+
+    /// <summary>
+    /// Ein Handgriff von der Übersicht. Alles, was Rechte verlangt, geht über
+    /// <see cref="Elevation"/>; alles andere über <see cref="ProcessRunner"/> —
+    /// und beides ohne aufblitzendes Fenster.
+    /// </summary>
+    private async Task PerformAsync(PartAction action)
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _busy = true;
+        Say("Einen Moment…", Tone.Working);
+
+        try
+        {
+            switch (action)
+            {
+                case PartAction.Open:
+                    await ShowPageAsync(Page.Remote);
+                    _busy = false;
+
+                    return;
+
+                case PartAction.Download:
+                    OverviewPage.Open(Tailscale.Download);
+                    Say("Tailscale öffnet sich im Browser. Danach hier weiter.");
+
+                    break;
+
+                case PartAction.SignIn:
+                    Report(await Task.Run(() => ProcessRunner.Run(
+                        Tailscale.Executable,
+                        NetworkStore.Read().Coordinator.UpArguments(),
+                        TimeSpan.FromMinutes(3))));
+
+                    break;
+
+                case PartAction.Certificate:
+                    Report(await Task.Run(() =>
+                        Elevation.Run(AdminTask.FetchCertificate, _probe.TailnetName)));
+
+                    break;
+
+                case PartAction.Install:
+                    Report(await Task.Run(() => Elevation.Run(AdminTask.InstallService, "auto")));
+
+                    break;
+
+                case PartAction.Remove:
+                    Report(await Task.Run(() => Elevation.Run(AdminTask.RemoveService)));
+
+                    break;
+
+                case PartAction.Start:
+                    Report(await Task.Run(() => Elevation.Run(AdminTask.StartService)));
+
+                    break;
+
+                default:
+                    Report(await Task.Run(() => Elevation.Run(AdminTask.StopService)));
+
+                    break;
+            }
+        }
+        catch (Exception failure)
+        {
+            Say(failure.Message, Tone.Bad);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await RefreshAsync();
+    }
+
+    private void Report(RunResult result) =>
+        Say(result.Message, result.Ok ? Tone.Good : Tone.Bad);
+
+    // ---- Vollbild ----------------------------------------------------------
+
+    /// <summary>
+    /// Randlos über den ganzen Bildschirm — dasselbe Fenster, nur ohne alles
+    /// darum. Beim Steuern eines fremden Rechners zählt jeder Millimeter, und
+    /// die Seitenleiste ist in dem Moment die Information, die am wenigsten
+    /// gebraucht wird.
+    /// </summary>
+    private void ToggleFullscreen()
+    {
+        _fullscreen = !_fullscreen;
+
+        _rail.Visible = !_fullscreen;
+        _status.Visible = !_fullscreen;
+
+        if (_fullscreen)
+        {
+            _beforeFullscreen = WindowState;
+
+            // Der Umweg über „Normal" ist nötig: aus einem bereits maximierten
+            // Fenster heraus nimmt Windows die neue Rahmenart nicht an, und das
+            // Fenster bliebe mit Titelzeile stehen.
+            WindowState = FormWindowState.Normal;
+            FormBorderStyle = FormBorderStyle.None;
+            WindowState = FormWindowState.Maximized;
+
+            return;
+        }
+
+        WindowState = FormWindowState.Normal;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        WindowState = _beforeFullscreen;
+
+        WindowChrome.Darken(Handle);
+    }
+
+    protected override bool ProcessCmdKey(ref Message message, Keys key)
+    {
+        if (key == Keys.F11)
+        {
+            if (_current != Page.Remote)
+            {
+                _ = ShowPageAsync(Page.Remote);
+            }
+
+            ToggleFullscreen();
+
+            return true;
+        }
+
+        if (key == Keys.Escape && _fullscreen)
+        {
+            ToggleFullscreen();
+
+            return true;
+        }
+
+        return base.ProcessCmdKey(ref message, key);
+    }
+
+    /// <summary>
+    /// Das Kreuz versteckt das Fenster, statt das Programm zu beenden. Wer
+    /// wirklich aufhören will, tut das im Infobereich — sonst wäre eine laufende
+    /// Sitzung mit einem Fehlklick weg.
+    /// </summary>
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (e.CloseReason == CloseReason.UserClosing)
+        {
+            e.Cancel = true;
+
+            if (_fullscreen)
+            {
+                ToggleFullscreen();
+            }
+
+            Hide();
+
+            return;
+        }
+
+        base.OnFormClosing(e);
+    }
+}

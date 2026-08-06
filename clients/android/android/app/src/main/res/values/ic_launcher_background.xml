@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Die Hintergrundebene des adaptiven Symbols. Genau der Ton der Kachel in
+  assets/icon.svg — die Vordergrundebene bringt ihn noch einmal mit, und nur
+  wenn beide gleich sind, ist die Naht dazwischen unsichtbar.
+-->
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="ic_launcher_background">#121821</color>
 </resources>

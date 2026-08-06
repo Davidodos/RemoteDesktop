@@ -21,7 +21,17 @@
          die WinForms-Hülle; die Meldung betrifft eine Datei, die nie geladen
          wird. -->
     <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+    <!-- Das Symbol der .exe: dasselbe, das auch auf dem Handy steht. Es
+         entsteht aus assets/icon.svg mit `node scripts/icons.mjs`. -->
+    <ApplicationIcon>RemoteDesktop.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Dieselbe Datei noch einmal, diesmal *in* der .exe. Von dort holt sie
+         das Programm zur Laufzeit für den Infobereich und die Titelzeile —
+         eine Datei daneben koennte fehlen, die Ressource nicht. -->
+    <EmbeddedResource Include="RemoteDesktop.ico" LogicalName="RemoteDesktopClient.RemoteDesktop.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Die Einrichtungslogik. Sie liegt in einem eigenen Projekt ohne WinForms,

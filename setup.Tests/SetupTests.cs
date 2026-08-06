@@ -331,6 +331,33 @@ public class ReleaseCheckTests
     }
 
     [Fact]
+    public void Die_Commit_Kennung_im_Dateikopf_ist_keine_neue_Fassung()
+    {
+        // Der Befund aus Release v1.1.0: seit .NET 8 steht in der installierten
+        // .exe nicht "1.2.0", sondern "1.2.0+<commit>". Verglichen wurde das
+        // gegen den nackten Git-Tag — die App bot deshalb bei jeder Suche ein
+        // Update auf genau die Fassung an, die schon lief.
+        Assert.False(ReleaseCheck.IsWorthInstalling(
+            ReleaseCheck.Find(Release), "1.2.0+435992d47c60e8d9890ee4e4a00aa1025499ffad"));
+
+        Assert.False(ReleaseCheck.IsWorthInstalling(
+            ReleaseCheck.Find(Release), "v1.2.0+435992d47c60e8d9890ee4e4a00aa1025499ffad"));
+    }
+
+    [Fact]
+    public void Aufgeraeumt_wird_das_v_und_alles_hinter_dem_Plus()
+    {
+        Assert.Equal("1.2.0", ReleaseCheck.Normalize("v1.2.0"));
+        Assert.Equal("1.2.0", ReleaseCheck.Normalize("1.2.0"));
+        Assert.Equal("1.2.0", ReleaseCheck.Normalize("  v1.2.0+abcdef1  "));
+
+        // Eine Vorabfassung *ist* ein Unterschied und bleibt deshalb stehen.
+        Assert.Equal("1.2.0-rc.1", ReleaseCheck.Normalize("v1.2.0-rc.1"));
+
+        Assert.Equal(string.Empty, ReleaseCheck.Normalize(null));
+    }
+
+    [Fact]
     public void Eine_andere_Fassung_wird_angeboten()
     {
         Assert.True(ReleaseCheck.IsWorthInstalling(ReleaseCheck.Find(Release), "1.1.0"));

@@ -39,6 +39,11 @@ OutputBaseFilename=RemoteDesktop-Setup-{#Version}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+; Dasselbe Zeichen wie auf dem Handy — es steht auf dem Installer selbst, in der
+; Programmliste von Windows und auf den Verknuepfungen. Es entsteht aus
+; assets/icon.svg mit `node scripts/icons.mjs`.
+SetupIconFile=..\desktop\RemoteDesktop.ico
+UninstallDisplayIcon={app}\{#Exe}
 ; Der Agent kann als Dienst eingetragen werden — das geht nur mit Adminrechten.
 ; Die Oberfläche selbst braucht sie nicht und läuft später ohne.
 PrivilegesRequired=admin

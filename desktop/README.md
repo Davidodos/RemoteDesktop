@@ -1,12 +1,50 @@
-# Windows-Client
+# Windows-Oberfläche
 
-Ein Tray-Programm mit einem WebView2-Fenster, in dem dieselbe React-App läuft
-wie auf dem Handy. Damit lässt sich der eine Rechner vom anderen aus bedienen,
-ohne dass es eine zweite Oberfläche zu pflegen gäbe.
+`RemoteDesktop.exe` — die einzige `.exe`, die ein Mensch startet. Sie sitzt im
+Infobereich und hat **ein** Fenster mit fünf Seiten:
 
-Der **Agent** (`agent/`) ist davon unberührt: er bleibt ein eigener Dienst. Der
-Client spricht ihn nur über die Loopback-Adresse an, und auch das nur für den
-Kopplungscode und den Widerruf.
+| Seite | Wofür |
+|---|---|
+| Übersicht | Zustand aller Teile, und je Teil der Knopf, der ihn ändert |
+| Fernsteuerung | dieselbe React-App wie auf dem Handy, in einer WebView2 |
+| Geräte | Kopplungscode, QR-Code, gekoppelte Geräte widerrufen |
+| Netz | Heimnetz · Tailscale · eigenes VPN, und Zertifikate anderer Rechner |
+| Einstellungen | Autostart, Updates, Fassungen |
+
+Bis V3 waren das drei getrennte Fenster. Sie sind zusammengelegt, weil sie nie
+drei Programme waren: wer ein Gerät koppelt, während er einen Rechner steuert,
+soll nicht Fenster schieben.
+
+Der **Agent** (`agent/`) bleibt davon unberührt: er ist ein eigener Dienst unter
+SYSTEM. Diese Oberfläche spricht ihn über die Loopback-Adresse an — und auch das
+nur für den Kopplungscode und den Widerruf.
+
+## Aussehen
+
+Die Oberfläche ist selbst gezeichnet (`desktop/Ui/`) und benutzt **dieselbe
+Palette wie die React-App** (`app/src/styles.css`). Das ist der Grund, warum das
+eingebettete Fernsteuerbild nicht wie ein Fremdkörper wirkt — es ist dieselbe
+Oberfläche in einem anderen Rahmen. Ändert sich dort eine Farbe, gehört sie in
+`desktop/Ui/Theme.cs` nachgezogen.
+
+Der Fensterrahmen selbst bleibt der von Windows und wird nur dunkel eingefärbt
+(`desktop/Ui/WindowChrome.cs`). Einen selbst gezeichneten Rahmen gibt es
+bewusst nicht: Andocken, Aufteilungsvorschläge und der Wechsel auf einen
+Bildschirm mit anderer Skalierung sind dann alle selbst nachzubauen, und daran
+scheitert es fast immer an einer Stelle.
+
+**F11** schaltet die Fernsteuerung randlos auf den ganzen Bildschirm — dasselbe
+Fenster, nur ohne Leiste und Statuszeile. Escape oder noch einmal F11 zurück.
+
+## Symbol
+
+`desktop/RemoteDesktop.ico` ist dasselbe Zeichen wie das der APK und der PWA.
+Quelle ist `assets/icon.svg`; erzeugt wird alles daraus:
+
+```bash
+npm install --no-save sharp
+node scripts/icons.mjs
+```
 
 ## Bauen
 
@@ -62,12 +100,14 @@ dort nach, bevor sie einen Knopf anbietet.
 
 ## Bedienung
 
-Das Programm sitzt im Tray, das Fenster geht nur auf Wunsch auf.
+Das Programm sitzt im Infobereich, das Fenster geht nur auf Wunsch auf.
 
 | Menüpunkt | Was passiert |
 |---|---|
-| Fenster öffnen | Die Oberfläche; das Kreuz versteckt sie wieder, statt zu beenden |
-| Geräte koppeln… | Kopplungscode und QR-Code anzeigen, gekoppelte Geräte auflisten und widerrufen |
+| RemoteDesktop öffnen | Das Fenster auf der Übersicht; das Kreuz versteckt es wieder, statt zu beenden |
+| Fernsteuerung | Dasselbe Fenster, direkt auf der Fernsteuerseite |
+| Geräte koppeln… | Dasselbe Fenster, direkt auf der Geräteseite |
+| Agent starten / beenden | Der Dienst, ohne dafür ein Fenster zu öffnen |
 | Beenden | Wirklich beenden |
 
 ## Der QR-Code
