@@ -394,6 +394,35 @@ auf weißem Karo) — mit dem Monitor-Symbol der PWA hatte es nie etwas zu tun.
   darauf warten. Danach bleibt sie stehen — ein Seitenwechsel darf keine
   laufende Sitzung abbrechen
 
+### Nachtrag 06.08.2026 — v1.2.0 startete nicht
+
+Am echten Gerät brach das Fenster beim ersten Öffnen ab:
+`System.ArgumentException: Control does not support transparent background
+colors`, aus dem Konstruktor von `TextBlock`.
+
+`BackColor = Color.Transparent` verlangt in WinForms den Stil
+`ControlStyles.SupportsTransparentBackColor`. Der stand nur am Knopf, nicht an
+`TextBlock`, `Row` und `ChoiceGroup` — und der Compiler sieht davon nichts,
+weil die Prüfung erst im Setter passiert. Hier ist keine Durchsichtigkeit nötig:
+WinForms **erbt** die Hintergrundfarbe vom übergeordneten Element, solange keine
+eigene gesetzt ist. Alle vier Zuweisungen sind ersatzlos weg.
+
+Beim Nachsehen kamen drei weitere Stellen derselben Bauart heraus:
+
+- **`Stack` trug fest die Fensterfarbe.** In einer Karte hätte das ein dunkles
+  Rechteck über die Kartenfläche gemalt. Auch diese Zuweisung ist weg — derselbe
+  Stapel trägt einmal eine Seite und einmal den Inhalt einer Karte, und die
+  Vererbung trifft beide Fälle von allein
+- **`Stack.Arrange` hatte keine Sperre gegen sich selbst.** Ein Kind zu
+  verschieben lässt WinForms das übergeordnete Element neu anordnen; das ist
+  jetzt abgefangen
+- **Das Mausrad ging an das Element mit dem Fokus**, nicht an das unter dem
+  Zeiger — wer eben auf „Netz" geklickt hatte, konnte die Seite daneben nicht
+  rollen. `desktop/Ui/WheelRouter.cs` leitet um
+- `Clipboard.SetText` und der User-Agent in `ClientUpdate` können zur Laufzeit
+  werfen (fremdes Programm hält die Zwischenablage · ein Zeichen im Dateikopf,
+  das ein HTTP-Kopf nicht verträgt). Beide sind jetzt abgefangen statt tödlich
+
 ---
 
 ## Was am echten Gerät noch geprüft werden muss

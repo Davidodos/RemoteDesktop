@@ -31,7 +31,6 @@ public sealed class Row : Control, IMeasurable
 
         _children = children;
         _wraps = wraps;
-        BackColor = Color.Transparent;
 
         Controls.AddRange(children);
     }

@@ -34,6 +34,10 @@ internal static class Program
         // Ohne das rendert die WebView auf skalierten Displays unscharf.
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
 
+        // Das Mausrad gehört dem Element unter dem Zeiger, nicht dem mit dem
+        // Fokus. Warum das eine eigene Umleitung braucht, steht in WheelRouter.
+        Application.AddMessageFilter(new Ui.WheelRouter());
+
         // Ein zweites Tray-Icon wäre nicht nur hässlich, sondern verwirrend:
         // beide Fenster teilten sich denselben localStorage und überschrieben
         // sich gegenseitig die Sitzung.

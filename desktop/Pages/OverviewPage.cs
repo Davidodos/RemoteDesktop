@@ -156,8 +156,19 @@ public sealed class OverviewPage : PageView
 
         copy.Click += (_, _) =>
         {
-            Clipboard.SetText(value);
-            Report("Der Fingerabdruck liegt in der Zwischenablage.", Tone.Good);
+            try
+            {
+                Clipboard.SetText(value);
+                Report("Der Fingerabdruck liegt in der Zwischenablage.", Tone.Good);
+            }
+            catch (Exception failure)
+            {
+                // Die Zwischenablage gehört dem ganzen System, und ein anderes
+                // Programm kann sie gerade halten. Daran darf das Fenster nicht
+                // sterben — der Wert steht ja im Feld daneben und lässt sich
+                // von Hand markieren.
+                Report($"Nicht in die Zwischenablage gekommen: {failure.Message}", Tone.Bad);
+            }
         };
 
         card.Body.Add(Row.Fill(field, copy));

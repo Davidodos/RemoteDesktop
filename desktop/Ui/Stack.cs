@@ -33,6 +33,7 @@ public sealed class Stack : Control, IMeasurable
 
     private int _offset;
     private int _content;
+    private bool _arranging;
     private bool _dragging;
     private int _grabbedAt;
     private int _grabbedOffset;
@@ -45,9 +46,15 @@ public sealed class Stack : Control, IMeasurable
             | ControlStyles.UserPaint
             | ControlStyles.OptimizedDoubleBuffer,
             true);
-
-        BackColor = Theme.Window;
     }
+
+    // Kein eigenes BackColor — und das ist Absicht.
+    //
+    // WinForms erbt die Hintergrundfarbe vom übergeordneten Element, solange
+    // keine eigene gesetzt ist. Genau das wird hier gebraucht: derselbe Stapel
+    // trägt einmal eine ganze Seite (Fensterfarbe) und einmal den Inhalt einer
+    // Karte (Kartenfarbe). Eine fest eingetragene Farbe malte im zweiten Fall
+    // ein dunkles Rechteck über die Karte.
 
     /// <summary>Ob überstehender Inhalt gerollt werden darf oder die Höhe wächst.</summary>
     public bool Scrollable { get; init; }
@@ -158,11 +165,28 @@ public sealed class Stack : Control, IMeasurable
             return;
         }
 
-        Place(ClientSize.Width - Padding.Horizontal);
-
-        if (NeedsBar)
+        // Ein Kind zu verschieben lässt WinForms das übergeordnete Element neu
+        // anordnen — also dieses hier. Ohne die Sperre riefe sich das Anordnen
+        // aus sich selbst heraus auf.
+        if (_arranging)
         {
-            Place(ClientSize.Width - Padding.Horizontal - BarWidth);
+            return;
+        }
+
+        _arranging = true;
+
+        try
+        {
+            Place(ClientSize.Width - Padding.Horizontal);
+
+            if (NeedsBar)
+            {
+                Place(ClientSize.Width - Padding.Horizontal - BarWidth);
+            }
+        }
+        finally
+        {
+            _arranging = false;
         }
 
         Invalidate();
@@ -205,14 +229,22 @@ public sealed class Stack : Control, IMeasurable
     protected override void OnMouseWheel(MouseEventArgs e)
     {
         base.OnMouseWheel(e);
-        ScrollBy(-e.Delta / 2);
+        Wheel(e.Delta);
     }
 
-    private void ScrollBy(int amount)
+    /// <summary>
+    /// Eine Radbewegung verarbeiten. Öffentlich, weil sie auch von
+    /// <see cref="WheelRouter"/> kommt — Windows schickt das Rad an das Element
+    /// mit dem Fokus, gemeint ist aber immer das unter dem Zeiger.
+    /// </summary>
+    /// <returns>Ob tatsächlich gerollt wurde.</returns>
+    public bool Wheel(int delta) => ScrollBy(-delta / 2);
+
+    private bool ScrollBy(int amount)
     {
         if (!NeedsBar)
         {
-            return;
+            return false;
         }
 
         var limit = Math.Max(0, _content - ClientSize.Height);
@@ -220,11 +252,13 @@ public sealed class Stack : Control, IMeasurable
 
         if (next == _offset)
         {
-            return;
+            return false;
         }
 
         _offset = next;
         Arrange();
+
+        return true;
     }
 
     private Rectangle Thumb()

@@ -27,8 +27,18 @@ public sealed class ClientUpdate : IDisposable
     {
         // Ohne User-Agent antwortet die GitHub-API mit 403. Das ist keine
         // Höflichkeit, sondern Bedingung.
-        _http.DefaultRequestHeaders.UserAgent.Add(
-            new ProductInfoHeaderValue("RemoteDesktopClient", InstalledVersion()));
+        //
+        // Über `TryParseAdd` und nicht über `Add`: die Fassung kommt aus dem
+        // Kopf einer Datei auf der Platte, und was dort steht, bestimmt der
+        // Build. Ein Zeichen darin, das ein HTTP-Kopf nicht verträgt, würde
+        // sonst hier eine Ausnahme werfen — im Konstruktor, beim Öffnen des
+        // Fensters, also weit weg von jeder Updatesuche.
+        if (!_http.DefaultRequestHeaders.UserAgent.TryParseAdd(
+                $"RemoteDesktopClient/{InstalledVersion()}"))
+        {
+            _http.DefaultRequestHeaders.UserAgent.Add(
+                new ProductInfoHeaderValue("RemoteDesktopClient", "0.0.0"));
+        }
     }
 
     /// <summary>

@@ -30,7 +30,6 @@ public sealed class TextBlock : Control, IMeasurable
         Text = text;
         Font = font ?? Theme.Body;
         ForeColor = color ?? Theme.TextDim;
-        BackColor = Color.Transparent;
         TabStop = false;
     }
 

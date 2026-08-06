@@ -31,7 +31,6 @@ public sealed class ChoiceGroup<T> : Control, IMeasurable
             | ControlStyles.ResizeRedraw,
             true);
 
-        BackColor = Color.Transparent;
         Cursor = Cursors.Hand;
     }
 
