@@ -15,6 +15,17 @@ on:
     tags:
       - 'v*'
 
+  # Der Notausgang. Am 06.08.2026 kam der Tag v1.2.1 nachweislich am Server an
+  # (der Tag steht da, annotiert, auf dem richtigen Commit), aber GitHub legte
+  # dazu keinen Lauf an — kein fehlgeschlagener, gar keinen. Dagegen hilft von
+  # aussen nichts.
+  #
+  # Damit laesst sich derselbe Ablauf von Hand starten: Reiter „Actions" →
+  # „Release" → „Run workflow", und dort oben **den Tag** als Ref waehlen, nicht
+  # master. Die Fassung kommt weiterhin aus dem Namen des Refs; der Schritt
+  # darunter bricht ab, wenn es kein Tag ist.
+  workflow_dispatch:
+
 permissions:
   contents: write
 
@@ -35,7 +46,16 @@ jobs:
 
       - name: Fassung aus dem Tag lesen
         id: version
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        # Die Prüfung ist wegen des Notausgangs nötig: von Hand gestartet steht
+        # als Ref sonst „master" da, und die Fassung hieße dann „master" — in
+        # jedem Dateinamen, im Manifest und in der APK.
+        run: |
+          if [ "$GITHUB_REF_TYPE" != "tag" ]; then
+            echo "Dieser Ablauf gehört auf einen Tag, nicht auf $GITHUB_REF_NAME." >&2
+            echo "Beim Starten von Hand oben als Ref den Tag wählen (z. B. v1.2.1)." >&2
+            exit 1
+          fi
+          echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       # ---- Oberfläche ----------------------------------------------------
       # Sie steckt in beiden Clients: das Windows-Fenster kopiert app/dist

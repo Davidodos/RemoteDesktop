@@ -108,6 +108,23 @@ Das ist der letzte manuelle Schritt, und er ist unvermeidlich:
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
+### Wenn der Tag ankommt, aber kein Lauf startet
+
+Kam am 06.08.2026 bei `v1.2.1` vor: der Tag stand auf GitHub, annotiert, auf dem
+richtigen Commit — und in *Actions* war trotzdem **kein** Eintrag, auch kein
+fehlgeschlagener. Von außen ist dagegen nichts zu machen; wiederholtes Löschen
+und neu Setzen des Tags half nicht.
+
+Der Weg daran vorbei: Reiter **Actions → Release → Run workflow**, und dort oben
+als Ref **den Tag** wählen (nicht `master`). Der Ablauf ist derselbe, die Fassung
+kommt weiterhin aus dem Namen des Tags. Wird versehentlich ein Branch gewählt,
+bricht der erste Schritt mit einer Erklärung ab, statt eine Fassung namens
+„master" zu bauen.
+
+Als Zweites hilft oft ein **frischer Tag-Name** (`v1.2.2` statt noch einmal
+`v1.2.1`). Ein Name, den der Server noch nie gesehen hat, umgeht alles, was an
+Resten des alten hängen könnte.
+
 Und auf den Geräten:
 
 | Wo | Was passiert |
