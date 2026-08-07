@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
+import { deviceLabel } from './lib/deviceNames.ts'
 import { collectDevices, localDeviceSource, saveLocalDevice } from './lib/deviceSources.ts'
 import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
 import { InputChannel } from './lib/inputChannel.ts'
@@ -32,6 +33,22 @@ export function App(): React.JSX.Element {
   const [error, setError] = useState<string | undefined>(undefined)
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
+
+  /**
+   * Die Liste hat sich geändert — umbenannt oder entfernt.
+   *
+   * Ist das verbundene Gerät weg, endet auch die Verbindung: alles andere wäre
+   * eine Sitzung zu einem Rechner, den die App gerade vergessen hat.
+   */
+  const applyDevices = useCallback((next: Device[]): void => {
+    setDevices(next)
+
+    setSelected((current) =>
+      current === undefined
+        ? undefined
+        : next.find((device) => device.id === current.id),
+    )
+  }, [])
 
   // Geräteliste laden. Seit Phase 14 gibt es nur noch eine Quelle: was dieses
   // Gerät selbst gekoppelt hat. Die Registry auf der NAS ist weg — sie lieferte
@@ -229,6 +246,7 @@ export function App(): React.JSX.Element {
         <ErrorBanner message={error} onDismiss={() => setError(undefined)} />
         <DeviceListView
           devices={devices}
+          onDevices={applyDevices}
           onError={setError}
           onPair={() => setPairing(true)}
           onSelect={(device) => void select(device)}
@@ -250,7 +268,7 @@ export function App(): React.JSX.Element {
         >
           <MenuIcon />
         </button>
-        <span className="header-title">{selected.name}</span>
+        <span className="header-title">{deviceLabel(selected)}</span>
         <span className={`connection ${connection}`}>{describeConnection(connection)}</span>
       </header>
 
@@ -272,7 +290,20 @@ export function App(): React.JSX.Element {
           </div>
         )}
 
-        {input === undefined || agent === undefined ? (
+        {/* Die Geräteseite braucht keine Verbindung — sie ist der Weg zurück,
+            gerade auch wenn die Verbindung hakt. */}
+        {page === 'devices' ? (
+          <DeviceListView
+            devices={devices}
+            current={selected}
+            onDevices={applyDevices}
+            onError={setError}
+            onPair={() => setPairing(true)}
+            onSelect={(device) => {
+              void select(device).then(() => setPage('screen'))
+            }}
+          />
+        ) : input === undefined || agent === undefined ? (
           <p className="placeholder">Verbinde…</p>
         ) : page === 'mouse' ? (
           <TouchpadView input={input} />

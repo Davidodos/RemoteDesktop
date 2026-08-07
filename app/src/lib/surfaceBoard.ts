@@ -1,3 +1,4 @@
+import { deviceLabel } from './deviceNames.ts'
 import type { AgentActionSummary, Device } from './types.ts'
 import { findWakeCandidate } from './wake.ts'
 
@@ -68,7 +69,9 @@ export function buildSurfaceBoard(
 
   return {
     deviceId: device.id,
-    deviceName: device.name,
+    // Der Name, den dieses Gerät vergeben hat — auf dem Homescreen soll
+    // dasselbe stehen wie in der App.
+    deviceName: deviceLabel(device),
     node,
     actions: actions.filter((action) => !action.confirm).map(({ id, label }) => ({ id, label })),
     ...(via === undefined || device.mac === undefined ? {} : { wake: { mac: device.mac, via } }),

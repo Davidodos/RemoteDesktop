@@ -26,9 +26,25 @@ public interface IMeasurable
 /// zweimal dieselbe Aufgabe wären eine Stelle mehr, an der die Abstände
 /// auseinanderlaufen.
 /// </para>
+///
+/// <para>
+/// **Gemessen wird nur, wenn sich etwas geändert hat.** Bis v1.2.0 rechnete
+/// jeder einzelne Schritt am Mausrad die ganze Seite neu durch — jeder Absatz
+/// noch einmal durch <c>TextRenderer.MeasureText</c>, jede Karte samt Inhalt,
+/// und das dreifach verschachtelt. Das war das Ruckeln. Jetzt merkt sich der
+/// Stapel die Höhen zu einer Breite; ein Rollschritt verschiebt die Kinder nur
+/// noch.
+/// </para>
 /// </summary>
 public sealed class Stack : Control, IMeasurable
 {
+    /// <summary>
+    /// Zeichnet das Fenster samt Kindern in einem Rutsch, statt jedes Kind für
+    /// sich blinken zu lassen. Ohne das flackert ein Rollvorgang, weil jede
+    /// verschobene Karte ihr eigenes Fenster neu zeichnet.
+    /// </summary>
+    private const int WsExComposited = 0x02000000;
+
     private readonly List<Item> _items = [];
 
     private int _offset;
@@ -38,6 +54,14 @@ public sealed class Stack : Control, IMeasurable
     private int _grabbedAt;
     private int _grabbedOffset;
     private bool _overBar;
+
+    /// <summary>Zu welcher Breite die gemerkten Höhen gehören — <c>-1</c>: zu keiner.</summary>
+    private int _laidOutWidth = -1;
+    private int _measuredWidth = -1;
+    private int _measuredHeight;
+
+    /// <summary>Zu welcher Fenstergröße die letzte Anordnung passte.</summary>
+    private Size _arrangedFor = Size.Empty;
 
     public Stack()
     {
@@ -65,10 +89,40 @@ public sealed class Stack : Control, IMeasurable
 
     private bool NeedsBar => Scrollable && _content > ClientSize.Height;
 
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var parameters = base.CreateParams;
+
+            // Nur der rollbare Stapel: in einer Karte wird nichts verschoben,
+            // und jede zusätzliche Zeichenschicht kostet auch etwas.
+            if (Scrollable)
+            {
+                parameters.ExStyle |= WsExComposited;
+            }
+
+            return parameters;
+        }
+    }
+
     public void Add(Control child, int? gap = null)
     {
         _items.Add(new Item(child, gap));
         Controls.Add(child);
+
+        // Ein Kind, das nach dem Einhängen seine Höhe selbst ändert — ein
+        // Eingabefeld tut das, sobald es sein Fenster bekommt —, macht die
+        // gemerkten Höhen ungültig. Während des eigenen Anordnens nicht:
+        // dort ist die Änderung ja gerade das Ergebnis der Rechnung.
+        child.SizeChanged += (_, _) =>
+        {
+            if (!_arranging)
+            {
+                Reflow(child);
+            }
+        };
+
         Reflow(this);
     }
 
@@ -100,15 +154,24 @@ public sealed class Stack : Control, IMeasurable
     /// oben bliebe die Karte in ihrer alten Höhe stehen und schnitte ihren
     /// eigenen Inhalt ab.
     /// </para>
+    ///
+    /// <para>
+    /// Unterwegs verwirft jeder Stapel seine gemerkten Höhen: was sich geändert
+    /// hat, weiß nur der, bei dem es passiert ist — die darüber müssen es
+    /// erfahren.
+    /// </para>
     /// </summary>
     public static void Reflow(Control? from)
     {
         var outermost = from as Stack;
 
+        (from as Stack)?.Forget();
+
         for (var parent = from?.Parent; parent is not null; parent = parent.Parent)
         {
             if (parent is Stack stack)
             {
+                stack.Forget();
                 outermost = stack;
             }
         }
@@ -117,12 +180,25 @@ public sealed class Stack : Control, IMeasurable
         outermost?.Invalidate(invalidateChildren: true);
     }
 
+    /// <summary>Die gemerkten Höhen wegwerfen — beim nächsten Bedarf neu gerechnet.</summary>
+    private void Forget()
+    {
+        _laidOutWidth = -1;
+        _measuredWidth = -1;
+        _arrangedFor = Size.Empty;
+    }
+
     /// <summary>
     /// Die Höhe, die dieser Stapel bei der gegebenen Breite bräuchte. Das ist
     /// dieselbe Rechnung wie beim Anordnen, nur ohne etwas zu verschieben.
     /// </summary>
     public int MeasureHeight(int width)
     {
+        if (width == _measuredWidth)
+        {
+            return _measuredHeight;
+        }
+
         var inner = width - Padding.Horizontal;
         var height = Padding.Vertical;
 
@@ -135,6 +211,9 @@ public sealed class Stack : Control, IMeasurable
 
             height += HeightOf(_items[index].Child, inner);
         }
+
+        _measuredWidth = width;
+        _measuredHeight = height;
 
         return height;
     }
@@ -177,12 +256,22 @@ public sealed class Stack : Control, IMeasurable
 
         try
         {
-            Place(ClientSize.Width - Padding.Horizontal);
-
-            if (NeedsBar)
+            // Unveränderte Größe und unveränderter Inhalt heißt: die Höhen von
+            // eben stimmen noch. Ohne diese Abkürzung misst jedes Anzeigen einer
+            // Seite alles zweimal — einmal ohne und einmal mit Rollbalken.
+            if (ClientSize != _arrangedFor)
             {
-                Place(ClientSize.Width - Padding.Horizontal - BarWidth);
+                Measure(ClientSize.Width - Padding.Horizontal);
+
+                if (NeedsBar)
+                {
+                    Measure(ClientSize.Width - Padding.Horizontal - BarWidth);
+                }
+
+                _arrangedFor = ClientSize;
             }
+
+            Place();
         }
         finally
         {
@@ -192,8 +281,17 @@ public sealed class Stack : Control, IMeasurable
         Invalidate();
     }
 
-    private void Place(int width)
+    /// <summary>
+    /// Wo jedes Kind hingehört und wie hoch es ist — zur gegebenen Breite
+    /// einmal gerechnet und dann gemerkt. Verschoben wird hier nichts.
+    /// </summary>
+    private void Measure(int width)
     {
+        if (width == _laidOutWidth)
+        {
+            return;
+        }
+
         var y = Padding.Top;
 
         for (var index = 0; index < _items.Count; index++)
@@ -203,16 +301,63 @@ public sealed class Stack : Control, IMeasurable
                 y += _items[index].Gap ?? Gap;
             }
 
-            var child = _items[index].Child;
-            var height = HeightOf(child, width);
+            var item = _items[index];
 
-            child.SetBounds(Padding.Left, y - _offset, Math.Max(1, width), height);
+            item.Y = y;
+            item.Height = HeightOf(item.Child, width);
 
-            y += height;
+            y += item.Height;
         }
 
         _content = y + Padding.Bottom;
+        _laidOutWidth = width;
+    }
 
+    /// <summary>Die gemessene Anordnung auf die Kinder anwenden.</summary>
+    private void Place()
+    {
+        var width = Math.Max(1, _laidOutWidth);
+
+        Clamp();
+
+        foreach (var item in _items)
+        {
+            item.Child.SetBounds(Padding.Left, item.Y - _offset, width, item.Height);
+        }
+    }
+
+    /// <summary>
+    /// Nur die Verschiebung anwenden — der einzige Handgriff beim Rollen.
+    ///
+    /// <para>
+    /// <see cref="Control.SuspendLayout"/> ist hier kein Feinschliff: ohne ihn
+    /// löst jedes verschobene Kind ein Neuanordnen dieses Stapels aus, und aus
+    /// einem Rollschritt würden so viele, wie es Kinder gibt.
+    /// </para>
+    /// </summary>
+    private void Shift()
+    {
+        _arranging = true;
+        SuspendLayout();
+
+        try
+        {
+            foreach (var item in _items)
+            {
+                item.Child.Top = item.Y - _offset;
+            }
+        }
+        finally
+        {
+            ResumeLayout(false);
+            _arranging = false;
+        }
+
+        Invalidate();
+    }
+
+    private void Clamp()
+    {
         var limit = Math.Max(0, _content - ClientSize.Height);
 
         if (_offset > limit)
@@ -256,7 +401,7 @@ public sealed class Stack : Control, IMeasurable
         }
 
         _offset = next;
-        Arrange();
+        Shift();
 
         return true;
     }
@@ -350,7 +495,7 @@ public sealed class Stack : Control, IMeasurable
         }
 
         _offset = next;
-        Arrange();
+        Shift();
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
@@ -366,5 +511,15 @@ public sealed class Stack : Control, IMeasurable
         base.OnMouseLeave(e);
     }
 
-    private sealed record Item(Control Child, int? Gap);
+    /// <summary>Ein Kind samt seinem Platz im Stapel. Veränderlich, weil gemerkt.</summary>
+    private sealed class Item(Control child, int? gap)
+    {
+        public Control Child { get; } = child;
+
+        public int? Gap { get; } = gap;
+
+        public int Y { get; set; }
+
+        public int Height { get; set; }
+    }
 }

@@ -46,6 +46,14 @@ public sealed class DevicesPage : PageView
 
     private string? _pendingRevoke;
 
+    /// <summary>
+    /// Woran die Seite erkennt, dass sich an der Liste nichts geändert hat.
+    /// Sie sieht im Takt des Fensters nach — ohne diesen Vergleich baute sie
+    /// die Zeilen alle zwei Sekunden neu, mitsamt dem Knopf, den gerade jemand
+    /// drückt.
+    /// </summary>
+    private string? _shown;
+
     public DevicesPage(LocalAgent agent)
         : base("Geräte", "Welche Geräte diesen Rechner steuern dürfen.")
     {
@@ -67,6 +75,13 @@ public sealed class DevicesPage : PageView
     }
 
     public override Task RefreshAsync() => FillAsync(_paired);
+
+    /// <summary>
+    /// Ein frisch gekoppeltes Handy soll auftauchen, während man noch auf diese
+    /// Seite schaut — und nicht erst, wenn man einmal woandershin und zurück
+    /// geklickt hat.
+    /// </summary>
+    public override bool LiveRefresh => true;
 
     private async Task IssueAsync()
     {
@@ -124,9 +139,8 @@ public sealed class DevicesPage : PageView
 
     private async Task FillAsync(Card card)
     {
-        card.Body.Clear();
-
-        IReadOnlyList<PairedClientInfo> clients;
+        IReadOnlyList<PairedClientInfo> clients = [];
+        string? complaint = null;
 
         try
         {
@@ -134,7 +148,26 @@ public sealed class DevicesPage : PageView
         }
         catch (Exception failure)
         {
-            card.Body.Add(new TextBlock(Unreachable(failure), Theme.Body, Theme.Danger));
+            complaint = Unreachable(failure);
+        }
+
+        var state = complaint ?? string.Join(
+            '|',
+            clients.Select(client =>
+                $"{client.Id}:{client.Label}:{client.LastSeenAt:O}:{_pendingRevoke == client.Id}"));
+
+        if (state == _shown)
+        {
+            return;
+        }
+
+        _shown = state;
+
+        card.Body.Clear();
+
+        if (complaint is not null)
+        {
+            card.Body.Add(new TextBlock(complaint, Theme.Body, Theme.Danger));
 
             return;
         }

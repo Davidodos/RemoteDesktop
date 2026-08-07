@@ -1,5 +1,12 @@
-import { describe, expect, test } from 'vitest'
-import { collectDevices, parseDevices, type DeviceSource } from './deviceSources.ts'
+import { beforeEach, describe, expect, test } from 'vitest'
+import {
+  collectDevices,
+  forgetLocalDevice,
+  parseDevices,
+  renameLocalDevice,
+  saveLocalDevice,
+  type DeviceSource,
+} from './deviceSources.ts'
 import type { Device } from './types.ts'
 
 /**
@@ -107,6 +114,68 @@ describe('Quellen zusammenlegen', () => {
     // Assert — fällt der Hub aus, bleiben die gekoppelten Geräte bedienbar.
     expect(devices).toHaveLength(1)
     expect(failures).toHaveLength(1)
+  })
+})
+
+/**
+ * Der selbst vergebene Name. Er gehört diesem Gerät und nicht der Kopplung —
+ * am Rechner ändert sich davon nichts, und ein zweites Handy hat seinen eigenen.
+ */
+describe('der eigene Name eines Geräts', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  test('wird mitgelesen', () => {
+    // Arrange
+    const raw = JSON.stringify([
+      { id: 'abc', name: 'PC', alias: 'Arbeit', host: 'pc.ts.net', port: 8443, clientId: 'h1' },
+    ])
+
+    // Assert
+    expect(parseDevices(raw)[0]?.alias).toBe('Arbeit')
+  })
+
+  test('lässt sich jederzeit ändern und wieder abnehmen', () => {
+    // Arrange
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+
+    // Act
+    const benannt = renameLocalDevice('abc', ' Arbeit ')
+
+    // Assert — ohne umgebende Leerzeichen, die niemand sieht.
+    expect(benannt[0]?.alias).toBe('Arbeit')
+
+    // Act — ein leerer Name ist kein Fehler, sondern die Rückkehr zum
+    // Namen, den der Rechner selbst meldet.
+    expect(renameLocalDevice('abc', '  ')[0]?.alias).toBeUndefined()
+  })
+
+  test('überlebt eine erneute Kopplung desselben Rechners', () => {
+    // Arrange
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+    renameLocalDevice('abc', 'Arbeit')
+
+    // Act — dieselbe Kennung, neue Zugangsdaten, kein Name dabei.
+    const devices = saveLocalDevice(device('abc', { clientId: 'h2' }))
+
+    // Assert
+    expect(devices).toHaveLength(1)
+    expect(devices[0]).toMatchObject({ clientId: 'h2', alias: 'Arbeit' })
+  })
+
+  test('geht mit dem Gerät, wenn es entfernt wird', () => {
+    // Arrange
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+    renameLocalDevice('abc', 'Arbeit')
+
+    // Act
+    forgetLocalDevice('abc')
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+
+    // Assert — ein entferntes Gerät ist weg, samt allem, was daranhing.
+    expect(parseDevices(localStorage.getItem('remotedesktop.devices') ?? undefined)[0]?.alias)
+      .toBeUndefined()
   })
 })
 

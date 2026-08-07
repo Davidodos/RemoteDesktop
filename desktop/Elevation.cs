@@ -145,8 +145,10 @@ public static class Elevation
     {
         AdminTask.InstallService => InstallService(argument),
         AdminTask.RemoveService => Sc(["delete", Autostart.ServiceName]),
-        AdminTask.StartService => Sc(["start", Autostart.ServiceName]),
-        AdminTask.StopService => Sc(["stop", Autostart.ServiceName]),
+        AdminTask.StartService => Tolerate(
+            Sc(["start", Autostart.ServiceName]), AlreadyRunning, "Der Agent läuft bereits."),
+        AdminTask.StopService => Tolerate(
+            Sc(["stop", Autostart.ServiceName]), NotRunning, "Der Agent läuft gar nicht."),
         AdminTask.ServiceStartType => Sc(
             ["config", Autostart.ServiceName, "start=", argument == "auto" ? "auto" : "demand"]),
         AdminTask.FetchCertificate => FetchCertificate(argument),
@@ -247,6 +249,25 @@ public static class Elevation
             return new RunResult(-1, string.Empty, failure.Message);
         }
     }
+
+    /// <summary>Windows-Fehler 1056: der Dienst läuft schon.</summary>
+    private const int AlreadyRunning = 1056;
+
+    /// <summary>Windows-Fehler 1062: der Dienst läuft gar nicht.</summary>
+    private const int NotRunning = 1062;
+
+    /// <summary>
+    /// Ein Rückgabewert, der gar kein Fehlschlag ist.
+    ///
+    /// <para>
+    /// „Starten“ an einem laufenden Dienst und „Beenden“ an einem stehenden sind
+    /// keine Fehler, sondern Wünsche, die schon erfüllt sind. <c>sc.exe</c> sieht
+    /// das anders und liefert einen Fehlercode; ungedeutet stand danach eine rote
+    /// Meldung im Fenster, obwohl alles in Ordnung war.
+    /// </para>
+    /// </summary>
+    private static RunResult Tolerate(RunResult result, int code, string message) =>
+        result.ExitCode == code ? new RunResult(0, message, string.Empty) : result;
 
     private static RunResult Sc(IReadOnlyList<string> arguments) =>
         ProcessRunner.Run(

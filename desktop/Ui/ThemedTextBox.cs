@@ -58,6 +58,17 @@ public sealed class ThemedTextBox : Control, IMeasurable
         set => _input.Text = value;
     }
 
+    /// <summary>
+    /// Der graue Beispieltext im leeren Feld. Nachträglich änderbar, weil
+    /// dasselbe Feld je nach Netzmodus etwas anderes aufnimmt — im Heimnetz eine
+    /// IP, bei Tailscale den Namen im Tailnet.
+    /// </summary>
+    public string Placeholder
+    {
+        get => _input.PlaceholderText;
+        set => _input.PlaceholderText = value;
+    }
+
     public bool ReadOnly
     {
         get => _input.ReadOnly;

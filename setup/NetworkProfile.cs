@@ -35,9 +35,13 @@ public enum NetworkKind
 /// Der gewählte Modus samt der Adresse, unter der dieser Rechner erreichbar ist.
 /// </summary>
 /// <param name="Address">
-/// Nur bei <see cref="NetworkKind.Lan"/> und <see cref="NetworkKind.Vpn"/> von
-/// Belang. Bei Tailscale steht der Name im Zertifikat und wird von dort gelesen —
-/// eine zweite, von Hand gepflegte Quelle wäre eine, die irgendwann abweicht.
+/// Bei <see cref="NetworkKind.Lan"/> und <see cref="NetworkKind.Vpn"/> Pflicht.
+///
+/// Bei Tailscale freiwillig: normalerweise steht der Name im Zertifikat, das
+/// <c>tailscale cert</c> ausstellt. Wer keins geholt hat, bekommt ein selbst
+/// ausgestelltes — und darin steht der Windows-Rechnername, nicht der Name im
+/// Tailnet. Genau der landete dann im QR-Code, und das Handy suchte einen
+/// Rechner, den es unter dem Namen nirgends gibt. Steht hier etwas, gilt es.
 /// </param>
 public sealed partial record NetworkProfile(NetworkKind Kind, string Address, Coordinator Coordinator)
 {
@@ -59,10 +63,14 @@ public sealed partial record NetworkProfile(NetworkKind Kind, string Address, Co
 
     /// <summary>
     /// Die Adresse, auf die das Zertifikat lauten muss und die im QR-Code steht —
-    /// <c>null</c>, solange sie fehlt oder aus Tailscale kommt.
+    /// <c>null</c>, solange keine eingetragen ist.
+    ///
+    /// Sie gilt in jedem Modus. Bei Tailscale ist sie freiwillig, schlägt aber
+    /// den Namen aus dem Zertifikat: ein selbst ausgestelltes trägt den
+    /// Windows-Rechnernamen, und unter dem findet das Handy im Tailnet nichts.
     /// </summary>
     public string? AdvertisedAddress =>
-        NeedsOwnAddress && Address.Trim().Length > 0 ? Address.Trim() : null;
+        Address.Trim().Length > 0 ? Address.Trim() : null;
 
     /// <summary>
     /// Warum dieses Profil nicht taugt — <c>null</c>, wenn es taugt.
@@ -81,7 +89,14 @@ public sealed partial record NetworkProfile(NetworkKind Kind, string Address, Co
                 return coordinator;
             }
 
-            return NeedsOwnAddress ? RejectAddress(Address) : null;
+            if (NeedsOwnAddress)
+            {
+                return RejectAddress(Address);
+            }
+
+            // Bei Tailscale darf das Feld leer bleiben — was aber daraufsteht,
+            // muss taugen: es geht unverändert ins Zertifikat und in den QR-Code.
+            return AdvertisedAddress is null ? null : RejectAddress(Address);
         }
     }
 

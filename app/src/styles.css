@@ -52,6 +52,9 @@ button:disabled {
   opacity: 0.4;
 }
 
+/* Auch ohne `type`: das ist der Normalfall in den Formularen dieser App, und
+   ohne diese Zeile stünden dort weiße Kästen in einem dunklen Fenster. */
+input:not([type]),
 input[type='text'],
 input[type='password'] {
   font: inherit;
@@ -251,6 +254,47 @@ input[type='password'] {
 .refresh-button,
 .pair-button {
   background: var(--surface);
+}
+
+/* Ein Gerät samt aufgeklappter Verwaltung. */
+.device-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Die drei Punkte: schmal, damit sie dem Namen keinen Platz wegnehmen. */
+.manage-button {
+  background: var(--surface);
+  padding: 0.9rem 0.8rem;
+  line-height: 1;
+}
+
+.device-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.device-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.device-panel-actions button {
+  flex: 1 1 8rem;
+  padding: 0.7rem 0.8rem;
+}
+
+/* Die Zeile über einem Eingabefeld — sie sagt, was hineingehört. */
+.field-label {
+  font-size: 0.85rem;
+  color: var(--text-dim);
 }
 
 /* Der zweite Knopf einer Ansicht — er soll nicht mit dem ersten um die

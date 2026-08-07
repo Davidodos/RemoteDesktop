@@ -54,6 +54,19 @@ public abstract class PageView : Control
     /// </summary>
     public virtual Task RefreshAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Ob das Fenster diese Seite von allein nachsehen lassen darf, solange sie
+    /// offen ist.
+    ///
+    /// <para>
+    /// Nur für Seiten, die einen fremden Zustand anzeigen — ob der Dienst läuft,
+    /// welche Geräte gekoppelt sind. Auf Seiten mit Eingabefeldern wäre es
+    /// schädlich: die Seite liest beim Nachsehen den gespeicherten Stand ein und
+    /// überschriebe damit, was jemand gerade tippt.
+    /// </para>
+    /// </summary>
+    public virtual bool LiveRefresh => false;
+
     private int Side => LogicalToDeviceUnits(28);
 
     private int HeaderHeight => LogicalToDeviceUnits(84);

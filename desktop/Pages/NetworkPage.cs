@@ -18,8 +18,10 @@ public sealed class NetworkPage : PageView
     private const string Guide =
         "https://github.com/Davidodos/RemoteDesktop/blob/master/docs/NETZ.md";
 
+    private readonly WindowsProbe _probe;
     private readonly ChoiceGroup<NetworkKind> _kinds = new();
     private readonly ThemedTextBox _address = new("z. B. 192.168.178.33");
+    private readonly TextBlock _addressHint = new(string.Empty);
     private readonly ThemedTextBox _coordinator = new(Coordinator.Default.Address);
     private readonly ThemedTextBox _trustHost = new("Adresse des anderen Rechners");
     private readonly ThemedButton _suggest = new("Vorschlag");
@@ -35,9 +37,11 @@ public sealed class NetworkPage : PageView
     private NetworkKind _chosen = NetworkKind.Lan;
     private FetchedCertificate? _fetched;
 
-    public NetworkPage()
+    public NetworkPage(WindowsProbe probe)
         : base("Netz", "Auf welchem Weg dein Handy diesen Rechner findet.")
     {
+        _probe = probe;
+
         _kinds.Add(
             NetworkKind.Lan,
             "Heimnetz",
@@ -54,7 +58,7 @@ public sealed class NetworkPage : PageView
             "Du hast schon eins — WireGuard auf der Fritzbox oder etwas Ähnliches.");
 
         _kinds.Chosen += Choose;
-        _suggest.Click += (_, _) => Suggest();
+        _suggest.Click += async (_, _) => await SuggestAsync();
 
         Body.Add(ModeCard());
         Body.Add(AddressCard());
@@ -96,11 +100,7 @@ public sealed class NetworkPage : PageView
 
         save.Click += (_, _) => Save();
 
-        card.Body.Add(new TextBlock(
-            "Unter dieser Adresse trägt sich der Agent bei den gekoppelten Geräten "
-            + "ein. Im Heimnetz ist es die Adresse vom Router, im eigenen VPN die "
-            + "aus dem VPN."));
-
+        card.Body.Add(_addressHint);
         card.Body.Add(Row.Fill(_address, _suggest));
 
         card.Body.Add(new TextBlock(
@@ -151,11 +151,32 @@ public sealed class NetworkPage : PageView
     /// </summary>
     private void ApplyMode()
     {
-        var needsAddress = _chosen is NetworkKind.Lan or NetworkKind.Vpn;
-
-        _address.Enabled = needsAddress;
-        _suggest.Enabled = _chosen == NetworkKind.Lan;
+        // Die Adresse gilt in jedem Modus. Bei Tailscale ist sie freiwillig,
+        // aber sie ist der einzige Weg, den Namen im Tailnet in den QR-Code zu
+        // bekommen, solange kein Zertifikat von Tailscale danebenliegt: ein
+        // selbst ausgestelltes trägt den Windows-Rechnernamen, und unter dem
+        // findet das Handy nichts.
+        _address.Enabled = true;
+        _suggest.Enabled = _chosen is NetworkKind.Lan or NetworkKind.Tailscale;
         _coordinator.Enabled = _chosen == NetworkKind.Tailscale;
+
+        _address.Placeholder = _chosen == NetworkKind.Tailscale
+            ? "z. B. pc.tailnet-1234.ts.net"
+            : "z. B. 192.168.178.33";
+
+        _addressHint.Retext(_chosen switch
+        {
+            NetworkKind.Tailscale =>
+                "Der Name dieses Rechners im Tailnet. Genau er steht später im QR-Code, "
+                + "und genau ihn muss das Handy auflösen können. „Vorschlag“ liest ihn "
+                + "aus Tailscale aus.",
+            NetworkKind.Vpn =>
+                "Unter dieser Adresse trägt sich der Agent bei den gekoppelten Geräten "
+                + "ein — die, die in deinem VPN gilt.",
+            _ =>
+                "Unter dieser Adresse trägt sich der Agent bei den gekoppelten Geräten "
+                + "ein. Im Heimnetz ist es die Adresse vom Router."
+        });
 
         if (_chosen == NetworkKind.Lan && _address.Value.Trim().Length == 0)
         {
@@ -166,8 +187,37 @@ public sealed class NetworkPage : PageView
             new NetworkProfile(_chosen, _address.Value, Coordinator.Default).Describe());
     }
 
-    private void Suggest()
+    /// <summary>
+    /// Der Vorschlag kommt aus dem Modus: im Heimnetz die eigene IP, bei
+    /// Tailscale der Name aus <c>tailscale status</c>. Beides wird abgefragt und
+    /// nicht geraten — im eigenen VPN weiß RemoteDesktop nichts, deshalb ist der
+    /// Knopf dort aus.
+    /// </summary>
+    private async Task SuggestAsync()
     {
+        if (_chosen == NetworkKind.Tailscale)
+        {
+            // Der Aufruf von tailscale.exe darf das Fenster nicht anhalten.
+            _probe.Forget();
+
+            var name = await Task.Run(() => _probe.TailnetName);
+
+            if (name.Length == 0)
+            {
+                Report(
+                    "Tailscale meldet für diesen Rechner keinen Namen — läuft es, und ist "
+                    + "dieser Rechner angemeldet?",
+                    Tone.Bad);
+
+                return;
+            }
+
+            _address.Value = name;
+            Report($"Gefunden: {name}.", Tone.Good);
+
+            return;
+        }
+
         var guess = NetworkStore.Guess();
 
         if (guess is null)

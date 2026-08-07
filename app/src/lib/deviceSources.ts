@@ -99,8 +99,20 @@ function toDevice(entry: unknown): Device[] {
     return []
   }
 
-  const { id, name, host, port, token, clientId, fingerprint, canWake, mac, siteId, waker } =
-    entry as Record<string, unknown>
+  const {
+    id,
+    name,
+    alias,
+    host,
+    port,
+    token,
+    clientId,
+    fingerprint,
+    canWake,
+    mac,
+    siteId,
+    waker,
+  } = entry as Record<string, unknown>
 
   if (typeof id !== 'string' || id.length === 0 || typeof host !== 'string' || host.length === 0) {
     return []
@@ -123,6 +135,7 @@ function toDevice(entry: unknown): Device[] {
     {
       id,
       name: typeof name === 'string' && name.length > 0 ? name : id,
+      ...(typeof alias === 'string' && alias.trim().length > 0 ? { alias: alias.trim() } : {}),
       host,
       port: port as number,
       ...(shared ? { token: token as string } : {}),
@@ -147,7 +160,41 @@ function toDevice(entry: unknown): Device[] {
  */
 export function saveLocalDevice(device: Device): Device[] {
   const existing = parseDevices(storage.getDevices())
-  const devices = [...existing.filter((entry) => entry.id !== device.id), device]
+  const previous = existing.find((entry) => entry.id === device.id)
+
+  // Der selbst vergebene Name gehört diesem Gerät und nicht der Kopplung: wer
+  // denselben Rechner erneut koppelt, soll seinen Namen nicht verlieren.
+  const entry =
+    device.alias === undefined && previous?.alias !== undefined
+      ? { ...device, alias: previous.alias }
+      : device
+
+  const devices = [...existing.filter((item) => item.id !== device.id), entry]
+
+  storage.setDevices(JSON.stringify(devices))
+
+  return devices
+}
+
+/**
+ * Gibt einem Gerät einen eigenen Namen — oder nimmt ihn wieder weg.
+ *
+ * Der Name gilt nur auf diesem Gerät und lässt sich jederzeit ändern; am
+ * Rechner ändert sich davon nichts. Ein leerer Name ist deshalb kein Fehler,
+ * sondern die Rückkehr zum Namen, den der Rechner selbst meldet.
+ */
+export function renameLocalDevice(id: string, alias: string): Device[] {
+  const trimmed = alias.trim()
+
+  const devices = parseDevices(storage.getDevices()).map((entry) => {
+    if (entry.id !== id) {
+      return entry
+    }
+
+    const { alias: _previous, ...rest } = entry
+
+    return trimmed.length > 0 ? { ...rest, alias: trimmed } : rest
+  })
 
   storage.setDevices(JSON.stringify(devices))
 

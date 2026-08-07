@@ -6,8 +6,10 @@ Veröffentlichen und Updates: **`docs/RELEASE.md`**
 Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
 
 **V3 (läuft):** gemeinsame Oberfläche für alle Teile, Tailscale optional.
-Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 06.08.2026: **Phasen 21–26
-erledigt**; offen ist nur noch die Prüfung am echten Gerät. Netzmodi und die
+Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 07.08.2026: **Phasen 21–26
+erledigt**, dazu der Nachtrag vom 07.08. (Live-Aktualisierung im Fenster,
+Rollen, Tailnet-Name im QR-Code, Kopplung in zwei Schritten, Geräteverwaltung
+in der App); offen ist die erneute Prüfung am echten Gerät. Netzmodi und die
 VPN-Anleitung stehen in **`docs/NETZ.md`**.
 
 **V2-Umbau zur echten App (abgeschlossen):** Begründungen in **`docs/PLAN-V2.md`**,

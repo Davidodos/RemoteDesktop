@@ -33,12 +33,33 @@ public sealed class OverviewPage : PageView
         _perform = perform;
     }
 
+    /// <summary>
+    /// Diese Seite zeigt nur fremden Zustand — kein Feld, in das jemand tippt.
+    /// Also darf sie von allein nachsehen.
+    /// </summary>
+    public override bool LiveRefresh => true;
+
+    /// <summary>
+    /// Woran die Seite erkennt, dass sich nichts geändert hat. Ohne das würde
+    /// der Takt aus <see cref="ShellWindow"/> die Karten alle zwei Sekunden neu
+    /// bauen — und ein Knopf, den man gerade drückt, wäre unter dem Finger weg.
+    /// </summary>
+    private string? _shown;
+
     public override async Task RefreshAsync()
     {
-        _probe.Forget();
-
         var profile = NetworkStore.Read();
         var machine = await _probe.SnapshotAsync(_appDirectory);
+        var fingerprint = OwnFingerprint();
+
+        var state = $"{machine}|{profile}|{fingerprint}";
+
+        if (state == _shown)
+        {
+            return;
+        }
+
+        _shown = state;
 
         Body.Clear();
 
@@ -52,7 +73,7 @@ public sealed class OverviewPage : PageView
             Body.Add(PartCard(part));
         }
 
-        Body.Add(FingerprintCard());
+        Body.Add(FingerprintCard(fingerprint));
     }
 
     /// <summary>
@@ -132,10 +153,9 @@ public sealed class OverviewPage : PageView
     /// dieser Wert zum Vergleich angezeigt, bevor dort etwas bestätigt wird.
     /// Ohne den Vergleich wäre das Bestätigen wertlos.
     /// </summary>
-    private Card FingerprintCard()
+    private Card FingerprintCard(string? value)
     {
         var card = new Card("Fingerabdruck dieses Rechners");
-        var value = OwnFingerprint();
 
         card.Body.Add(new TextBlock(
             "Diesen Wert zeigt das Handy an, bevor es diesem Rechner vertraut. "

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { probeAll } from '../lib/reachability.ts'
 import type { Device, DeviceStatus } from '../lib/types.ts'
+import { deviceLabel } from '../lib/deviceNames.ts'
 import {
+  DevicesIcon,
   type IconComponent,
   KeyboardIcon,
   MediaIcon,
@@ -14,7 +16,20 @@ import {
 /** Solange die Leiste offen ist, den Online-Zustand frisch halten. */
 const POLL_INTERVAL_MS = 10_000
 
-export type Page = 'screen' | 'mouse' | 'keyboard' | 'media' | 'power' | 'actions' | 'shortcuts'
+export type Page =
+  | 'screen'
+  | 'mouse'
+  | 'keyboard'
+  | 'media'
+  | 'power'
+  | 'actions'
+  | 'shortcuts'
+  /**
+   * Die Geräteliste als Seite — erreichbar, **während** etwas verbunden ist.
+   * Vorher führte der Weg zurück nur über das Trennen, und wer ein zweites
+   * Gerät koppeln oder eines umbenennen wollte, musste die Sitzung aufgeben.
+   */
+  | 'devices'
 
 const PAGES: { id: Page; label: string; icon: IconComponent }[] = [
   { id: 'screen', label: 'Bildschirm', icon: ScreenIcon },
@@ -81,10 +96,23 @@ export function Sidebar({
       >
         <div className="sidebar-device">
           <span className="status-dot online" />
-          <span className="device-name">{current.name}</span>
+          <span className="device-name">{deviceLabel(current)}</span>
         </div>
 
         <span className="sidebar-label">Geräte</span>
+
+        <button
+          type="button"
+          className={page === 'devices' ? 'sidebar-entry active' : 'sidebar-entry'}
+          onClick={() => {
+            onPage('devices')
+            onClose()
+          }}
+        >
+          <DevicesIcon />
+          <span className="device-name">Alle Geräte verwalten</span>
+        </button>
+
         {devices.map((device) => (
           <button
             key={device.id}
@@ -96,7 +124,7 @@ export function Sidebar({
             }}
           >
             <span className={isOnline(device.id) ? 'status-dot online' : 'status-dot'} />
-            <span className="device-name">{device.name}</span>
+            <span className="device-name">{deviceLabel(device)}</span>
           </button>
         ))}
 

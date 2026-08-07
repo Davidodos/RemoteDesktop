@@ -449,3 +449,50 @@ Hier nicht ausführbar, deshalb gesammelt:
   Homescreen. Hier ist beides nur als Bilddatei prüfbar, nicht in Windows
 - **Die Updatesuche** auf der v1.1.0-Installation: sie muss jetzt „das ist die
   neueste" sagen statt eine Neuinstallation anzubieten
+
+### Nachtrag 07.08.2026 — Befunde vom echten Gerät
+
+Sechs Punkte aus dem ersten Durchlauf am Rechner und am Handy. Alle sechs waren
+dieselbe Art Fehler: **das Fenster zeigte einen Stand, den es einmal erfragt und
+danach nie wieder überprüft hat.**
+
+- **Der Agent lief, das Fenster sagte „gestoppt“.** Der Installer startet den
+  Dienst und öffnet gleich danach das Fenster; bis der Agent antwortet, vergehen
+  Sekunden. Das Fenster fragte genau einmal. Es fragt jetzt alle zwei Sekunden
+  nach (`ShellWindow.TickAsync`), aber nur auf Seiten, die das aushalten
+  (`PageView.LiveRefresh`) — auf der Netz-Seite würde ein Nachfragen
+  überschreiben, was jemand gerade tippt. Gebaut werden die Karten nur, wenn
+  sich wirklich etwas geändert hat; sonst wäre der Knopf unter dem Finger alle
+  zwei Sekunden weg
+- **„Starten“ an einem laufenden Dienst meldete einen Fehler.** `sc.exe` gibt
+  1056 zurück, und ungedeutet stand das rot in der Statuszeile. 1056 und 1062
+  („läuft gar nicht“) sind jetzt keine Fehlschläge mehr, sondern Auskünfte
+- **Gekoppelte Geräte erschienen erst nach einem Seitenwechsel.** Dieselbe
+  Ursache, dieselbe Lösung — die Geräteseite sieht jetzt selbst nach
+- **Das Rollen ruckelte.** Jeder Schritt am Mausrad rechnete die ganze Seite neu
+  durch: jeder Absatz noch einmal durch `TextRenderer.MeasureText`, jede Karte
+  samt Inhalt, dreifach verschachtelt. `Stack` merkt sich die Höhen jetzt zu
+  einer Breite und verschiebt beim Rollen nur noch (`Shift`, mit
+  `SuspendLayout`); der rollbare Stapel bekommt `WS_EX_COMPOSITED`, damit nicht
+  jede Karte für sich blinkt
+- **Im QR-Code stand der Windows-Rechnername statt des Namens im Tailnet.** Ohne
+  Zertifikat von Tailscale stellt der Agent sich selbst eins aus, und darin
+  steht `Environment.MachineName` — den kennt im Tailnet niemand. Das Feld
+  „Adresse dieses Rechners“ gilt jetzt in **jedem** Modus; bei Tailscale ist es
+  freiwillig, und „Vorschlag“ liest den Namen aus `tailscale status`
+- **Der Scan füllte Felder, statt zu koppeln.** Adresse, Port und Code sind
+  nichts, worüber jemand entscheidet — sie stehen im QR-Code und sind entweder
+  richtig oder unbrauchbar. Nach dem Scan kommt jetzt genau eine Seite mit den
+  beiden Namen, über die tatsächlich entschieden wird
+
+Dazu zwei Dinge, die die App vorher nicht konnte:
+
+- **Ein eigener Name je Rechner** (`Device.alias`). Er steht nur auf diesem
+  Handy, ist jederzeit änderbar und überlebt eine erneute Kopplung. Angezeigt
+  wird überall `deviceLabel()` — Liste, Titelzeile, Seitenleiste und der
+  Steckbrief für Widget und Kachel
+- **Geräteverwaltung, ohne die Verbindung aufzugeben.** „Alle Geräte verwalten“
+  im Hauptmenü führt auf dieselbe Geräteliste wie beim Start, diesmal als Seite:
+  umbenennen, Verbindung testen, entfernen, ein weiteres koppeln — und danach
+  ein Klick zurück auf den Bildschirm. Vorher führte der Weg zurück nur über das
+  Trennen

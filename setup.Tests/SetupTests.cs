@@ -410,6 +410,31 @@ public class NetworkProfileTests
         Assert.Null(NetworkProfile.Default.AdvertisedAddress);
     }
 
+    [Fact]
+    public void Bei_Tailscale_gilt_eine_eingetragene_Adresse_trotzdem()
+    {
+        // Der Befund: ohne Zertifikat von Tailscale stellt der Agent sich selbst
+        // eins aus, und darin steht der Windows-Rechnername. Genau der landete
+        // im QR-Code — und unter dem findet das Handy im Tailnet nichts. Wer den
+        // Namen im Tailnet einträgt, muss ihn also wiederbekommen.
+        var profile = new NetworkProfile(
+            NetworkKind.Tailscale, "pc.tailnet-1234.ts.net", Coordinator.Default);
+
+        Assert.Equal("pc.tailnet-1234.ts.net", profile.AdvertisedAddress);
+        Assert.Null(profile.Rejection);
+    }
+
+    [Fact]
+    public void Eine_unbrauchbare_Tailnet_Adresse_wird_auch_bei_Tailscale_abgelehnt()
+    {
+        // Freiwillig heißt nicht beliebig: was hier steht, geht unverändert ins
+        // Zertifikat und in den QR-Code.
+        var profile = new NetworkProfile(
+            NetworkKind.Tailscale, "https://pc.tailnet-1234.ts.net", Coordinator.Default);
+
+        Assert.Contains("https://", profile.Rejection);
+    }
+
     [Theory]
     [InlineData("192.168.178.20")]
     [InlineData("pc.fritz.box")]

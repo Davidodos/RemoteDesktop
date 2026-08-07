@@ -9,6 +9,16 @@
 export interface Device {
   id: string
   name: string
+  /**
+   * Der Name, den dieses Gerät dem Rechner gegeben hat — nur hier gültig.
+   *
+   * Der Rechner heißt, wie er heißt (`name`, aus `/api/info`). Wer zwei
+   * Rechner mit ähnlichem Windows-Namen hat oder schlicht „Arbeit" lesen will,
+   * kann das hier hinterlegen; auf dem Rechner ändert sich davon nichts, und
+   * kein anderes Gerät erfährt davon. Angezeigt wird er über
+   * {@link deviceLabel}.
+   */
+  alias?: string
   /** MagicDNS-Name des Rechners. */
   host: string
   port: number

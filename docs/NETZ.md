@@ -56,6 +56,14 @@ bestätigen.
 Wer einen eigenen Koordinationsserver betreibt (Headscale), trägt dessen Adresse
 im selben Bereich ein; alles andere bleibt gleich.
 
+**Der Name im Tailnet gehört ins Feld „Adresse dieses Rechners“.** Er ist
+freiwillig, aber er ist das, was im QR-Code landet und was das Handy nachher
+auflösen muss — etwa `pc.tailnet-1234.ts.net`. „Vorschlag“ liest ihn aus
+Tailscale aus. Bleibt das Feld leer, nimmt der Agent den Namen aus seinem
+Zertifikat: bei einem Zertifikat von Tailscale ist das derselbe, bei einem
+selbst ausgestellten dagegen der Windows-Rechnername — und unter dem findet das
+Handy im Tailnet nichts. Nach dem Ändern den Agent einmal beenden und starten.
+
 ---
 
 ## Eigenes VPN — du hast schon eins

@@ -41,6 +41,17 @@ export function MenuIcon(props: IconProps): React.JSX.Element {
   )
 }
 
+/** Zwei Rechner untereinander — die Geräteliste. */
+export function DevicesIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="7" rx="1.5" />
+      <rect x="3" y="14" width="18" height="6" rx="1.5" />
+      <path d="M6.5 7.5h.01M6.5 17h.01" />
+    </Icon>
+  )
+}
+
 export function KeyboardIcon(props: IconProps): React.JSX.Element {
   return (
     <Icon {...props}>

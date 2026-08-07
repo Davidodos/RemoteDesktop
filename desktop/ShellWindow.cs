@@ -31,10 +31,26 @@ public sealed class ShellWindow : Form
     private readonly Dictionary<Page, Control> _pages = [];
     private readonly RemotePage _remote;
 
+    /// <summary>
+    /// Wie oft das Fenster von allein nachsieht. Zwei Sekunden sind der
+    /// Kompromiss: kurz genug, dass ein frisch gestarteter Dienst nicht
+    /// „gestoppt“ bleibt, lang genug, dass die Abfragen nicht auffallen.
+    /// </summary>
+    private static readonly TimeSpan Beat = TimeSpan.FromSeconds(2);
+
+    private readonly System.Windows.Forms.Timer _pulse = new();
+
     private Page _current = Page.Overview;
     private bool _fullscreen;
     private FormWindowState _beforeFullscreen = FormWindowState.Normal;
     private bool _busy;
+
+    /// <summary>
+    /// Ob gerade schon jemand nachfragt. Der Takt und ein Seitenwechsel dürfen
+    /// sich nicht überholen: beide bauen dieselben Karten neu, und zweimal
+    /// gleichzeitig ergäbe eine Seite mit doppeltem Inhalt.
+    /// </summary>
+    private bool _refreshing;
 
     public ShellWindow(
         WindowsProbe probe, LocalAgent agent, IAutostartHost autostart, string? appDirectory)
@@ -57,7 +73,7 @@ public sealed class ShellWindow : Form
         Register(Page.Overview, new OverviewPage(probe, appDirectory, PerformAsync));
         Register(Page.Remote, _remote);
         Register(Page.Devices, new DevicesPage(agent));
-        Register(Page.Network, new NetworkPage());
+        Register(Page.Network, new NetworkPage(probe));
         Register(Page.Settings, new SettingsPage(autostart));
 
         _rail.Picked += page => _ = ShowPageAsync(page);
@@ -67,6 +83,55 @@ public sealed class ShellWindow : Form
         Controls.Add(_status);
 
         _rail.Highlight(Page.Overview);
+
+        _pulse.Interval = (int)Beat.TotalMilliseconds;
+        _pulse.Tick += (_, _) => _ = TickAsync();
+        _pulse.Start();
+    }
+
+    /// <summary>
+    /// Von allein nachsehen, statt auf einen Seitenwechsel zu warten.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** der Installer startet den Dienst und öffnet
+    /// gleich danach das Fenster. Bis der Agent antwortet, vergehen ein paar
+    /// Sekunden — das Fenster fragte genau einmal, bekam „nein“ und blieb bei
+    /// „Agent gestoppt“. Wer dann auf „Starten“ klickte, bekam einen Fehler,
+    /// weil der Dienst längst lief. Dasselbe galt für die gekoppelten Geräte:
+    /// ein frisch gekoppeltes Handy tauchte erst auf, wenn man einmal die Seite
+    /// wechselte und zurückkam.
+    /// </para>
+    /// </summary>
+    private async Task TickAsync()
+    {
+        // Nicht sichtbar heißt: niemand liest mit. Und während eines Handgriffs
+        // wäre eine zweite Abfrage nur im Weg — der Handgriff fragt selbst nach.
+        if (_refreshing || _busy || !Visible || WindowState == FormWindowState.Minimized)
+        {
+            return;
+        }
+
+        _refreshing = true;
+
+        try
+        {
+            if (_pages[_current] is PageView view && view.LiveRefresh)
+            {
+                await view.RefreshAsync();
+            }
+
+            await ShowAgentStateAsync();
+        }
+        catch (Exception)
+        {
+            // Ein Nachsehen im Hintergrund darf nichts melden und schon gar
+            // nichts abbrechen. Was dauerhaft nicht geht, sieht man am Zustand
+            // der Karte; ein Fehlerfenster alle zwei Sekunden wäre eine Plage.
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
     private void Register(Page page, Control view)
@@ -133,7 +198,21 @@ public sealed class ShellWindow : Form
 
         if (_pages[page] is PageView view2)
         {
-            await view2.RefreshAsync();
+            // Beim Wechsel auf eine Seite alles neu erfragen — auch das, was
+            // teuer ist. Der Takt weiter unten tut das ausdrücklich nicht: er
+            // liefe sonst alle zwei Sekunden `tailscale status`.
+            _probe.Forget();
+
+            _refreshing = true;
+
+            try
+            {
+                await view2.RefreshAsync();
+            }
+            finally
+            {
+                _refreshing = false;
+            }
         }
 
         await ShowAgentStateAsync();
@@ -147,7 +226,18 @@ public sealed class ShellWindow : Form
     {
         if (_pages[_current] is PageView view)
         {
-            await view.RefreshAsync();
+            _probe.Forget();
+
+            _refreshing = true;
+
+            try
+            {
+                await view.RefreshAsync();
+            }
+            finally
+            {
+                _refreshing = false;
+            }
         }
 
         await ShowAgentStateAsync();
@@ -338,5 +428,15 @@ public sealed class ShellWindow : Form
         }
 
         base.OnFormClosing(e);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _pulse.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }
