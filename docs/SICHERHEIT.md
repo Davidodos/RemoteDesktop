@@ -110,7 +110,7 @@ Wer den PC gesperrt vorfindet, kann ihn über die App nicht entsperren. Ein
 Dienst in Sitzung 0 würde diese Grenze aufheben — bewusst noch nicht gebaut.
 
 **`agentkey.txt` liegt im Klartext neben der `.exe`.** Darin steht der private
-Schlüssel des Agents. Er gehört nach `C:\ProgramData\RemoteDesktopAgent\` mit
+Schlüssel des Agents. Er gehört nach `C:\Program Files\RemoteDesktop\data\` mit
 denselben ACLs wie `cert.key` — steht als offener Punkt in `docs/TASKS-V2.md`.
 
 **Das alte geteilte Token gilt weiter.** `Agent:Token` ist seit Phase 10

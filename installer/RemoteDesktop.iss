@@ -7,9 +7,11 @@
 ; wiederzufinden. Was auf diesem Rechner *aktiv* ist, entscheidet danach die
 ; Oberfläche; sie kann den Dienst eintragen, starten und wieder entfernen.
 ;
-; Übrig bleibt eine einzige echte Wahl: ob Tailscale mitinstalliert werden soll.
-; Es ist ein fremdes Programm mit eigenem Aktualisierungsweg — und seit V3 auch
-; gar nicht mehr nötig, wenn Handy und Rechner im selben Netz hängen.
+; Seit v1.3.0 hat er gar keine Wahl mehr anzubieten: er legt Dateien ab, mehr
+; nicht. Ob der Agent eingetragen wird, auf welchem Weg dieser Rechner erreichbar
+; sein soll und was beim Hochfahren mitkommt, fragt die Einrichtung im Fenster —
+; in der Reihenfolge, in der die Antworten aufeinander aufbauen, und ohne dass
+; irgendetwas losläuft, bevor sie durch ist.
 ;
 ; Gebaut wird er unter Windows mit `iscc installer\RemoteDesktop.iss`, nachdem
 ; `publish\` aus dem Release-Workflow daliegt. Auf dem Linux-Container ist er
@@ -53,19 +55,18 @@ LicenseFile=..\LICENSE
 [Languages]
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
-[Tasks]
-; Tailscale wird heruntergeladen und nicht mitgeliefert: eine mitgelieferte
-; Fassung veraltet im Paket, und niemand merkt es. Standardmäßig **aus** — wer
-; den Rechner nur aus dem eigenen WLAN steuert, braucht es nicht.
-Name: "tailscale"; Description: "Tailscale mitinstallieren (nur nötig, wenn du von unterwegs ranwillst)"; \
-    Flags: unchecked; Check: NeedsTailscale
-
-Name: "agentservice"; Description: "Diesen Rechner fernsteuerbar machen (Agent als Dienst eintragen)"
-; Als untergeordnete Aufgabe geschrieben (Backslash im Namen) und nicht mit
-; einem `Tasks:`-Verweis — den gibt es in dieser Sektion nicht. Inno rückt sie
-; dadurch ein und lässt sie nur ankreuzen, solange die übergeordnete steht.
-Name: "agentservice\autostart"; Description: "Agent beim Hochfahren starten"
-Name: "autostartclient"; Description: "RemoteDesktop beim Anmelden starten"
+; Keine Aufgaben mehr.
+;
+; **Der Befund dahinter:** hier standen bis v1.2.0 vier Häkchen — Dienst
+; eintragen, Agent beim Hochfahren starten, Fenster beim Anmelden starten,
+; Tailscale mitinstallieren. Sie wurden gesetzt, bevor irgendjemand die Frage
+; verstanden hatte, und der Agent lief danach, ob gewollt oder nicht. Alles
+; davon entscheidet jetzt die Einrichtung im Fenster (desktop/Pages/SetupPage.cs):
+; sie fragt in der Reihenfolge, in der die Antworten aufeinander aufbauen, und
+; startet den Agent erst, wenn er weiß, unter welchem Namen er sich ausweisen
+; soll.
+;
+; Der Installer legt Dateien ab. Mehr nicht.
 
 [Files]
 ; Alles nebeneinander in einem Ordner. Die Oberfläche sucht die Programmdatei des
@@ -81,73 +82,38 @@ Source: "..\agent\appsettings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 Type: filesandordirs; Name: "{app}\client"
 
 [Dirs]
-; Zertifikate, privater Schlüssel, gekoppelte Geräte und das Netzprofil. Nur
-; Administratoren und das System dürfen hinein — der Schlüssel des Agents liegt
-; im Klartext, und wer ihn hat, ist der Agent.
-Name: "{commonappdata}\RemoteDesktopAgent"; Permissions: admins-full system-full
+; Zertifikate, privater Schlüssel, gekoppelte Geräte und das Netzprofil — alles
+; in einem Ordner neben dem Programm. Nur Administratoren und das System dürfen
+; hinein: der Schlüssel des Agents liegt im Klartext, und wer ihn hat, ist der
+; Agent.
+;
+; Der Installer kennt den Inhalt nicht, also überschreibt ein Update ihn auch
+; nicht — Kopplungen und die eigene Zertifizierungsstelle überstehen jede neue
+; Fassung. Beim Deinstallieren wird er dagegen mit weggeräumt, siehe
+; [UninstallDelete]: was zum Programm gehört, soll auch mit ihm verschwinden.
+Name: "{app}\data"; Permissions: admins-full system-full
+
+[UninstallDelete]
+; Der Datenordner. Er entsteht zur Laufzeit, deshalb weiß der Uninstaller sonst
+; nichts von ihm — und ein „deinstalliert" mit zurückbleibendem privatem
+; Schlüssel wäre die unangenehmste Art von Rückstand.
+Type: filesandordirs; Name: "{app}\data"
 
 [Icons]
 Name: "{group}\RemoteDesktop"; Filename: "{app}\{#Exe}"
 Name: "{group}\RemoteDesktop deinstallieren"; Filename: "{uninstallexe}"
 
 [Run]
-; Reihenfolge mit Absicht: erst Tailscale, dann der Dienst, dann das Fenster.
-; Tailscale kommt als MSI, also über msiexec und nicht direkt. /qn installiert
-; ohne weitere Rückfragen — die eine Frage, ob es überhaupt soll, ist auf der
-; Aufgabenseite schon gestellt worden.
-Filename: "{sys}\msiexec.exe"; Parameters: "/i ""{tmp}\tailscale-setup.msi"" /qn /norestart"; \
-    Tasks: tailscale; Check: NeedsTailscale and TailscaleDownloaded; \
-    StatusMsg: "Tailscale wird installiert…"; Flags: runhidden waituntilterminated
-
-; Beim ersten Mal anlegen, danach nur den Starttyp nachziehen. Ein zweites
-; `sc create` schlüge fehl, und der Fehler wäre für den Nutzer nicht von einem
-; echten zu unterscheiden.
-Filename: "{sys}\sc.exe"; Parameters: "create {#Service} binPath= ""{app}\RemoteDesktopAgent.exe"" start= {code:AgentStartType} DisplayName= ""RemoteDesktop Agent"""; \
-    Tasks: agentservice; Check: not ServiceExists; Flags: runhidden waituntilterminated
-
-Filename: "{sys}\sc.exe"; Parameters: "config {#Service} binPath= ""{app}\RemoteDesktopAgent.exe"" start= {code:AgentStartType}"; \
-    Check: ServiceExists; Flags: runhidden waituntilterminated
-
-Filename: "{sys}\sc.exe"; Parameters: "description {#Service} ""Macht diesen Rechner über RemoteDesktop fernsteuerbar."""; \
-    Tasks: agentservice; Flags: runhidden waituntilterminated
-
-; Nach einem Update wieder anwerfen — sonst wäre der Rechner nach jeder
-; Aktualisierung stumm, bis jemand ihn neu startet. Nur, wenn er auch von allein
-; starten soll.
-Filename: "{sys}\sc.exe"; Parameters: "start {#Service}"; \
-    Tasks: agentservice\autostart; Flags: runhidden waituntilterminated
-
-Filename: "{app}\{#Exe}"; Description: "Einrichtung jetzt abschließen"; \
+; Nur noch das Fenster. Der Dienst wird dort eingetragen und gestartet, nicht
+; hier — siehe die Begründung unter [Tasks].
+Filename: "{app}\{#Exe}"; Description: "RemoteDesktop einrichten"; \
     Flags: postinstall nowait skipifsilent
-
-[Registry]
-; Der Autostart hängt am angemeldeten Benutzer, nicht am Rechner: das Fenster
-; gehört einem Menschen. Derselbe Schlüssel, den die Oberfläche später
-; umschaltet (siehe setup/Autostart.cs).
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
-    ValueType: string; ValueName: "RemoteDesktopClient"; \
-    ValueData: """{app}\{#Exe}"""; \
-    Tasks: autostartclient; Flags: uninsdeletevalue
-
-; Ohne das Häkchen den alten Eintrag entfernen — er zeigte auf die Datei, die es
-; seit V3 nicht mehr gibt, und Windows meldete bei jeder Anmeldung einen Fehler.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; \
-    ValueType: none; ValueName: "RemoteDesktopClient"; \
-    Tasks: not autostartclient; Flags: deletevalue
 
 [UninstallRun]
 Filename: "{sys}\sc.exe"; Parameters: "stop {#Service}"; Check: ServiceExists; Flags: runhidden
 Filename: "{sys}\sc.exe"; Parameters: "delete {#Service}"; Check: ServiceExists; Flags: runhidden
 
 [Code]
-var
-  Downloaded: Boolean;
-
-function TailscaleDownloaded: Boolean;
-begin
-  Result := Downloaded;
-end;
-
 { Ob der Dienst schon eingetragen ist — dann ist dies ein Update und keine
   Erstinstallation. }
 function ServiceExists: Boolean;
@@ -173,45 +139,9 @@ begin
          SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
-{ Ob Tailscale schon da ist. Wer es längst benutzt, soll es nicht ein zweites
-  Mal installiert bekommen — und schon gar nicht ungefragt. }
-function NeedsTailscale: Boolean;
-begin
-  Result := not FileExists(ExpandConstant('{pf}\Tailscale\tailscale.exe'));
-end;
+{ Nichts weiter zu entscheiden.
 
-{ Der Starttyp des Dienstes kommt aus dem Häkchen und nicht aus einer Vorgabe.
-  „auto" heißt: läuft, sobald der Rechner an ist, auch ohne Anmeldung — genau
-  das, was man von einem fernsteuerbaren Rechner erwartet. „demand" lässt ihn
-  liegen, bis jemand ihn startet. Deinstalliert wird er dabei nie; siehe die
-  Begründung in setup/Autostart.cs. }
-function AgentStartType(Param: string): String;
-begin
-  if WizardIsTaskSelected('agentservice\autostart') then
-    Result := 'auto'
-  else
-    Result := 'demand';
-end;
-
-{ Tailscale wird zur Laufzeit geholt, nicht mitgepackt.
-
-  Scheitert der Download, bricht die Installation *nicht* ab. Alles andere ist
-  dann installiert und die Oberfläche führt zum fehlenden Schritt hin — das ist
-  ungleich besser, als wegen eines fremden Servers alles zurückzurollen. }
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if (CurStep = ssInstall) and WizardIsTaskSelected('tailscale') and NeedsTailscale then
-  begin
-    try
-      DownloadTemporaryFile(
-        'https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi',
-        'tailscale-setup.msi', '', nil);
-      Downloaded := True;
-    except
-      Downloaded := False;
-      MsgBox('Tailscale ließ sich nicht herunterladen. Du kannst es später von Hand ' +
-             'installieren — die Einrichtung im RemoteDesktop-Fenster führt dich hin.',
-             mbInformation, MB_OK);
-    end;
-  end;
-end;
+  Was früher hier stand — ob Tailscale mitkommt, welchen Starttyp der Dienst
+  bekommt, ob er gleich losläuft —, entscheidet die Einrichtung im Fenster. Der
+  Installer weiß von alldem nichts mehr, und das ist der Punkt: er kann nur
+  Dateien ablegen, und genau das tut er. }

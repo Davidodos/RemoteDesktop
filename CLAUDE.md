@@ -6,10 +6,12 @@ Veröffentlichen und Updates: **`docs/RELEASE.md`**
 Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
 
 **V3 (läuft):** gemeinsame Oberfläche für alle Teile, Tailscale optional.
-Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 07.08.2026: **Phasen 21–26
-erledigt**, dazu der Nachtrag vom 07.08. (Live-Aktualisierung im Fenster,
-Rollen, Tailnet-Name im QR-Code, Kopplung in zwei Schritten, Geräteverwaltung
-in der App); offen ist die erneute Prüfung am echten Gerät. Netzmodi und die
+Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 08.08.2026: **Phasen 21–26
+erledigt**, dazu die Nachträge vom 07. und 08.08. (Live-Aktualisierung im
+Fenster, Rollen, Tailnet-Name im QR-Code, Geräteverwaltung in der App;
+Einrichtungsassistent im Fenster statt Häkchen im Installer, ein Datenordner
+`{app}\data`, Zertifikat wird vor der Kopplung bestätigt); offen ist die
+erneute Prüfung am echten Gerät. Netzmodi und die
 VPN-Anleitung stehen in **`docs/NETZ.md`**.
 
 **V2-Umbau zur echten App (abgeschlossen):** Begründungen in **`docs/PLAN-V2.md`**,
@@ -37,7 +39,7 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 |---|---|---|
 | `agent/` | C# / .NET 8, Windows-Dienst | PC + Laptop, Port 8443 |
 | `setup/` | C# / .NET 8, Klassenbibliothek | Einrichtungslogik für Installer **und** Fenster |
-| `installer/` | Inno Setup 6 | modularer Installer (Agent · Client · Tailscale) |
+| `installer/` | Inno Setup 6 | legt nur Dateien ab — eingerichtet wird im Fenster |
 | `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop — `RemoteDesktop.exe`, die einzige .exe, die ein Mensch startet |
 | `assets/` | SVG | Quelle des Symbols für alle drei Plattformen |
 | `waker/` | Node/TS + Express, Docker | NAS, Port 3080 |
@@ -65,6 +67,9 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 - Ein Symbol für alles: `assets/icon.svg` → `node scripts/icons.mjs` erzeugt
   `.ico`, Android-Mipmaps und PWA-Icons. Nie eine der erzeugten Dateien von Hand
   anfassen.
+- Aller Zustand liegt in **einem** Ordner: `{app}\data` (`setup/AgentPaths.cs`) —
+  Schlüssel, Zertifikate, `clients.json`, `setup.json`. Nichts davon gehört
+  neben die `.exe`, und nichts nach `ProgramData`.
 - Keine Tokens, MACs oder Tailnet-Namen im Repo — `.env` bzw. `devices.json`
   (beide in `.gitignore`).
 

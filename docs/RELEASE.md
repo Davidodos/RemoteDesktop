@@ -94,7 +94,8 @@ Das ist der letzte manuelle Schritt, und er ist unvermeidlich:
 
 - **Windows:** `RemoteDesktop-Setup-1.0.0.exe` aus dem Release ausführen. Was
   vorher von Hand nach `C:\RemoteDesktopAgent\` kopiert wurde, kann weg —
-  vorher `%ProgramData%\RemoteDesktopAgent\` sichern, dort liegen Zertifikat und
+  vorher `%ProgramFiles%\RemoteDesktop\data\` sichern (eine Deinstallation räumt
+  ihn seit v1.3.0 mit weg), dort liegen Zertifikat und
   gekoppelte Geräte.
 - **Android:** die vorhandene, debug-signierte App **deinstallieren**, dann
   `remotedesktop.apk` aus dem Release installieren. Ohne das lehnt Android jedes

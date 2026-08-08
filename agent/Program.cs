@@ -5,6 +5,7 @@ using RemoteDesktopAgent.Auth;
 using RemoteDesktopAgent.Capture.H264;
 using RemoteDesktopAgent.Native;
 using RemoteDesktopAgent.Services;
+using RemoteDesktopSetup;
 
 // Ohne das meldet Windows bei skalierten Displays virtuelle statt echter
 // Pixel — die Klicks landen dann systematisch daneben.
@@ -23,7 +24,21 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 
 builder.Host.UseWindowsService(options => options.ServiceName = "RemoteDesktopAgent");
 
+// Alles, was zu dieser Installation gehört, liegt seit v1.3.0 in einem Ordner
+// neben der Programmdatei. Was eine ältere Fassung woanders hinterlassen hat,
+// wird beim Start übernommen — sonst wären nach einem Update alle Kopplungen
+// weg und der Rechner meldete sich mit einer neuen Kennung.
+RemoteDesktopSetup.AgentPaths.Adopt(
+    AppContext.BaseDirectory,
+    Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        RemoteDesktopSetup.AgentPaths.LegacyFolderName));
+
 var settings = AgentSettings.Load(builder.Configuration);
+
+// Der Ordner muss stehen, bevor irgendetwas hineingeschrieben wird — der
+// Installer legt ihn zwar an, aber ein Entwicklungsbau hat keinen Installer.
+Directory.CreateDirectory(settings.DataDirectory);
 
 // Wie dieser Rechner erreichbar sein soll: im Heimnetz, über Tailscale oder
 // über ein fremdes VPN. Aus derselben Datei, die auch die Oberfläche schreibt.
@@ -513,12 +528,22 @@ internal sealed record AgentSettings(
         var certificatePath = configuration["Agent:CertificatePath"];
         var keyPath = configuration["Agent:KeyPath"];
 
-        var dataDirectory = configuration["Agent:DataDirectory"]
-                            ?? (certificatePath is null
-                                ? DefaultDataDirectory
-                                : Path.GetDirectoryName(certificatePath) is { Length: > 0 } folder
-                                    ? folder
-                                    : DefaultDataDirectory);
+        // Ein Ordner für alles, neben der Programmdatei. Ein eingetragener Pfad
+        // schlägt ihn — aber der aus einer alten appsettings.json zeigt in den
+        // Ordner von damals, und der ist inzwischen leer.
+        var dataDirectory = AgentPaths.Redirect(
+            configuration["Agent:DataDirectory"], DefaultDataDirectory, LegacyDataDirectory)
+            ?? DefaultDataDirectory;
+
+        // Ohne Eintrag: dorthin legt „Zertifikat holen" die Dateien von
+        // Tailscale. Liegen sie nicht da, stellt der Agent sich selbst eins aus
+        // (siehe CertificateLoader) — der Eintrag ist also kein Zwang, sondern
+        // die Stelle, an der nachgesehen wird.
+        certificatePath = AgentPaths.Redirect(certificatePath, dataDirectory, LegacyDataDirectory)
+                          ?? Path.Combine(dataDirectory, "cert.crt");
+
+        keyPath = AgentPaths.Redirect(keyPath, dataDirectory, LegacyDataDirectory)
+                  ?? Path.Combine(dataDirectory, "cert.key");
 
         var networkConfigPath = configuration["Agent:NetworkConfigPath"]
                                 ?? Path.Combine(
@@ -528,11 +553,13 @@ internal sealed record AgentSettings(
         // eben mit dem JPEG-Stream. Deshalb hier kein Abbruch.
         var ffmpegPath = configuration["Agent:FfmpegPath"] ?? "ffmpeg";
 
-        // Beide liegen neben der appsettings.json, also im Verzeichnis der .exe.
-        // Ein absoluter Pfad in der Konfiguration schlägt das aus.
-        var clientsPath = Resolve(configuration["Agent:ClientsPath"] ?? "clients.json");
-        var identityPath = Resolve(configuration["Agent:IdentityPath"] ?? "agentkey.txt");
-        var actionsPath = Resolve(configuration["Agent:ActionsPath"] ?? "actions.json");
+        // Kopplungen und der eigene Schlüssel gehören zu den Daten, nicht zum
+        // Programm: sie stehen im Datenordner. Die Aktionen sind Konfiguration
+        // und bleiben neben der actions.example.json liegen.
+        var clientsPath = Resolve(configuration["Agent:ClientsPath"], dataDirectory, "clients.json");
+        var identityPath = Resolve(configuration["Agent:IdentityPath"], dataDirectory, "agentkey.txt");
+        var actionsPath = Resolve(
+            configuration["Agent:ActionsPath"], AppContext.BaseDirectory, "actions.json");
 
         var broadcastAddress = configuration["Agent:BroadcastAddress"] ?? "255.255.255.255";
         var updateRepository = configuration["Agent:UpdateRepository"] ?? "Davidodos/RemoteDesktop";
@@ -544,13 +571,21 @@ internal sealed record AgentSettings(
     }
 
     /// <summary>
-    /// Dorthin legt der Installer die Daten des Agents, und nur Administratoren
-    /// und das System dürfen hinein.
+    /// Der Datenordner: <c>data\</c> neben der Programmdatei. Nur Administratoren
+    /// und das System dürfen hinein — der Schlüssel des Agents liegt im Klartext,
+    /// und wer ihn hat, ist der Agent.
     /// </summary>
-    private static string DefaultDataDirectory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "RemoteDesktopAgent");
+    private static string DefaultDataDirectory => AgentPaths.For(AppContext.BaseDirectory);
 
-    private static string Resolve(string path) =>
-        Path.IsPathRooted(path) ? path : Path.Combine(AppContext.BaseDirectory, path);
+    /// <summary>Wo die Daten bis v1.2.0 lagen.</summary>
+    private static string LegacyDataDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        AgentPaths.LegacyFolderName);
+
+    private static string Resolve(string? configured, string folder, string name) =>
+        configured is null
+            ? Path.Combine(folder, name)
+            : Path.IsPathRooted(configured)
+                ? configured
+                : Path.Combine(AppContext.BaseDirectory, configured);
 }

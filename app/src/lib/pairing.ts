@@ -128,9 +128,15 @@ function describeFailure(cause: unknown, host: string): string {
   }
 
   if (cause.status === undefined) {
+    // Drei Ursachen sehen an dieser Stelle gleich aus: kein Rechner, kein Name,
+    // kein Vertrauen. Die dritte ist die unangenehmste, weil der Rechner dabei
+    // antwortet — deshalb steht sie mit dabei und nicht in einer Fußnote.
     return (
-      `${host} antwortet nicht. Läuft der Rechner, und sind beide Geräte im ` +
-      'selben Netz? Die Adresse muss genau so lauten wie im Fenster am Rechner.'
+      `${host} antwortet nicht. Läuft der Agent auf diesem Rechner, und sind ` +
+      'beide Geräte im selben Netz? Die Adresse muss genau so lauten wie im ' +
+      'Fenster am Rechner. Läuft der Rechner ohne Tailscale, koppelt nur der ' +
+      'QR-Code — er bringt das Zertifikat mit, das dieses Gerät vorher ' +
+      'bestätigen muss.'
     )
   }
 

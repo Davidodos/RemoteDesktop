@@ -36,24 +36,26 @@ Heraus kommt `installer\Output\RemoteDesktop-Setup-1.2.0.exe`.
 
 ## Was er tut
 
-1. **Tailscale** herunterladen und still installieren — nur wenn es angehakt ist
-   *und* noch nicht daliegt. Heruntergeladen statt mitgeliefert: eine
-   mitgelieferte Fassung veraltet im Paket, und niemand merkt es. Scheitert der
-   Download, bricht die Installation **nicht** ab; die Einrichtung im Fenster
-   führt dann zum fehlenden Schritt hin.
-2. **Agent** nach `Program Files`, Dienst `RemoteDesktopAgent` anlegen. Der
-   Starttyp kommt aus dem Autostart-Häkchen (`auto` oder `demand`).
-3. **`%ProgramData%\RemoteDesktopAgent`** anlegen — nur für Administratoren und
-   das System. Dort liegen Zertifikat, privater Schlüssel und die Liste der
-   gekoppelten Geräte.
-4. **Client** nach `Program Files\RemoteDesktop\client`, Startmenü-Eintrag,
-   auf Wunsch ein Eintrag unter `HKCU\...\Run`.
-5. Zum Schluss **das Fenster öffnen**, das durch die restliche Einrichtung
-   führt.
+1. **Dateien ablegen**: Fenster, Agent und die Weboberfläche nebeneinander nach
+   `Program Files\RemoteDesktop`, dazu die `appsettings.json` (nur, wenn sie
+   noch nicht da ist).
+2. **`%ProgramFiles%\RemoteDesktop\data`** anlegen — nur für Administratoren und
+   das System. Dort liegen Zertifikat, privater Schlüssel, gekoppelte Geräte und
+   das Netzprofil.
+3. **Startmenü-Eintrag** anlegen.
+4. Zum Schluss **das Fenster öffnen**, das durch die Einrichtung führt.
 
-Deinstalliert wird der Dienst mit `sc stop` und `sc delete`. Die gekoppelten
-Geräte in `%ProgramData%` bleiben absichtlich stehen — wer neu installiert, will
-meist nicht alle Handys neu koppeln.
+Mehr tut er nicht — und das ist seit v1.3.0 der Punkt. Kein Dienst, kein
+Autostart-Eintrag, kein Tailscale, kein gestarteter Agent: was auf diesem
+Rechner aktiv wird, entscheidet die Einrichtung im Fenster
+(`desktop/Pages/SetupPage.cs`). Vier Häkchen im Installer wurden gesetzt, bevor
+irgendjemand die Frage verstanden hatte.
+
+Deinstalliert wird der Dienst mit `sc stop` und `sc delete`, und der Datenordner
+wird über `[UninstallDelete]` mit weggeräumt: was zum Programm gehört, soll auch
+mit ihm verschwinden. Ein **Update** rührt ihn dagegen nicht an — der Installer
+kennt seinen Inhalt nicht, also überstehen Kopplungen und die eigene
+Zertifizierungsstelle jede neue Fassung.
 
 ## Im CI
 

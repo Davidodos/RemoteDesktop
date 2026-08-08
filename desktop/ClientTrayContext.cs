@@ -1,3 +1,4 @@
+using RemoteDesktopClient.Pages;
 using RemoteDesktopClient.Ui;
 
 namespace RemoteDesktopClient;
@@ -68,6 +69,15 @@ public sealed class ClientTrayContext : ApplicationContext
         };
 
         _tray.DoubleClick += async (_, _) => await OpenAsync();
+
+        // Beim allerersten Start führt der Weg ins Fenster und dort in die
+        // Einrichtung. Sonst stünde nach der Installation nur ein Symbol im
+        // Infobereich, und der Rechner täte nichts — richtig eingerichtet ist
+        // er ja noch nicht.
+        if (!SetupState.Done)
+        {
+            _ = OpenAsync(Page.Setup);
+        }
     }
 
     /// <summary>Das eine Fenster, auf der gewünschten Seite.</summary>

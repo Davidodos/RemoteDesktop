@@ -119,7 +119,7 @@ ein Zertifikat für `192.168.178.20` ausstellen würde. Also stellt der Agent es
 sich selbst aus:
 
 - Er legt **einmalig** eine eigene kleine Zertifizierungsstelle an
-  (`C:\ProgramData\RemoteDesktopAgent\agentca.pfx`) und stellt sich damit sein
+  (`C:\Program Files\RemoteDesktop\data\agentca.pfx`) und stellt sich damit sein
   Serverzertifikat aus. Läuft das ab oder ändert sich die Adresse, erneuert er
   es still — du merkst nichts davon.
 - Dein Handy muss dieser Stelle **einmal** vertrauen. Die App führt dich hin:
@@ -141,7 +141,7 @@ Tailscale — dort ist das Zertifikat öffentlich anerkannt.
 
 ## Wechseln geht jederzeit
 
-Der Modus liegt in `C:\ProgramData\RemoteDesktopAgent\setup.json` und lässt sich
+Der Modus liegt in `C:\Program Files\RemoteDesktop\data\setup.json` und lässt sich
 im Fenster umstellen. Danach den Agent einmal neu starten (im Fenster unter
 **Komponenten**), damit er sein Zertifikat auf die neue Adresse ausstellt.
 Gekoppelte Geräte bleiben gekoppelt — die Kopplung hängt an Schlüsseln, nicht an

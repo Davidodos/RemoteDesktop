@@ -26,9 +26,22 @@ public sealed class DevicesPage : PageView
     private readonly TextBlock _code = new(
         "— — —   — — —", Theme.Code, Theme.Text, centered: true);
 
+    /// <summary>
+    /// Kantenlänge des QR-Bildes in logischen Punkten.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** die Kantenlänge kam aus der Höhe des
+    /// Bildfeldes (<c>_qr.Height - 24</c>). Steht das Feld gerade auf 0 —
+    /// und das tut es, solange es noch nie angeordnet wurde —, ergibt das
+    /// <c>-24</c>, und die Erzeugung wirft. Genau das stand am echten Gerät
+    /// im Fenster. Eine feste Größe kann das nicht passieren; nebenbei ist
+    /// der Code auf einem hochauflösenden Bildschirm damit doppelt so scharf.
+    /// </para>
+    /// </summary>
+    private const int QrSide = 200;
+
     private readonly PictureBox _qr = new()
     {
-        Height = 220,
         SizeMode = PictureBoxSizeMode.CenterImage,
         BackColor = Theme.Field,
         Visible = false
@@ -125,8 +138,17 @@ public sealed class DevicesPage : PageView
 
         try
         {
-            _qr.Image = QrImage.Render(pairingUri, _qr.Height - 24);
+            var image = QrImage.Render(pairingUri, LogicalToDeviceUnits(QrSide));
+
+            _qr.Image = image;
+
+            // Das Feld richtet sich nach dem Bild und nicht umgekehrt: die
+            // Kantenlänge ist ein glattes Vielfaches der Modulzahl und deshalb
+            // selten genau die gewünschte.
+            _qr.Height = image.Height + LogicalToDeviceUnits(24);
             _qr.Visible = true;
+
+            Stack.Reflow(_qr);
         }
         catch (Exception failure)
         {

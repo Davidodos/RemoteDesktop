@@ -496,3 +496,52 @@ Dazu zwei Dinge, die die App vorher nicht konnte:
   umbenennen, Verbindung testen, entfernen, ein weiteres koppeln — und danach
   ein Klick zurück auf den Bildschirm. Vorher führte der Weg zurück nur über das
   Trennen
+
+### Nachtrag 08.08.2026 — der Installer entscheidet nichts mehr
+
+Zwei Fehler und ein Umbau.
+
+**Der QR-Code ließ sich nicht erzeugen.** Die Kantenlänge kam aus der Höhe des
+Bildfeldes (`_qr.Height - 24`). Solange das Feld nie angeordnet wurde, steht die
+auf 0 — und `QrImage.Render` bekam `-24`. Jetzt ist die Größe fest (200 logische
+Punkte, DPI-skaliert), und das Feld richtet sich nach dem Bild statt umgekehrt.
+
+**Die Kopplung scheiterte an genau der Stelle, an der sie nicht scheitern
+durfte.** Der Aufruf `POST /api/pair` geht über `https`. Weist sich der Rechner
+mit einem selbst ausgestellten Zertifikat aus, bricht schon dieser erste Aufruf
+ab — und die App meldete „der Rechner antwortet nicht", obwohl er antwortete.
+Bestätigt wurde die Stelle bisher *nach* der Kopplung, also nie. Der QR-Code
+trägt jetzt den Fingerabdruck der Stelle mit (`&ca=…`), und das Handy vertraut
+ihr, bevor es koppelt. Der Fingerabdruck kommt damit den einen Weg, der nicht
+durch das Netz führt: über den Bildschirm.
+
+**Der Installer legt nur noch Dateien ab.** Vier Häkchen — Dienst eintragen,
+Agent beim Hochfahren starten, Fenster beim Anmelden starten, Tailscale
+mitinstallieren — wurden gesetzt, bevor irgendjemand die Frage verstanden hatte,
+und der Agent lief danach, ob gewollt oder nicht. Sie sind weg. Stattdessen gibt
+es die **Einrichtung im Fenster** (`desktop/Pages/SetupPage.cs`), vier Schritte
+in der Reihenfolge, in der die Antworten aufeinander aufbauen:
+
+1. Soll dieser Rechner steuerbar sein, oder nur selbst steuern?
+2. Auf welchem Weg findet das Handy ihn? — und dazu nur die Felder, die dieser
+   Modus braucht. Bei Tailscale mit Installieren, Anmelden und Zertifikat
+   holen an Ort und Stelle
+3. Was startet mit Windows?
+4. Nachsehen und abschließen
+
+Erst der letzte Schritt greift ein, und zwar in **einem** erhöhten Auftrag
+(`AdminTask.Complete`, `setup/SetupRequest.cs`): Netzprofil schreiben, Dienst
+eintragen, Starttyp setzen, starten. Vier einzelne Sprünge wären vier
+Rückfragen von Windows hintereinander, und die klickt niemand aufmerksam durch.
+
+Die Einrichtung steht in der Leiste und ist jederzeit erneut aufrufbar — den
+Agent nachzurüsten oder den Modus zu wechseln ist derselbe Ablauf wie beim
+ersten Mal. Beim allerersten Start öffnet sich das Fenster von allein darauf.
+
+**Ein Datenordner statt zweier.** Schlüssel, Zertifikate, Kopplungen und
+`setup.json` lagen an zwei Orten: neben der `.exe` und in
+`C:\ProgramData\RemoteDesktopAgent`. Jetzt liegt alles in
+`C:\Program Files\RemoteDesktop\data` (`setup/AgentPaths.cs`). Ein Update rührt
+den Ordner nicht an, eine Deinstallation räumt ihn mit weg, und wer von Hand
+aufräumt, löscht einen Ordner statt zwei. Was eine ältere Fassung woanders
+hinterlassen hat, wird beim ersten Start übernommen — verschoben, nicht kopiert.

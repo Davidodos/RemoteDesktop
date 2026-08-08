@@ -23,6 +23,17 @@ public sealed class NetworkPage : PageView
     private readonly ThemedTextBox _address = new("z. B. 192.168.178.33");
     private readonly TextBlock _addressHint = new(string.Empty);
     private readonly ThemedTextBox _coordinator = new(Coordinator.Default.Address);
+
+    /// <summary>
+    /// Die Zeile über dem Koordinator-Feld. Sie wird zusammen mit ihm
+    /// ausgeblendet — eine Beschriftung ohne Feld wäre die schlechtere Hälfte.
+    /// </summary>
+    private readonly TextBlock _coordinatorHint = new(
+        "Eigener Koordinator (Headscale) — nur, wenn du Tailscale nicht über "
+        + "deren Server betreibst.", Theme.Body, Theme.TextDim);
+
+    /// <summary>Der Stapel, in dem beide stecken — er blendet sie aus.</summary>
+    private Stack? _addressBody;
     private readonly ThemedTextBox _trustHost = new("Adresse des anderen Rechners");
     private readonly ThemedButton _suggest = new("Vorschlag");
     private readonly TextBlock _explanation = new(string.Empty);
@@ -102,13 +113,11 @@ public sealed class NetworkPage : PageView
 
         card.Body.Add(_addressHint);
         card.Body.Add(Row.Fill(_address, _suggest));
-
-        card.Body.Add(new TextBlock(
-            "Eigener Koordinator (Headscale) — nur, wenn du Tailscale nicht über "
-            + "deren Server betreibst.", Theme.Body, Theme.TextDim));
-
+        card.Body.Add(_coordinatorHint);
         card.Body.Add(_coordinator);
         card.Body.Add(Row.Buttons(save));
+
+        _addressBody = card.Body;
 
         return card;
     }
@@ -146,8 +155,7 @@ public sealed class NetworkPage : PageView
     }
 
     /// <summary>
-    /// Was zu diesem Modus gehört, wird bedienbar; der Rest wird gesperrt statt
-    /// versteckt. Dass es die Möglichkeit gäbe, ist selbst eine Auskunft.
+    /// Zu sehen ist, was zum gewählten Modus gehört — und sonst nichts.
     /// </summary>
     private void ApplyMode()
     {
@@ -156,9 +164,16 @@ public sealed class NetworkPage : PageView
         // bekommen, solange kein Zertifikat von Tailscale danebenliegt: ein
         // selbst ausgestelltes trägt den Windows-Rechnernamen, und unter dem
         // findet das Handy nichts.
-        _address.Enabled = true;
         _suggest.Enabled = _chosen is NetworkKind.Lan or NetworkKind.Tailscale;
-        _coordinator.Enabled = _chosen == NetworkKind.Tailscale;
+
+        // Ausgeblendet und nicht gesperrt: ein graues Feld sieht aus wie etwas,
+        // das man gleich ausfüllen muss, und lässt die Frage offen, warum es
+        // nicht geht. Der eigene Koordinator gehört zu Tailscale und zu sonst
+        // nichts.
+        var ownCoordinator = _chosen == NetworkKind.Tailscale;
+
+        _addressBody?.Toggle(_coordinatorHint, ownCoordinator);
+        _addressBody?.Toggle(_coordinator, ownCoordinator);
 
         _address.Placeholder = _chosen == NetworkKind.Tailscale
             ? "z. B. pc.tailnet-1234.ts.net"

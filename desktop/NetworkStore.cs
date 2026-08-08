@@ -16,8 +16,31 @@ public static class NetworkStore
     public static string Path => System.IO.Path.Combine(
         Elevation.DataDirectory, NetworkConfig.FileName);
 
-    public static NetworkProfile Read() =>
-        NetworkConfig.Read(File.Exists(Path) ? File.ReadAllText(Path) : null);
+    /// <summary>
+    /// Der Ort bis v1.2.0. Er wird noch gelesen, bis der erste erhöhte Aufruf
+    /// den Umzug erledigt hat — sonst stünde eine bestehende Installation nach
+    /// dem Update da wie eine frische und bekäme die Einrichtung vorgesetzt.
+    /// </summary>
+    private static string LegacyPath => System.IO.Path.Combine(
+        Elevation.LegacyDataDirectory, NetworkConfig.FileName);
+
+    /// <summary>Ob dieser Rechner schon einmal eingerichtet wurde.</summary>
+    public static bool Exists => File.Exists(Path) || File.Exists(LegacyPath);
+
+    public static NetworkProfile Read() => NetworkConfig.Read(Existing());
+
+    private static string? Existing()
+    {
+        foreach (var candidate in new[] { Path, LegacyPath })
+        {
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllText(candidate);
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// Schreibt das Profil. Der Umweg über eine vorbereitete Datei im

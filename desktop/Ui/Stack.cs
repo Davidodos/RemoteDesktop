@@ -127,6 +127,32 @@ public sealed class Stack : Control, IMeasurable
     }
 
     /// <summary>
+    /// Ein Kind ein- oder ausblenden — und zwar **ohne Lücke**.
+    ///
+    /// <para>
+    /// <see cref="Control.Visible"/> allein genügt nicht: der Stapel rechnet
+    /// weiter mit der Höhe des Kindes, und an seiner Stelle bliebe ein leerer
+    /// Streifen stehen. Und abfragen lässt sich die Eigenschaft hier nicht —
+    /// sie ist <c>false</c>, sobald irgendein übergeordnetes Element unsichtbar
+    /// ist, und das trifft auf jede Seite zu, die gerade nicht vorne liegt.
+    /// </para>
+    /// </summary>
+    public void Toggle(Control child, bool shown)
+    {
+        var item = _items.FirstOrDefault(entry => entry.Child == child);
+
+        if (item is null || item.Shown == shown)
+        {
+            return;
+        }
+
+        item.Shown = shown;
+        child.Visible = shown;
+
+        Reflow(this);
+    }
+
+    /// <summary>
     /// Leert den Stapel **und entsorgt seinen Inhalt**. Das ist richtig für
     /// alles, was beim Anzeigen neu entsteht, und falsch für Felder, in die
     /// jemand gerade getippt hat — solche Steuerelemente gehören in einen
@@ -201,15 +227,17 @@ public sealed class Stack : Control, IMeasurable
 
         var inner = width - Padding.Horizontal;
         var height = Padding.Vertical;
+        var first = true;
 
-        for (var index = 0; index < _items.Count; index++)
+        foreach (var item in _items.Where(entry => entry.Shown))
         {
-            if (index > 0)
+            if (!first)
             {
-                height += _items[index].Gap ?? Gap;
+                height += item.Gap ?? Gap;
             }
 
-            height += HeightOf(_items[index].Child, inner);
+            first = false;
+            height += HeightOf(item.Child, inner);
         }
 
         _measuredWidth = width;
@@ -293,15 +321,24 @@ public sealed class Stack : Control, IMeasurable
         }
 
         var y = Padding.Top;
+        var first = true;
 
-        for (var index = 0; index < _items.Count; index++)
+        foreach (var item in _items)
         {
-            if (index > 0)
+            if (!item.Shown)
             {
-                y += _items[index].Gap ?? Gap;
+                item.Y = y;
+                item.Height = 0;
+
+                continue;
             }
 
-            var item = _items[index];
+            if (!first)
+            {
+                y += item.Gap ?? Gap;
+            }
+
+            first = false;
 
             item.Y = y;
             item.Height = HeightOf(item.Child, width);
@@ -320,7 +357,7 @@ public sealed class Stack : Control, IMeasurable
 
         Clamp();
 
-        foreach (var item in _items)
+        foreach (var item in _items.Where(entry => entry.Shown))
         {
             item.Child.SetBounds(Padding.Left, item.Y - _offset, width, item.Height);
         }
@@ -342,7 +379,7 @@ public sealed class Stack : Control, IMeasurable
 
         try
         {
-            foreach (var item in _items)
+            foreach (var item in _items.Where(entry => entry.Shown))
             {
                 item.Child.Top = item.Y - _offset;
             }
@@ -521,5 +558,8 @@ public sealed class Stack : Control, IMeasurable
         public int Y { get; set; }
 
         public int Height { get; set; }
+
+        /// <summary>Ob es mitgerechnet wird. Siehe <see cref="Stack.Toggle"/>.</summary>
+        public bool Shown { get; set; } = true;
     }
 }

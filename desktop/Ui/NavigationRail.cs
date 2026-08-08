@@ -9,6 +9,7 @@ public enum Page
     Remote,
     Devices,
     Network,
+    Setup,
     Settings
 }
 
@@ -36,6 +37,10 @@ public sealed class NavigationRail : Control
         (Page.Remote, "Fernsteuerung"),
         (Page.Devices, "Geräte"),
         (Page.Network, "Netz"),
+        // Sie steht in der Leiste und nicht nur beim ersten Start: genau die
+        // Frage, die man beim ersten Mal falsch beantwortet, wäre sonst die
+        // unerreichbare.
+        (Page.Setup, "Einrichtung"),
         (Page.Settings, "Einstellungen")
     ];
 

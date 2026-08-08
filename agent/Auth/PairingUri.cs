@@ -16,7 +16,21 @@ namespace RemoteDesktopAgent.Auth;
 /// </summary>
 public static partial class PairingUri
 {
-    public static string Build(string host, int port, string code)
+    /// <param name="caFingerprint">
+    /// Der Fingerabdruck der eigenen Zertifizierungsstelle — nur gesetzt, wenn
+    /// dieser Rechner sich sein Zertifikat selbst ausgestellt hat.
+    ///
+    /// <para>
+    /// **Warum er hierhin gehört:** ohne ihn kommt das Handy nicht einmal bis
+    /// zur Kopplung. Der Aufruf geht über <c>https</c>, das Zertifikat kennt
+    /// niemand, und die Verbindung scheitert, bevor irgendein Code geprüft
+    /// wird — von außen sieht das aus wie ein Rechner, der nicht antwortet.
+    /// Über den QR-Code kommt der Fingerabdruck den einen Weg, der nicht durch
+    /// das Netz führt: über den Bildschirm. Damit kann das Handy die Stelle
+    /// holen, prüfen und bestätigen, und *danach* koppeln.
+    /// </para>
+    /// </param>
+    public static string Build(string host, int port, string code, string? caFingerprint = null)
     {
         var trimmed = (host ?? string.Empty).Trim();
 
@@ -44,7 +58,11 @@ public static partial class PairingUri
         // Namen, den es nicht gibt.
         var name = Uri.EscapeDataString(trimmed.ToLowerInvariant());
 
-        return $"remotedesktop://pair?host={name}&port={port}&code={code}";
+        var uri = $"remotedesktop://pair?host={name}&port={port}&code={code}";
+
+        return string.IsNullOrWhiteSpace(caFingerprint)
+            ? uri
+            : $"{uri}&ca={Uri.EscapeDataString(caFingerprint.Trim().ToLowerInvariant())}";
     }
 
     [GeneratedRegex(@"^\d{6}$")]

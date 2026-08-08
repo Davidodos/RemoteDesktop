@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 import { DEFAULT_AGENT_PORT, buildPairingUri, parsePairingUri } from './pairingUri.ts'
 
 /**
@@ -90,5 +90,33 @@ describe('buildPairingUri', () => {
     expect(parsePairingUri(buildPairingUri({ host: 'a b', port: 8443, code: '111111' })).host).toBe(
       'a b',
     )
+  })
+})
+
+/**
+ * Der Fingerabdruck der eigenen Zertifizierungsstelle. Er steht im QR-Code,
+ * weil er sonst zu spät käme — siehe `pairingUri.ts`.
+ */
+describe('das Zertifikat aus dem QR-Code', () => {
+  test('wird gelesen und wieder geschrieben', () => {
+    const ca = 'a'.repeat(64)
+    const uri = buildPairingUri({ host: 'pc.ts.net', port: 8443, code: '123456', caFingerprint: ca })
+
+    expect(parsePairingUri(uri).caFingerprint).toBe(ca)
+  })
+
+  test('fehlt bei einem Rechner mit Zertifikat von Tailscale', () => {
+    const uri = buildPairingUri({ host: 'pc.ts.net', port: 8443, code: '123456' })
+
+    expect(parsePairingUri(uri).caFingerprint).toBeUndefined()
+  })
+
+  test('ein unbrauchbarer Wert hält die Kopplung nicht auf', () => {
+    // Der Rechner ist deshalb nicht der falsche. Er wird verworfen, und dann
+    // läuft es wie bei einem Rechner mit öffentlichem Zertifikat.
+    const target = parsePairingUri('remotedesktop://pair?host=pc.ts.net&code=123456&ca=kaputt')
+
+    expect(target.caFingerprint).toBeUndefined()
+    expect(target.host).toBe('pc.ts.net')
   })
 })

@@ -22,6 +22,16 @@ export interface PairingTarget {
   host: string
   port: number
   code: string
+  /**
+   * Fingerabdruck der Zertifizierungsstelle, wenn der Rechner sich sein
+   * Zertifikat selbst ausgestellt hat.
+   *
+   * Er steht im QR-Code, weil er sonst zu spät käme: die Kopplung selbst läuft
+   * über `https`, und ohne bestätigte Stelle scheitert sie, bevor der Code
+   * überhaupt geprüft wird. Über den Bildschirm kommt er den einen Weg, der
+   * nicht durch das Netz führt — genau das macht ihn zum Vergleichswert.
+   */
+  caFingerprint?: string
 }
 
 export function buildPairingUri(target: PairingTarget): string {
@@ -29,6 +39,7 @@ export function buildPairingUri(target: PairingTarget): string {
     host: target.host,
     port: String(target.port),
     code: target.code,
+    ...(target.caFingerprint === undefined ? {} : { ca: target.caFingerprint }),
   })
 
   return `${SCHEME}//${ACTION}?${query.toString()}`
@@ -62,7 +73,26 @@ export function parsePairingUri(scanned: string): PairingTarget {
     throw new PairingUriError('Der Kopplungscode im QR-Code besteht nicht aus sechs Ziffern.')
   }
 
-  return { host, port: readPort(url.searchParams.get('port')), code }
+  return {
+    host,
+    port: readPort(url.searchParams.get('port')),
+    code,
+    ...readFingerprint(url.searchParams.get('ca')),
+  }
+}
+
+/**
+ * Der Fingerabdruck aus dem QR-Code — 64 Hexzeichen oder gar nichts.
+ *
+ * Ein unbrauchbarer Wert ist kein Grund, die Kopplung abzubrechen: der Rechner
+ * ist deshalb nicht der falsche. Er wird verworfen, und dann läuft es wie bei
+ * einem Rechner mit Zertifikat von Tailscale — die Kopplung sagt selbst, wenn
+ * etwas zu bestätigen ist.
+ */
+function readFingerprint(raw: string | null): { caFingerprint?: string } {
+  const value = raw?.trim().toLowerCase() ?? ''
+
+  return /^[0-9a-f]{64}$/.test(value) ? { caFingerprint: value } : {}
 }
 
 export class PairingUriError extends Error {

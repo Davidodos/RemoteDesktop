@@ -800,3 +800,129 @@ public class InventoryTests
         }
     }
 }
+
+/// <summary>
+/// Wo die Daten liegen. Ein Ordner statt zweier — und ein Weg von dort, wo sie
+/// bis v1.2.0 lagen, hierher.
+/// </summary>
+public class AgentPathsTests
+{
+    [Fact]
+    public void Der_Datenordner_liegt_neben_dem_Programm()
+    {
+        Assert.Equal(
+            Path.Combine("C:", "Program Files", "RemoteDesktop", "data"),
+            AgentPaths.For(Path.Combine("C:", "Program Files", "RemoteDesktop")));
+    }
+
+    [Fact]
+    public void Beide_alten_Orte_werden_beruecksichtigt()
+    {
+        var moves = AgentPaths.Moves("/app", "/legacy");
+
+        // Der Schlüssel lag neben der .exe, das Zertifikat in ProgramData.
+        Assert.Contains(moves, move => move.From == Path.Combine("/app", "agentkey.txt"));
+        Assert.Contains(moves, move => move.From == Path.Combine("/legacy", "cert.crt"));
+        Assert.All(moves, move => Assert.StartsWith(Path.Combine("/app", "data"), move.To));
+    }
+
+    [Fact]
+    public void Umgezogen_wird_nur_was_hier_noch_fehlt()
+    {
+        // Arrange — eine alte Installation mit Schlüssel und Kopplungen.
+        var root = Directory.CreateTempSubdirectory().FullName;
+        var app = Path.Combine(root, "app");
+        var legacy = Path.Combine(root, "legacy");
+
+        Directory.CreateDirectory(app);
+        Directory.CreateDirectory(legacy);
+        Directory.CreateDirectory(AgentPaths.For(app));
+
+        File.WriteAllText(Path.Combine(app, "agentkey.txt"), "alter Schlüssel");
+        File.WriteAllText(Path.Combine(legacy, "cert.crt"), "altes Zertifikat");
+        File.WriteAllText(Path.Combine(AgentPaths.For(app), "clients.json"), "die neuen");
+        File.WriteAllText(Path.Combine(legacy, "clients.json"), "die alten");
+
+        // Act
+        var adopted = AgentPaths.Adopt(app, legacy);
+
+        // Assert
+        Assert.Equal("alter Schlüssel", File.ReadAllText(Path.Combine(AgentPaths.For(app), "agentkey.txt")));
+        Assert.Equal("altes Zertifikat", File.ReadAllText(Path.Combine(AgentPaths.For(app), "cert.crt")));
+
+        // Was hier schon steht, gehört zur laufenden Installation und bleibt.
+        Assert.Equal("die neuen", File.ReadAllText(Path.Combine(AgentPaths.For(app), "clients.json")));
+
+        // Verschoben, nicht kopiert: sonst gäbe es weiter zwei Orte.
+        Assert.False(File.Exists(Path.Combine(app, "agentkey.txt")));
+        Assert.Contains("agentkey.txt", adopted);
+
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public void Ein_Pfad_aus_einer_alten_Konfiguration_wird_umgebogen()
+    {
+        // Die appsettings.json überlebt ein Update — der Pfad darin nicht.
+        Assert.Equal(
+            Path.Combine("/app/data", "cert.crt"),
+            AgentPaths.Redirect(Path.Combine("/legacy", "cert.crt"), "/app/data", "/legacy"));
+    }
+
+    [Fact]
+    public void Ein_selbst_eingetragener_Pfad_bleibt_stehen()
+    {
+        // Wer etwas Eigenes einträgt, meint es auch so.
+        Assert.Equal(
+            "/eigenes/cert.crt",
+            AgentPaths.Redirect("/eigenes/cert.crt", "/app/data", "/legacy"));
+
+        Assert.Null(AgentPaths.Redirect(null, "/app/data", "/legacy"));
+    }
+}
+
+/// <summary>
+/// Der Abschluss der Einrichtung — ein Auftrag, eine Rückfrage von Windows.
+/// </summary>
+public class SetupRequestTests
+{
+    [Fact]
+    public void Ein_Auftrag_uebersteht_den_Weg_ueber_die_Datei()
+    {
+        // Arrange
+        var request = new SetupRequest(
+            new NetworkProfile(NetworkKind.Lan, "192.168.178.33", Coordinator.Default),
+            AgentSetup.Automatic);
+
+        // Act
+        var read = SetupRequest.Read(request.Write());
+
+        // Assert
+        Assert.NotNull(read);
+        Assert.Equal(AgentSetup.Automatic, read.Agent);
+        Assert.Equal(NetworkKind.Lan, read.Profile.Kind);
+        Assert.Equal("192.168.178.33", read.Profile.Address);
+    }
+
+    [Fact]
+    public void Unlesbares_richtet_nichts_ein()
+    {
+        // Eine halb verstandene Einrichtung wäre schlimmer als keine — sie
+        // richtete etwas ein, das niemand so gewählt hat.
+        Assert.Null(SetupRequest.Read("{"));
+        Assert.Null(SetupRequest.Read(""));
+        Assert.Null(SetupRequest.Read(null));
+        Assert.Null(SetupRequest.Read("{\"agent\":\"Automatic\"}"));
+    }
+
+    [Fact]
+    public void Ein_unbekannter_Agent_Wunsch_richtet_keinen_ein()
+    {
+        // Im Zweifel nichts eintragen: ein Dienst, den niemand bestellt hat,
+        // ist schlimmer als ein fehlender.
+        var read = SetupRequest.Read("{\"network\":\"{}\",\"agent\":\"vielleicht\"}");
+
+        Assert.NotNull(read);
+        Assert.Equal(AgentSetup.None, read.Agent);
+    }
+}

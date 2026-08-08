@@ -55,7 +55,9 @@ public static class PairingEndpoints
                 // Environment.MachineName: Letzterer ist der Windows-Name und
                 // hat mit dem Tailnet-Namen nichts zu tun. Ein QR mit dem
                 // falschen Namen sieht gültig aus und führt ins Leere.
-                pairingUri = hostName is null ? null : PairingUri.Build(hostName, port, code)
+                pairingUri = hostName is null
+                    ? null
+                    : PairingUri.Build(hostName, port, code, caFingerprint)
             });
         });
 

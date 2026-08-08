@@ -30,6 +30,7 @@ public sealed class ShellWindow : Form
 
     private readonly Dictionary<Page, Control> _pages = [];
     private readonly RemotePage _remote;
+    private readonly SetupPage _setup;
 
     /// <summary>
     /// Wie oft das Fenster von allein nachsieht. Zwei Sekunden sind der
@@ -70,11 +71,19 @@ public sealed class ShellWindow : Form
         _remote = new RemotePage(appDirectory);
         _remote.FullscreenToggled += ToggleFullscreen;
 
+        // Ohne Netzprofil ist dieser Rechner noch nie eingerichtet worden —
+        // dann führt der erste Blick in den Assistenten und nicht in eine
+        // Übersicht, auf der alles fehlt.
+        _current = SetupState.Done ? Page.Overview : Page.Setup;
+
+        _setup = new SetupPage(probe, autostart, () => ShowPageAsync(Page.Overview));
+
         Register(Page.Overview, new OverviewPage(probe, appDirectory, PerformAsync));
         Register(Page.Remote, _remote);
         Register(Page.Devices, new DevicesPage(agent));
         Register(Page.Network, new NetworkPage(probe));
-        Register(Page.Settings, new SettingsPage(autostart));
+        Register(Page.Setup, _setup);
+        Register(Page.Settings, new SettingsPage(autostart, () => _ = ShowPageAsync(Page.Setup)));
 
         _rail.Picked += page => _ = ShowPageAsync(page);
 
@@ -82,7 +91,7 @@ public sealed class ShellWindow : Form
         Controls.Add(_rail);
         Controls.Add(_status);
 
-        _rail.Highlight(Page.Overview);
+        _rail.Highlight(_current);
 
         _pulse.Interval = (int)Beat.TotalMilliseconds;
         _pulse.Tick += (_, _) => _ = TickAsync();
@@ -137,7 +146,7 @@ public sealed class ShellWindow : Form
     private void Register(Page page, Control view)
     {
         view.Dock = DockStyle.Fill;
-        view.Visible = page == Page.Overview;
+        view.Visible = page == _current;
 
         if (view is PageView typed)
         {
@@ -187,6 +196,13 @@ public sealed class ShellWindow : Form
 
         _current = page;
         _rail.Highlight(page);
+
+        // Wer die Einrichtung aus der Leiste aufruft, will von vorn anfangen —
+        // und nicht dort weitermachen, wo er beim letzten Mal ausgestiegen ist.
+        if (page == Page.Setup)
+        {
+            _setup.Restart();
+        }
 
         if (page == Page.Remote)
         {

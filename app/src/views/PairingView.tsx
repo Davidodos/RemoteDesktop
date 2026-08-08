@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CertificateTrustStep } from './CertificateTrustStep.tsx'
+import { fetchAgentCertificate } from '../lib/certificateTrust.ts'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
 import { suggestAlias } from '../lib/deviceNames.ts'
 import { pairWithAgent } from '../lib/pairing.ts'
@@ -70,8 +71,10 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
       <NameStep
         target={target}
         onBack={() => setTarget(undefined)}
-        onPaired={(devices, device) => {
-          if (device.caFingerprint === undefined) {
+        onPaired={(devices, device, trusted) => {
+          // Nichts zu bestätigen — oder eben schon bestätigt, bevor gekoppelt
+          // wurde. Ein zweites Mal danach zu fragen wäre nur Weg.
+          if (device.caFingerprint === undefined || trusted) {
             onPaired(devices, device)
 
             return
@@ -132,7 +135,7 @@ function NameStep({
   onBack,
 }: {
   target: PairingTarget
-  onPaired: (devices: Device[], paired: Device) => void
+  onPaired: (devices: Device[], paired: Device, trusted: boolean) => void
   onBack: () => void
 }): React.JSX.Element {
   const [label, setLabel] = useState(defaultLabel())
@@ -140,11 +143,38 @@ function NameStep({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
 
+  const platform = getPlatform()
+
+  /**
+   * Erst vertrauen, dann koppeln.
+   *
+   * <p>
+   * **Der Befund dahinter:** die Kopplung geht über `https`. Weist sich der
+   * Rechner mit einem selbst ausgestellten Zertifikat aus, scheitert schon
+   * dieser erste Aufruf — und die App meldete „der Rechner antwortet nicht",
+   * obwohl er antwortete. Bestätigt wurde die Stelle erst *nach* der Kopplung,
+   * also nie. Der Fingerabdruck aus dem QR-Code dreht die Reihenfolge um.
+   * </p>
+   */
+  const trust = async (): Promise<boolean> => {
+    if (target.caFingerprint === undefined || !platform.trust.available) {
+      return false
+    }
+
+    const certificate = await fetchAgentCertificate(target.host, target.caFingerprint)
+
+    await platform.trust.install(certificate.base64, certificate.fingerprint)
+
+    return true
+  }
+
   const submit = async (): Promise<void> => {
     setBusy(true)
     setError(undefined)
 
     try {
+      const trusted = await trust()
+
       const paired = await pairWithAgent({
         host: target.host,
         port: target.port,
@@ -157,7 +187,7 @@ function NameStep({
       const device =
         alias.trim().length > 0 ? { ...paired, alias: alias.trim() } : paired
 
-      onPaired(saveLocalDevice(device), device)
+      onPaired(saveLocalDevice(device), device, trusted)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))
     } finally {
@@ -183,6 +213,14 @@ function NameStep({
         Der Rechner unter <code>{target.host}</code> ist erkannt. Fehlen nur noch die
         Namen.
       </p>
+
+      {target.caFingerprint !== undefined && (
+        <p>
+          Dieser Rechner läuft ohne Tailscale und weist sich mit einem selbst
+          ausgestellten Zertifikat aus. Beim Koppeln fragt Android einmal nach, ob du
+          der Stelle vertraust — der Fingerabdruck stand im QR-Code und wird geprüft.
+        </p>
+      )}
 
       {error !== undefined && <p className="error-text">{error}</p>}
 

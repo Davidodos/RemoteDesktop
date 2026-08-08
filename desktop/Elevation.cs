@@ -30,7 +30,16 @@ public enum AdminTask
     WriteNetwork,
 
     /// <summary>Den Starttyp des Dienstes umstellen.</summary>
-    ServiceStartType
+    ServiceStartType,
+
+    /// <summary>
+    /// Die ganze Einrichtung in einem Zug: Netzprofil schreiben, Dienst
+    /// eintragen, Starttyp setzen, starten.
+    ///
+    /// Einer statt vier, weil jeder einzelne Sprung eine Rückfrage von Windows
+    /// kostet — siehe <see cref="RemoteDesktopSetup.SetupRequest"/>.
+    /// </summary>
+    Complete
 }
 
 /// <summary>
@@ -54,10 +63,21 @@ public static class Elevation
     public const string TaskSwitch = "--admin-task";
     public const string ResultSwitch = "--result";
 
-    /// <summary>Der Ordner des Agents. Dort liegt alles, was Rechte verlangt.</summary>
-    public static string DataDirectory { get; } = Path.Combine(
+    /// <summary>
+    /// Der Datenordner: <c>data\</c> neben dem Programm. Dort liegt alles, was
+    /// Rechte verlangt — Schlüssel, Zertifikate, Kopplungen, Netzprofil.
+    ///
+    /// <para>
+    /// Ein Ordner statt zweier: siehe <see cref="AgentPaths"/>. Lesen darf hier
+    /// jeder, schreiben nur der erhöhte Aufruf.
+    /// </para>
+    /// </summary>
+    public static string DataDirectory { get; } = AgentPaths.For(AppContext.BaseDirectory);
+
+    /// <summary>Wo die Daten bis v1.2.0 lagen — nur noch zum Übernehmen.</summary>
+    public static string LegacyDataDirectory { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "RemoteDesktopAgent");
+        AgentPaths.LegacyFolderName);
 
     public static bool IsElevated =>
         OperatingSystem.IsWindows()
@@ -118,6 +138,12 @@ public static class Elevation
             return 2;
         }
 
+        // Der erhöhte Aufruf ist die einzige Gelegenheit, in beide Ordner zu
+        // schreiben. Also zieht er nebenbei um, was eine ältere Fassung
+        // hinterlassen hat — auch dann, wenn der Agent nie startet, weil er
+        // gar nicht eingerichtet ist.
+        AgentPaths.Adopt(AppContext.BaseDirectory, LegacyDataDirectory);
+
         var argument = Argument(args);
         var result = Perform(task.Value, argument);
 
@@ -152,8 +178,75 @@ public static class Elevation
         AdminTask.ServiceStartType => Sc(
             ["config", Autostart.ServiceName, "start=", argument == "auto" ? "auto" : "demand"]),
         AdminTask.FetchCertificate => FetchCertificate(argument),
+        AdminTask.Complete => Complete(argument),
         _ => WriteNetwork(argument)
     };
+
+    /// <summary>
+    /// Der Abschluss der Einrichtung, erhöht und in einem Stück.
+    ///
+    /// <para>
+    /// Die Reihenfolge ist nicht beliebig: erst das Netzprofil, dann der Dienst.
+    /// Der Agent liest das Profil beim Start — stünde es noch nicht da, liefe er
+    /// mit einem Zertifikat auf den falschen Namen los, und der QR-Code enthielte
+    /// eine Adresse, die niemand erreicht.
+    /// </para>
+    /// </summary>
+    private static RunResult Complete(string preparedFile)
+    {
+        SetupRequest? request;
+
+        try
+        {
+            request = SetupRequest.Read(File.ReadAllText(preparedFile));
+        }
+        catch (Exception failure)
+        {
+            return new RunResult(-1, string.Empty, failure.Message);
+        }
+
+        if (request is null)
+        {
+            return new RunResult(
+                -1, string.Empty, "Die vorbereitete Einrichtung war nicht lesbar.");
+        }
+
+        try
+        {
+            Directory.CreateDirectory(DataDirectory);
+
+            File.WriteAllText(
+                Path.Combine(DataDirectory, NetworkConfig.FileName),
+                NetworkConfig.Write(request.Profile.Normalized()));
+        }
+        catch (Exception failure)
+        {
+            return new RunResult(-1, string.Empty, $"Das Netzprofil blieb ungeschrieben: {failure.Message}");
+        }
+
+        if (request.Agent == AgentSetup.None)
+        {
+            return new RunResult(0, "Eingerichtet — ohne Agent, dieser Rechner steuert nur.", string.Empty);
+        }
+
+        var installed = InstallService(
+            request.Agent == AgentSetup.Automatic ? "auto" : "demand");
+
+        if (!installed.Ok)
+        {
+            return installed;
+        }
+
+        var started = Tolerate(
+            Sc(["start", Autostart.ServiceName]), AlreadyRunning, "Der Agent läuft bereits.");
+
+        return started.Ok
+            ? new RunResult(0, "Eingerichtet. Der Agent läuft.", string.Empty)
+            : new RunResult(
+                -1,
+                string.Empty,
+                "Eingerichtet, aber der Agent ließ sich nicht starten: " + started.Message);
+    }
 
     /// <summary>
     /// Der Dienst wird angelegt und beschrieben, aber nicht gestartet — das ist
@@ -184,6 +277,18 @@ public static class Elevation
             "start=", start,
             "DisplayName=", "RemoteDesktop Agent"
         ]);
+
+        // 1073: den Dienst gibt es schon. Das ist kein Fehlschlag, sondern der
+        // Normalfall beim erneuten Durchlaufen der Einrichtung — dann wird der
+        // vorhandene Eintrag nachgezogen statt ein zweiter angelegt.
+        if (created.ExitCode == AlreadyExists)
+        {
+            created = Sc([
+                "config", Autostart.ServiceName,
+                "binPath=", binary,
+                "start=", start
+            ]);
+        }
 
         if (!created.Ok)
         {
@@ -249,6 +354,9 @@ public static class Elevation
             return new RunResult(-1, string.Empty, failure.Message);
         }
     }
+
+    /// <summary>Windows-Fehler 1073: den Dienst gibt es schon.</summary>
+    private const int AlreadyExists = 1073;
 
     /// <summary>Windows-Fehler 1056: der Dienst läuft schon.</summary>
     private const int AlreadyRunning = 1056;

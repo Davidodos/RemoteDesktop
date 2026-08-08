@@ -84,4 +84,22 @@ public class PairingUriTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => PairingUri.Build("pc", port, "123456"));
     }
+
+    [Fact]
+    public void Ein_selbst_ausgestelltes_Zertifikat_bringt_seinen_Fingerabdruck_mit()
+    {
+        // Ohne ihn kommt das Handy nicht einmal bis zur Kopplung: die läuft über
+        // https, und das Zertifikat kennt niemand. Über den Bildschirm kommt der
+        // Fingerabdruck den einen Weg, der nicht durch das Netz führt.
+        var uri = PairingUri.Build("pc.example.ts.net", 8443, "123456", "AABB");
+
+        Assert.EndsWith("&ca=aabb", uri);
+    }
+
+    [Fact]
+    public void Mit_Zertifikat_von_Tailscale_gibt_es_nichts_zu_bestaetigen()
+    {
+        Assert.DoesNotContain("ca=", PairingUri.Build("pc.example.ts.net", 8443, "123456"));
+        Assert.DoesNotContain("ca=", PairingUri.Build("pc.example.ts.net", 8443, "123456", "  "));
+    }
 }

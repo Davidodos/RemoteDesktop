@@ -2,7 +2,7 @@
 
 > **Der übliche Weg ist seit Phase 16 der Installer** (`installer/README.md`):
 > er kopiert die Dateien, legt den Dienst an, setzt die Rechte auf
-> `%ProgramData%\RemoteDesktopAgent` und führt danach durch Tailscale,
+> `%ProgramFiles%\RemoteDesktop\data` und führt danach durch Tailscale,
 > Zertifikat und Kopplung. Diese Anleitung bleibt der Weg von Hand — für den
 > eigenen Aufbau, für eine Fehlersuche und als Beschreibung dessen, was der
 > Installer tut.
@@ -36,7 +36,7 @@ Geräte) und gelegentlich `.update-attempt-*`.
 
 > `C:\RemoteDesktopAgent\` darf man jederzeit komplett leeren und neu befüllen.
 > Der Preis ist, dass `agentkey.txt` und `clients.json` mitgehen: **alle Geräte
-> müssen danach neu koppeln.** `C:\ProgramData\RemoteDesktopAgent\` dagegen
+> müssen danach neu koppeln.** `C:\Program Files\RemoteDesktop\data\` dagegen
 > stehen lassen — dort liegt nur das Zertifikat, und es neu zu ziehen bringt
 > nichts, kostet aber ein Let's-Encrypt-Kontingent.
 
@@ -61,18 +61,18 @@ Browser die Verbindung, weil die App über HTTPS von der NAS kommt.
 PowerShell **als Administrator**:
 
 ```powershell
-mkdir C:\ProgramData\RemoteDesktopAgent -Force
-cd C:\ProgramData\RemoteDesktopAgent
+mkdir C:\Program Files\RemoteDesktop\data -Force
+cd C:\Program Files\RemoteDesktop\data
 tailscale cert --cert-file cert.crt --key-file cert.key pc.tail1234.ts.net
 ```
 
 `pc.tail1234.ts.net` durch den Namen aus Schritt 2 ersetzen.
 
-`C:\ProgramData` vererbt Leserechte an `Users`, der Agent kommt also normalerweise
+`C:\Program Files` vererbt Leserechte an `Users`, der Agent kommt also normalerweise
 an den Schlüssel. Falls er beim Start doch über `cert.key` klagt:
 
 ```powershell
-icacls C:\ProgramData\RemoteDesktopAgent\cert.key /grant "${env:USERNAME}:(R)"
+icacls C:\Program Files\RemoteDesktop\data\cert.key /grant "${env:USERNAME}:(R)"
 ```
 
 > Die geschweiften Klammern sind nötig — ohne sie zieht PowerShell den
@@ -165,7 +165,7 @@ Als Administrator:
 
 ```powershell
 $renew = New-ScheduledTaskAction -Execute "tailscale" `
-  -Argument "cert --cert-file C:\ProgramData\RemoteDesktopAgent\cert.crt --key-file C:\ProgramData\RemoteDesktopAgent\cert.key pc.tail1234.ts.net"
+  -Argument "cert --cert-file C:\Program Files\RemoteDesktop\data\cert.crt --key-file C:\Program Files\RemoteDesktop\data\cert.key pc.tail1234.ts.net"
 Register-ScheduledTask -TaskName "RemoteDesktopAgent-Cert" `
                        -Action $renew `
                        -Trigger (New-ScheduledTaskTrigger -Daily -At 4am) `

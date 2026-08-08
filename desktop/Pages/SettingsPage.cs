@@ -26,10 +26,13 @@ public sealed class SettingsPage : PageView
 
     private ReleaseOffer? _offer;
 
-    public SettingsPage(IAutostartHost autostart)
+    private readonly Action _openSetup;
+
+    public SettingsPage(IAutostartHost autostart, Action openSetup)
         : base("Einstellungen", "Start, Aktualisierung und was sonst selten gebraucht wird.")
     {
         _autostart = autostart;
+        _openSetup = openSetup;
 
         _updateState = new TextBlock($"Fassung {ClientUpdate.InstalledVersion()}");
 
@@ -46,6 +49,7 @@ public sealed class SettingsPage : PageView
         _updateAct.Click += async (_, _) => await UpdateStepAsync();
 
         Body.Add(AutostartCard());
+        Body.Add(SetupCard());
         Body.Add(UpdateCard());
         Body.Add(AboutCard());
     }
@@ -80,6 +84,28 @@ public sealed class SettingsPage : PageView
         var card = new Card("Beim Anmelden starten");
 
         card.Body.Add(_modes);
+
+        return card;
+    }
+
+    /// <summary>
+    /// Der Weg zurück in die Einrichtung. Sie ist kein einmaliger Vorgang: den
+    /// Agent später nachzurüsten oder den Netzmodus zu wechseln ist derselbe
+    /// Ablauf wie beim ersten Mal.
+    /// </summary>
+    private Card SetupCard()
+    {
+        var card = new Card("Einrichtung");
+        var again = new ThemedButton("Einrichtung erneut durchführen");
+
+        again.Click += (_, _) => _openSetup();
+
+        card.Body.Add(new TextBlock(
+            "Nachträglich den Agent einrichten, den Netzmodus wechseln oder die "
+            + "Adresse ändern — dieselben vier Fragen wie beim ersten Start. Die "
+            + "Adresse allein steht auch unter „Netz“."));
+
+        card.Body.Add(Row.Buttons(again));
 
         return card;
     }
