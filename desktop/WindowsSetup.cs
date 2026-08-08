@@ -88,9 +88,16 @@ public sealed class WindowsAutostart : IAutostartHost
 
     private bool ReadClientEntry()
     {
-        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey);
 
-        return key?.GetValue(Autostart.ClientEntryName) is not null;
+            return key?.GetValue(Autostart.ClientEntryName) is not null;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 }
 
@@ -196,24 +203,67 @@ public static class AgentService
     /// Ob Windows die Aufgabe kennt.
     ///
     /// <para>
-    /// Zwei Wege, weil beide für sich unzuverlässig sind: die Registry der
-    /// Aufgabenplanung ist lesbar, aber undokumentiert, und die Datei unter
-    /// <c>System32\Tasks</c> ist je nach Rechtevergabe nicht lesbar. Findet
-    /// einer von beiden sie, ist sie da.
+    /// **Der Befund dahinter:** der erste Versuch las den Schlüssel der
+    /// Aufgabenplanung unter <c>HKLM\…\TaskCache\Tree</c>. Den darf ein
+    /// gewöhnlicher Benutzer nicht öffnen — und <c>OpenSubKey</c> liefert dann
+    /// nicht <c>null</c>, sondern **wirft**. Am echten Gerät stand deshalb eine
+    /// leere Übersichtsseite und danach ein Absturzfenster.
+    /// </para>
+    ///
+    /// <para>
+    /// Gefragt wird jetzt <c>schtasks</c> selbst — das darf jeder, und es ist
+    /// dieselbe Auskunft, die auch das Anlegen gibt. Weil dafür ein Programm
+    /// startet, gilt die Antwort ein paar Sekunden; nach jedem Handgriff wird
+    /// sie mit <see cref="Forget"/> weggeworfen.
     /// </para>
     /// </summary>
     public static bool Installed
     {
         get
         {
-            using var key = Registry.LocalMachine.OpenSubKey(
-                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\"
-                + AgentTask.Name);
+            if (_known is { } remembered && DateTime.UtcNow - _asked < Memory)
+            {
+                return remembered;
+            }
 
-            return key is not null
-                   || File.Exists(Path.Combine(
-                       Environment.SystemDirectory, "Tasks", AgentTask.Name));
+            var found = Query();
+
+            _known = found;
+            _asked = DateTime.UtcNow;
+
+            return found;
         }
+    }
+
+    /// <summary>Die gemerkte Antwort wegwerfen — nach jedem Eingriff.</summary>
+    public static void Forget() => _known = null;
+
+    /// <summary>Wie lange die Antwort gilt. Der Takt des Fensters fragt alle zwei Sekunden.</summary>
+    private static readonly TimeSpan Memory = TimeSpan.FromSeconds(5);
+
+    private static bool? _known;
+    private static DateTime _asked;
+
+    private static bool Query()
+    {
+        // Die Datei zuerst: kein Prozessstart, und lesen darf sie in der Regel
+        // jeder. Was sie nicht beantwortet, beantwortet schtasks.
+        try
+        {
+            if (File.Exists(Path.Combine(Environment.SystemDirectory, "Tasks", AgentTask.Name)))
+            {
+                return true;
+            }
+        }
+        catch (Exception)
+        {
+            // Kein Leserecht auf den Ordner. Dann eben der andere Weg.
+        }
+
+        return ProcessRunner.Run(
+            Path.Combine(Environment.SystemDirectory, "schtasks.exe"),
+            ["/Query", "/TN", AgentTask.Name],
+            TimeSpan.FromSeconds(10)).Ok;
     }
 
     /// <summary>
@@ -265,10 +315,19 @@ public static class AgentService
     {
         get
         {
-            using var key = Registry.LocalMachine.OpenSubKey(
-                $@"SYSTEM\CurrentControlSet\Services\{Autostart.ServiceName}");
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(
+                    $@"SYSTEM\CurrentControlSet\Services\{Autostart.ServiceName}");
 
-            return key is not null;
+                return key is not null;
+            }
+            catch (Exception)
+            {
+                // Ein gesperrter Schlüssel ist keine Auskunft, aber ganz sicher
+                // kein Grund abzustürzen — siehe den Befund bei `Installed`.
+                return false;
+            }
         }
     }
 
@@ -361,5 +420,9 @@ public sealed class WindowsProbe : ISetupProbe
         Certificate: HasCertificate);
 
     /// <summary>Nach einem Handgriff neu fragen, statt den alten Stand zu zeigen.</summary>
-    public void Forget() => _name = null;
+    public void Forget()
+    {
+        _name = null;
+        AgentService.Forget();
+    }
 }

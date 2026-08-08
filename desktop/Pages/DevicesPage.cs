@@ -183,9 +183,11 @@ public sealed class DevicesPage : PageView
             return;
         }
 
-        _shown = state;
-
         card.Body.Clear();
+
+        // Gemerkt wird erst, wenn die Karte auch steht: eine halb gebaute Liste,
+        // die sich für aktuell hält, wäre eine, die nie wieder nachsieht.
+        _shown = state;
 
         if (complaint is not null)
         {

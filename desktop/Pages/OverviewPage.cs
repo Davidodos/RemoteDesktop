@@ -59,8 +59,6 @@ public sealed class OverviewPage : PageView
             return;
         }
 
-        _shown = state;
-
         Body.Clear();
 
         if (NextStep(machine, profile) is { } next)
@@ -74,6 +72,11 @@ public sealed class OverviewPage : PageView
         }
 
         Body.Add(FingerprintCard(fingerprint));
+
+        // Erst jetzt gemerkt, nicht vorher: geht auf dem Weg hierher etwas
+        // schief, muss der nächste Versuch es noch einmal probieren. Sonst
+        // bliebe die Seite leer und hielte sich für aktuell.
+        _shown = state;
     }
 
     /// <summary>

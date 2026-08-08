@@ -595,3 +595,36 @@ Dazu vier Fehler aus demselben Durchlauf:
   Zertifizierungsstellen mehr an — kein Dialog, kein Fehler, nichts. Die App
   legt die Datei jetzt in die Downloads, öffnet die zuständige Seite der
   Einstellungen und schreibt hin, welche drei Schritte dort nötig sind
+
+### Nachtrag 08.08.2026 (3) — zwei Folgefehler des Umzugs
+
+**Der Agent brachte ein Konsolenfenster mit.** Als Dienst fiel das nie auf:
+Dienste haben keinen Desktop. In der Sitzung des Benutzers bekommt ein
+Konsolenprogramm sein eigenes schwarzes Fenster — bei jeder Anmeldung.
+`<OutputType>WinExe</OutputType>` in `agent/RemoteDesktopAgent.csproj` beendet
+das. Gestartet und beendet wird der Agent im Fenster oder im Infobereich,
+nirgends sonst.
+
+**Die Übersicht blieb leer, danach stürzte das Fenster ab.**
+
+> `System.Security.SecurityException: Requested registry access is not allowed`
+> in `AgentService.get_Installed()`
+
+Der Schlüssel der Aufgabenplanung (`HKLM\…\Schedule\TaskCache\Tree\…`) ist für
+gewöhnliche Benutzer gesperrt, und `OpenSubKey` liefert dann nicht `null`,
+sondern **wirft**. Die Übersicht kam nie bis zum Füllen; im Menü des
+Infobereichs lief derselbe Aufruf außerhalb jeder Aufrufkette und nahm das
+ganze Programm mit.
+
+Drei Änderungen, und nur die erste behebt die Ursache:
+
+- Gefragt wird jetzt `schtasks` selbst — das darf jeder. Zuerst wird die Datei
+  unter `System32\Tasks` geprüft (kein Prozessstart), und die Antwort gilt fünf
+  Sekunden; nach jedem Handgriff wird sie weggeworfen
+- **Eine Auskunft rechtfertigt kein beendetes Programm.** Ein Fehlschlag beim
+  Auffrischen landet in der Statuszeile (`ShellWindow.SafelyAsync`), das
+  Tray-Menü fängt seinen eigenen ab, und was trotzdem durchkommt, geht nach
+  `%LOCALAPPDATA%\RemoteDesktop\fehler.log` statt in ein Absturzfenster
+- Der Vergleichswert einer Seite wird erst gemerkt, **wenn sie steht**. Vorher
+  hätte ein Fehler mittendrin eine leere Seite hinterlassen, die sich für
+  aktuell hält und nie wieder nachsieht

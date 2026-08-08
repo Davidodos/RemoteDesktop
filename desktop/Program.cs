@@ -28,6 +28,14 @@ internal static class Program
             return Elevation.Execute(args);
         }
 
+        // Das letzte Netz: was sonst nirgends aufgefangen wird, landet in einer
+        // Datei und nicht in einem Absturzfenster mit Aufrufliste. Ein Fenster,
+        // das man wegklicken muss und das das Programm mitnimmt, ist die
+        // schlechteste Art, von einem Fehler zu erfahren.
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) => Log(e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Log(e.ExceptionObject as Exception);
+
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
@@ -56,5 +64,35 @@ internal static class Program
         Application.Run(new ClientTrayContext(WebAppLocator.Locate(AppContext.BaseDirectory)));
 
         return 0;
+    }
+
+    /// <summary>
+    /// Wohin ein unerwarteter Fehler geht: in eine Datei im Profil des
+    /// Benutzers, angehängt, mit Zeitstempel. Sie ist das Erste, wonach man bei
+    /// „es tut plötzlich nichts mehr" fragen kann.
+    /// </summary>
+    private static void Log(Exception? failure)
+    {
+        if (failure is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var folder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "RemoteDesktop");
+
+            Directory.CreateDirectory(folder);
+
+            File.AppendAllText(
+                Path.Combine(folder, "fehler.log"),
+                $"{DateTime.Now:u}  {failure}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch (Exception)
+        {
+            // Wenn nicht einmal das geht, ist Schweigen die letzte Möglichkeit.
+        }
     }
 }

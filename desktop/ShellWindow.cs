@@ -130,6 +130,7 @@ public sealed class ShellWindow : Form
             }
 
             await ShowAgentStateAsync();
+
         }
         catch (Exception)
         {
@@ -219,16 +220,7 @@ public sealed class ShellWindow : Form
             // liefe sonst alle zwei Sekunden `tailscale status`.
             _probe.Forget();
 
-            _refreshing = true;
-
-            try
-            {
-                await view2.RefreshAsync();
-            }
-            finally
-            {
-                _refreshing = false;
-            }
+            await SafelyAsync(view2);
         }
 
         await ShowAgentStateAsync();
@@ -244,16 +236,7 @@ public sealed class ShellWindow : Form
         {
             _probe.Forget();
 
-            _refreshing = true;
-
-            try
-            {
-                await view.RefreshAsync();
-            }
-            finally
-            {
-                _refreshing = false;
-            }
+            await SafelyAsync(view);
         }
 
         await ShowAgentStateAsync();
@@ -286,6 +269,35 @@ public sealed class ShellWindow : Form
         _rail.ShowAgent(
             alive ? "Agent antwortet nicht" : "Agent gestoppt",
             alive ? Theme.Warn : Theme.Danger);
+    }
+
+    /// <summary>
+    /// Eine Seite auffrischen — und einen Fehlschlag dabei in die Statuszeile
+    /// schreiben statt ins Verderben.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** eine gesperrte Registry warf beim Erfragen des
+    /// Agent-Zustands. Die Übersicht blieb leer, weil sie nie bis zum Füllen
+    /// kam, und kurz darauf stand das Absturzfenster von .NET auf dem
+    /// Bildschirm. Keine Auskunft rechtfertigt ein beendetes Programm.
+    /// </para>
+    /// </summary>
+    private async Task SafelyAsync(PageView view)
+    {
+        _refreshing = true;
+
+        try
+        {
+            await view.RefreshAsync();
+        }
+        catch (Exception failure)
+        {
+            Say($"Diese Seite ließ sich nicht auffrischen: {failure.Message}", Tone.Bad);
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
     private void Say(string message, Tone tone = Tone.Neutral) => _status.Say(message, tone);

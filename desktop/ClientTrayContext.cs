@@ -53,9 +53,25 @@ public sealed class ClientTrayContext : ApplicationContext
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Beenden", image: null, (_, _) => Quit());
 
-        // Erst beim Aufklappen fragen: der Zustand des Dienstes ändert sich, und
+        // Erst beim Aufklappen fragen: der Zustand des Agents ändert sich, und
         // ein Menü, das den Stand von vorhin zeigt, führt in die Irre.
-        menu.Opening += async (_, _) => await RefreshMenuAsync();
+        //
+        // Der Fehlschlag darf nichts kosten: dieses Ereignis läuft außerhalb
+        // jeder Aufrufkette, und eine Ausnahme darin beendete am echten Gerät
+        // das ganze Programm mit einem Absturzfenster.
+        menu.Opening += async (_, _) =>
+        {
+            try
+            {
+                await RefreshMenuAsync();
+            }
+            catch (Exception)
+            {
+                // Dann bleiben beide Einträge, wie sie sind. Das Menü ist immer
+                // noch bedienbar, und der Handgriff sagt selbst, wenn er nicht
+                // geht.
+            }
+        };
 
         _tray = new NotifyIcon
         {
@@ -103,6 +119,9 @@ public sealed class ClientTrayContext : ApplicationContext
     private async Task ServiceAsync(AdminTask task)
     {
         var result = await Task.Run(() => Elevation.Run(task));
+
+        // Danach ist der gemerkte Zustand von vorhin nichts mehr wert.
+        AgentService.Forget();
 
         if (_window is { IsDisposed: false })
         {

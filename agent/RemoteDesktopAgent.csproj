@@ -5,6 +5,14 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Kein Konsolenfenster.
+
+         Als Windows-Dienst fiel das nie auf: Dienste haben keinen Desktop. Seit
+         der Agent als geplante Aufgabe in der Sitzung des Benutzers läuft (siehe
+         setup/AgentTask.cs), bekäme ein Konsolenprogramm sein eigenes schwarzes
+         Fenster — und zwar bei jeder Anmeldung. Gestartet und beendet wird der
+         Agent im Fenster oder im Infobereich, nirgends sonst. -->
+    <OutputType>WinExe</OutputType>
     <RootNamespace>RemoteDesktopAgent</RootNamespace>
     <AssemblyName>RemoteDesktopAgent</AssemblyName>
     <PublishSingleFile>true</PublishSingleFile>
