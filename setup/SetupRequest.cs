@@ -32,14 +32,33 @@ public enum AgentSetup
 /// </para>
 /// </summary>
 /// <param name="Profile">Das Netzprofil, so wie es in die <c>setup.json</c> geht.</param>
-/// <param name="Agent">Was mit dem Dienst geschehen soll.</param>
-public sealed record SetupRequest(NetworkProfile Profile, AgentSetup Agent)
+/// <param name="Agent">Was mit dem Agent geschehen soll.</param>
+/// <param name="User">
+/// In wessen Sitzung der Agent laufen soll — <c>DOMÄNE\Name</c>.
+///
+/// Er wird mitgegeben, weil der erhöhte Aufruf ihn nicht ermitteln kann: bei
+/// einem Standardbenutzer läuft er unter dem Administratorkonto, dessen Kennwort
+/// gerade eingegeben wurde, und nicht unter dem Konto, das am Rechner sitzt.
+/// </param>
+/// <param name="Certificate">
+/// Ob zum Schluss <c>tailscale cert</c> laufen soll. Es gehört in denselben
+/// erhöhten Auftrag: ohne Zertifikat von Tailscale stellt sich der Agent selbst
+/// eins aus, und dann muss jedes Handy eine Zertifizierungsstelle bestätigen —
+/// der Schritt, an dem am echten Gerät alles hing.
+/// </param>
+public sealed record SetupRequest(
+    NetworkProfile Profile,
+    AgentSetup Agent,
+    string User = "",
+    bool Certificate = false)
 {
     public string Write()
     {
         var document = new Document(
             NetworkConfig.Write(Profile.Normalized()),
-            Agent.ToString());
+            Agent.ToString(),
+            User,
+            Certificate);
 
         return JsonSerializer.Serialize(document, Options);
     }
@@ -69,7 +88,9 @@ public sealed record SetupRequest(NetworkProfile Profile, AgentSetup Agent)
                 NetworkConfig.Read(document.Network),
                 Enum.TryParse<AgentSetup>(document.Agent, ignoreCase: true, out var agent)
                     ? agent
-                    : AgentSetup.None);
+                    : AgentSetup.None,
+                document.User ?? string.Empty,
+                document.Certificate ?? false);
         }
         catch (JsonException)
         {
@@ -89,5 +110,6 @@ public sealed record SetupRequest(NetworkProfile Profile, AgentSetup Agent)
     /// <see cref="NetworkConfig"/>, und zwei Wege in dieselbe Datei wären zwei
     /// Gelegenheiten, sie unterschiedlich zu verstehen.
     /// </summary>
-    private sealed record Document(string? Network, string? Agent);
+    private sealed record Document(
+        string? Network, string? Agent, string? User = null, bool? Certificate = null);
 }

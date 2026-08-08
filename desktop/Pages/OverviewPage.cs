@@ -83,6 +83,12 @@ public sealed class OverviewPage : PageView
     /// </summary>
     private string? NextStep(Machine machine, NetworkProfile profile)
     {
+        if (machine.LegacyService)
+        {
+            return "Den Agent neu einrichten — als Dienst kann er weder Bildschirm noch "
+                   + "Eingaben, und genau das ist seine Aufgabe.";
+        }
+
         if (!machine.AgentService && machine.AgentBinary)
         {
             return "Den Agent einrichten, damit dieser Rechner erreichbar wird.";

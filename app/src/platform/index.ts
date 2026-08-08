@@ -107,13 +107,24 @@ export interface TrustService {
    *   Weboberfläche ist austauschbar, und eine Prüfung, die nur an einer Stelle
    *   steht, ist eine, die beim nächsten Umbau verschwindet.
    */
-  install(certificateBase64: string, fingerprint: string): Promise<void>
+  install(certificateBase64: string, fingerprint: string): Promise<TrustOutcome>
 }
+
+/**
+ * Wie weit das System gekommen ist.
+ *
+ * `dialog` heißt: Android hat seinen Bestätigungsdialog gezeigt, danach ist es
+ * erledigt. `settings` heißt: es lässt das seit Android 11 nicht mehr aus einer
+ * App heraus zu — die Datei liegt jetzt in den Downloads, und die
+ * Systemeinstellungen sind offen. Der Unterschied gehört auf den Bildschirm:
+ * beim zweiten Fall passiert sonst scheinbar nichts.
+ */
+export type TrustOutcome = 'dialog' | 'settings'
 
 /** Für Umgebungen, die es nicht können — der Browser vor allem. */
 export const noTrust: TrustService = {
   available: false,
-  install: () =>
+  install: (): Promise<TrustOutcome> =>
     Promise.reject(
       new Error(
         'Auf diesem Gerät lässt sich das Zertifikat nicht aus der App heraus bestätigen.',

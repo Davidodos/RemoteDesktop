@@ -1,7 +1,13 @@
 package app.remotedesktop.client.surfaces
 
+import android.content.ContentValues
+import android.content.Context
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.security.KeyChain
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
@@ -86,10 +92,75 @@ object CertificateTrust {
     /**
      * Der Auftrag ans System. Was danach geschieht, gehört dem System: es fragt
      * selbst nach, zeigt seine eigene Warnung und darf abgelehnt werden.
+     *
+     * **Nur bis Android 10.** Ab Android 11 nimmt der Zertifikatsinstallierer
+     * über diesen Weg keine Zertifizierungsstellen mehr an: der Dialog kommt
+     * gar nicht erst, die App bekommt keinen Fehler, und für den Menschen davor
+     * passiert schlicht nichts. Genau das stand am echten Gerät — „auf
+     * ‚Zertifikat bestätigen‘ drücken tut nichts". Deshalb der zweite Weg
+     * unten.
      */
     fun installIntent(certificate: X509Certificate) =
         KeyChain.createInstallIntent().apply {
             putExtra(KeyChain.EXTRA_CERTIFICATE, certificate.encoded)
             putExtra(KeyChain.EXTRA_NAME, "RemoteDesktop")
         }
+
+    /** Ob der Dialog von Android überhaupt noch etwas annimmt. */
+    val dialogWorks: Boolean
+        get() = Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+
+    /** Wie die Datei heißt, die in den Downloads landet. */
+    const val FileName = "RemoteDesktop-CA.crt"
+
+    /**
+     * Legt das Zertifikat als Datei ab, damit der Mensch es in den
+     * Einstellungen auswählen kann.
+     *
+     * <p>
+     * Ab Android 11 führt der Weg ausschließlich über *Einstellungen →
+     * Sicherheit → Verschlüsselung und Anmeldedaten → Zertifikat installieren →
+     * CA-Zertifikat*, und dort wird eine Datei ausgewählt. Also muss eine
+     * dastehen — in den Downloads, weil das der eine Ordner ist, den jeder
+     * Dateiwähler zeigt.
+     * </p>
+     *
+     * @return Wo sie liegt, für die Anzeige — oder `null`, wenn das Ablegen
+     *   nicht geklappt hat.
+     */
+    fun saveForImport(context: Context, certificate: X509Certificate): String? = try {
+        val bytes = certificate.encoded
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, FileName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/x-x509-ca-cert")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+
+            val resolver = context.contentResolver
+            val target = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+
+            if (target == null) {
+                null
+            } else {
+                resolver.openOutputStream(target)?.use { stream -> stream.write(bytes) }
+
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                resolver.update(target, values, null, null)
+
+                FileName
+            }
+        } else {
+            val folder =
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+
+            File(folder, FileName).also { file -> file.writeBytes(bytes) }.name
+        }
+    } catch (failure: Exception) {
+        // Ohne Datei bleibt der Hinweis auf die Einstellungen — der hilft schon
+        // mehr als ein Knopf, der nichts tut.
+        null
+    }
 }

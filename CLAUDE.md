@@ -37,7 +37,7 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 
 | Ordner | Stack | Läuft auf |
 |---|---|---|
-| `agent/` | C# / .NET 8, Windows-Dienst | PC + Laptop, Port 8443 |
+| `agent/` | C# / .NET 8, geplante Aufgabe in der Benutzersitzung | PC + Laptop, Port 8443 |
 | `setup/` | C# / .NET 8, Klassenbibliothek | Einrichtungslogik für Installer **und** Fenster |
 | `installer/` | Inno Setup 6 | legt nur Dateien ab — eingerichtet wird im Fenster |
 | `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop — `RemoteDesktop.exe`, die einzige .exe, die ein Mensch startet |
@@ -67,6 +67,10 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 - Ein Symbol für alles: `assets/icon.svg` → `node scripts/icons.mjs` erzeugt
   `.ico`, Android-Mipmaps und PWA-Icons. Nie eine der erzeugten Dateien von Hand
   anfassen.
+- Der Agent läuft als **geplante Aufgabe in der Sitzung des Benutzers**, nicht
+  als Dienst (`setup/AgentTask.cs`). Ein Dienst sitzt in Sitzung 0 und hat dort
+  weder Bildschirm noch Desktop — Bild und Eingabe scheitern dort grundsätzlich.
+  Preis: ohne angemeldeten Benutzer ist der Rechner nicht erreichbar.
 - Aller Zustand liegt in **einem** Ordner: `{app}\data` (`setup/AgentPaths.cs`) —
   Schlüssel, Zertifikate, `clients.json`, `setup.json`. Nichts davon gehört
   neben die `.exe`, und nichts nach `ProgramData`.

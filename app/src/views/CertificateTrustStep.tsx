@@ -25,6 +25,9 @@ export function CertificateTrustStep({ device, onDone }: Props): React.JSX.Eleme
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
 
+  /** Android hat den Vorgang abgegeben — hier steht, wie es weitergeht. */
+  const [manual, setManual] = useState(false)
+
   const platform = getPlatform()
   const fingerprint = device.caFingerprint ?? ''
 
@@ -35,7 +38,16 @@ export function CertificateTrustStep({ device, onDone }: Props): React.JSX.Eleme
     try {
       const certificate = await fetchAgentCertificate(device.host, fingerprint)
 
-      await platform.trust.install(certificate.base64, certificate.fingerprint)
+      // Ab Android 11 nimmt das System eine Zertifizierungsstelle nicht mehr
+      // aus einer App entgegen. Dann liegt die Datei in den Downloads und die
+      // Einstellungen sind offen — und hier steht, was dort zu tun ist. Weiter
+      // geht es erst, wenn der Mensch das erledigt hat.
+      if ((await platform.trust.install(certificate.base64, certificate.fingerprint)) ===
+        'settings') {
+        setManual(true)
+
+        return
+      }
 
       onDone()
     } catch (failure) {
@@ -50,25 +62,40 @@ export function CertificateTrustStep({ device, onDone }: Props): React.JSX.Eleme
       <h2>Zertifikat bestätigen</h2>
 
       <p>
-        <strong>{device.name}</strong> läuft ohne Tailscale und weist sich mit einem selbst
-        ausgestellten Zertifikat aus. Dein Handy muss ihm einmal vertrauen — danach nie wieder,
-        auch wenn sich die Adresse ändert.
+        <strong>{device.name}</strong> weist sich mit einem <strong>selbst ausgestellten</strong>{' '}
+        Zertifikat aus. Dein Handy muss der ausstellenden Stelle einmal vertrauen — danach nie
+        wieder, auch wenn sich die Adresse ändert.
       </p>
 
       <p>
-        Gleich fragt Android selbst nach und zeigt dabei eine Warnung. Sie gehört dazu: du
-        bestätigst gerade eine Stelle, der dein Gerät künftig glaubt.
+        Benutzt der Rechner Tailscale, ist das vermeidbar: dort im Fenster unter „Netz“ das
+        Zertifikat von Tailscale holen und den Agent neu starten. Dann ist der Aussteller
+        öffentlich bekannt und hier gibt es nichts mehr zu bestätigen.
       </p>
 
       <p className="fingerprint">
         <small>{readable(fingerprint)}</small>
       </p>
 
+      {manual && (
+        <p className="hint">
+          Android lässt das seit Version 11 nicht mehr aus einer App heraus zu. Die Datei
+          <strong> RemoteDesktop-CA.crt</strong> liegt jetzt in deinen Downloads, und die
+          Einstellungen sind offen. Dort: <em>Sicherheit → Verschlüsselung und Anmeldedaten
+          → Zertifikat installieren → CA-Zertifikat</em>, dann die Datei auswählen. Danach
+          hier auf „Fertig“.
+        </p>
+      )}
+
       {error !== undefined && <p className="error">{error}</p>}
 
       <div className="row">
-        <button type="button" onClick={() => void confirm()} disabled={busy || !platform.trust.available}>
-          {busy ? 'Einen Moment…' : 'Zertifikat bestätigen'}
+        <button
+          type="button"
+          onClick={() => (manual ? onDone() : void confirm())}
+          disabled={busy || !platform.trust.available}
+        >
+          {manual ? 'Fertig' : busy ? 'Einen Moment…' : 'Zertifikat bestätigen'}
         </button>
 
         {/*

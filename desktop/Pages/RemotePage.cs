@@ -113,8 +113,32 @@ public sealed class RemotePage : Control
         }
     }
 
+    /// <summary>
+    /// Wohin WebView2 seinen eigenen Zwischenspeicher legt.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** ohne Angabe legt WebView2 ihn **neben die
+    /// Programmdatei**, also nach <c>C:\Program Files\RemoteDesktop</c>. Dort
+    /// darf ein Programm ohne Administratorrechte nicht schreiben, und genau
+    /// das ist das Fenster. Am echten Gerät stand deshalb „Die Oberfläche ließ
+    /// sich nicht laden — Zugriff verweigert (0x80070005)“. Der Ordner gehört
+    /// dem angemeldeten Menschen, also liegt er in seinem Profil.
+    /// </para>
+    /// </summary>
+    private static string UserDataFolder => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RemoteDesktop",
+        "WebView2");
+
     private async Task BuildAsync(string appDirectory)
     {
+        Directory.CreateDirectory(UserDataFolder);
+
+        _view.CreationProperties = new CoreWebView2CreationProperties
+        {
+            UserDataFolder = UserDataFolder
+        };
+
         await _view.EnsureCoreWebView2Async();
 
         var core = _view.CoreWebView2

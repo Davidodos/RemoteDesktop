@@ -27,7 +27,7 @@ import type { SessionKeepAlive } from './session.ts'
 
 /** Übergibt ein geprüftes Zertifikat an den Systemdialog von Android. */
 interface TrustPlugin {
-  install(options: { certificate: string; fingerprint: string }): Promise<void>
+  install(options: { certificate: string; fingerprint: string }): Promise<{ mode?: string }>
 }
 
 /** Die vier Plugin-Methoden, die diese App benutzt — mehr nicht. */
@@ -370,7 +370,12 @@ function certificateTrust(plugins: CapacitorPlugins): TrustService {
   return {
     available: true,
     install: async (certificateBase64, fingerprint) => {
-      await plugin.install({ certificate: certificateBase64, fingerprint })
+      const { mode } = await plugin.install({ certificate: certificateBase64, fingerprint })
+
+      // Alles außer dem ausdrücklichen Dialog behandeln wir als „geh in die
+      // Einstellungen": eine ältere APK meldet gar nichts, und dann ist der
+      // Hinweis das Nützlichere von beidem.
+      return mode === 'dialog' ? 'dialog' : 'settings'
     },
   }
 }

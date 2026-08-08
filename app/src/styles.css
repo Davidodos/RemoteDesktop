@@ -8,6 +8,8 @@
   --accent: #4a9eff;
   --online: #3ddc84;
   --danger: #ff5c5c;
+  /* Weder gut noch schlimm — dieselbe Farbe wie `Theme.Warn` im Fenster. */
+  --warn: #ffb454;
   --radius: 12px;
 }
 

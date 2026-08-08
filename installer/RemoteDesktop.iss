@@ -110,6 +110,11 @@ Filename: "{app}\{#Exe}"; Description: "RemoteDesktop einrichten"; \
     Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
+; Der Agent läuft seit v1.3.0 als geplante Aufgabe in der Sitzung des Benutzers
+; und nicht mehr als Dienst — der Grund steht in setup/AgentTask.cs. Beides wird
+; hier abgeräumt: die Aufgabe, und der Dienst einer älteren Installation.
+Filename: "{sys}\schtasks.exe"; Parameters: "/End /TN {#Service}"; Flags: runhidden
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN {#Service} /F"; Flags: runhidden
 Filename: "{sys}\sc.exe"; Parameters: "stop {#Service}"; Check: ServiceExists; Flags: runhidden
 Filename: "{sys}\sc.exe"; Parameters: "delete {#Service}"; Check: ServiceExists; Flags: runhidden
 
@@ -134,6 +139,11 @@ var
 begin
   Result := '';
 
+  { Die geplante Aufgabe — der übliche Fall seit v1.3.0. }
+  Exec(ExpandConstant('{sys}\schtasks.exe'), '/End /TN {#Service}', '',
+       SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  { Und der Dienst einer älteren Installation, falls er noch läuft. }
   if ServiceExists then
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#Service}', '',
          SW_HIDE, ewWaitUntilTerminated, ResultCode);

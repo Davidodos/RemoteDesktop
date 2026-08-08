@@ -81,7 +81,9 @@ public sealed class SetupPage : PageView
             _kind = profile.Kind;
             _address = profile.Address;
             _coordinator = profile.Coordinator.Address;
-            _withAgent = AgentService.Installed || !SetupState.Done;
+            // Auch der alte Dienst zählt: wer aktualisiert, hat den Agent
+            // gewollt und soll ihn nicht abwählen müssen, um ihn zu behalten.
+            _withAgent = AgentService.Installed || AgentService.LegacyService || !SetupState.Done;
             _autostart = Autostart.Read(_autostartHost);
         }
 
@@ -463,7 +465,9 @@ public sealed class SetupPage : PageView
         {
             card.Body.Add(new TextBlock(
                 "Windows fragt gleich einmal nach Administratorrechten — für den "
-                + "Diensteintrag. Danach nicht mehr."));
+                + "Eintrag in die Aufgabenplanung. Danach nicht mehr.\n"
+                + "Der Agent läuft in deiner Sitzung und startet mit deiner Anmeldung; "
+                + "ohne angemeldeten Benutzer ist dieser Rechner nicht erreichbar."));
         }
 
         var back = new ThemedButton("Zurück");
@@ -570,7 +574,17 @@ public sealed class SetupPage : PageView
                 ? AgentSetup.None
                 : _autostart.Starts(AutostartMode.Agent)
                     ? AgentSetup.Automatic
-                    : AgentSetup.Manual);
+                    : AgentSetup.Manual,
+            // In wessen Sitzung der Agent laufen soll. Der erhöhte Aufruf kann
+            // das nicht wissen — er läuft womöglich unter einem anderen Konto.
+            AgentService.InteractiveUser,
+            // Wenn Tailscale steht und noch kein Zertifikat daliegt, wird es
+            // gleich mitgeholt. Sonst stellt sich der Agent selbst eins aus,
+            // und jedes Handy müsste eine Zertifizierungsstelle bestätigen —
+            // der Schritt, an dem am echten Gerät alles hing.
+            Certificate: _kind == NetworkKind.Tailscale
+                         && _probe.IsConnected
+                         && !_probe.HasCertificate);
 
         var prepared = Path.Combine(
             Path.GetTempPath(), $"remotedesktop-setup-{Guid.NewGuid():N}.json");

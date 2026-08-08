@@ -545,3 +545,53 @@ ersten Mal. Beim allerersten Start öffnet sich das Fenster von allein darauf.
 den Ordner nicht an, eine Deinstallation räumt ihn mit weg, und wer von Hand
 aufräumt, löscht einen Ordner statt zwei. Was eine ältere Fassung woanders
 hinterlassen hat, wird beim ersten Start übernommen — verschoben, nicht kopiert.
+
+### Nachtrag 08.08.2026 (2) — der Agent gehört in die Sitzung, nicht in Sitzung 0
+
+Am echten Gerät scheiterte alles Wesentliche, und die Meldungen sagten
+zusammengenommen genau, warum:
+
+> Kein Grafikausgang für Monitor **'WinDisc'** gefunden.
+> SendInput hat nur 0 von 1 Events akzeptiert (**Win32-Fehler 5**).
+
+`WinDisc` ist der Platzhaltermonitor, den **Sitzung 0** vorzeigt, und Fehler 5
+ist die Trennung zwischen Sitzung 0 und dem Desktop des angemeldeten Menschen.
+Ein Windows-Dienst läuft unter `SYSTEM` in Sitzung 0. Dort gibt es keinen
+Bildschirm aufzunehmen und keinen Desktop, auf den sich etwas schreiben ließe.
+Kein Schalter behebt das.
+
+**Also läuft der Agent jetzt dort, wo der Bildschirm ist:** als geplante Aufgabe
+in der Sitzung des angemeldeten Benutzers, mit den höchsten Rechten, die dieser
+Benutzer hat, ausgelöst bei der Anmeldung (`setup/AgentTask.cs`). Der Preis ist
+ausgesprochen und war die ausdrückliche Entscheidung: **ohne angemeldeten
+Benutzer ist dieser Rechner nicht erreichbar.** Angelegt wird sie aus einer
+XML-Beschreibung, nicht über die Schalter von `schtasks` — nur so lassen sich
+„kein Zeitlimit“, „nicht auf Akku anhalten“ und vor allem „**kein** Auslöser“
+überhaupt ausdrücken.
+
+Der Dienst einer älteren Installation wird beim Einrichten entfernt. Er muss
+weg, nicht der Ordnung halber: er hält Port 8443 belegt und antwortet auf
+`/health` — von außen sieht alles gesund aus, und nur Bild und Eingabe fehlen.
+Solange er noch da ist, sagt die Übersicht genau das.
+
+Dazu vier Fehler aus demselben Durchlauf:
+
+- **„Die Oberfläche ließ sich nicht laden — Zugriff verweigert (0x80070005)".**
+  WebView2 legt seinen Zwischenspeicher ohne Angabe **neben die Programmdatei**,
+  also nach `C:\Program Files\RemoteDesktop`. Dort darf das Fenster nicht
+  schreiben. Er liegt jetzt unter `%LOCALAPPDATA%\RemoteDesktop\WebView2`
+- **„Eingerichtet, aber gestoppt", obwohl der Agent lief.** Gefragt wurde allein
+  `/health`. Jetzt zählt auch, ob überhaupt ein Agent-Prozess läuft, und die
+  drei Fälle heißen verschieden: *läuft* · *läuft, antwortet aber nicht* ·
+  *gestoppt*. Das erste schickt zum Startknopf, das zweite zum Port
+- **„Dieser Rechner läuft ohne Tailscale", obwohl er es tut.** Der Satz war
+  schlicht falsch: gemeint ist „er hat kein Zertifikat **von** Tailscale geholt
+  und stellt sich deshalb selbst eins aus". Er sagt das jetzt — und nennt den
+  Weg, es loszuwerden. Die Einrichtung holt das Zertifikat im Tailscale-Modus
+  von sich aus mit, im selben erhöhten Auftrag; dann gibt es am Handy gar nichts
+  mehr zu bestätigen
+- **„Zertifikat bestätigen" tat nichts.** Ab Android 11 nimmt der
+  Zertifikatsinstallierer über `KeyChain.createInstallIntent` keine
+  Zertifizierungsstellen mehr an — kein Dialog, kein Fehler, nichts. Die App
+  legt die Datei jetzt in die Downloads, öffnet die zuständige Seite der
+  Einstellungen und schreibt hin, welche drei Schritte dort nötig sind

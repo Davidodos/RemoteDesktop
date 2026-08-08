@@ -6,7 +6,11 @@ namespace RemoteDesktopClient;
 /// <summary>Was nur mit Administratorrechten geht.</summary>
 public enum AdminTask
 {
-    /// <summary>Den Agent als Dienst eintragen.</summary>
+    /// <summary>
+    /// Den Agent als geplante Aufgabe eintragen — siehe
+    /// <see cref="RemoteDesktopSetup.AgentTask"/> für den Grund, warum es kein
+    /// Dienst mehr ist.
+    /// </summary>
     InstallService,
 
     /// <summary>Den Eintrag entfernen. Die Dateien und die Kopplungen bleiben.</summary>
@@ -169,14 +173,11 @@ public static class Elevation
     /// </summary>
     private static RunResult Perform(AdminTask task, string argument) => task switch
     {
-        AdminTask.InstallService => InstallService(argument),
-        AdminTask.RemoveService => Sc(["delete", Autostart.ServiceName]),
-        AdminTask.StartService => Tolerate(
-            Sc(["start", Autostart.ServiceName]), AlreadyRunning, "Der Agent läuft bereits."),
-        AdminTask.StopService => Tolerate(
-            Sc(["stop", Autostart.ServiceName]), NotRunning, "Der Agent läuft gar nicht."),
-        AdminTask.ServiceStartType => Sc(
-            ["config", Autostart.ServiceName, "start=", argument == "auto" ? "auto" : "demand"]),
+        AdminTask.InstallService => InstallTask(argument),
+        AdminTask.RemoveService => Remove(),
+        AdminTask.StartService => Schtasks(["/Run", "/TN", AgentTask.Name]),
+        AdminTask.StopService => Schtasks(["/End", "/TN", AgentTask.Name]),
+        AdminTask.ServiceStartType => InstallTask(argument),
         AdminTask.FetchCertificate => FetchCertificate(argument),
         AdminTask.Complete => Complete(argument),
         _ => WriteNetwork(argument)
@@ -229,19 +230,31 @@ public static class Elevation
             return new RunResult(0, "Eingerichtet — ohne Agent, dieser Rechner steuert nur.", string.Empty);
         }
 
-        var installed = InstallService(
-            request.Agent == AgentSetup.Automatic ? "auto" : "demand");
+        // Das Zertifikat von Tailscale vor dem Start: der Agent sieht beim
+        // Hochfahren nach, ob es daliegt, und stellt sich sonst selbst eins aus.
+        // Danach zu holen hieße, ihn gleich wieder neu starten zu müssen.
+        var certificate = request.Certificate
+            ? FetchCertificate(request.Profile.AdvertisedAddress ?? string.Empty)
+            : new RunResult(0, string.Empty, string.Empty);
+
+        var installed = InstallTask(
+            AgentTask.Argument(request.Agent == AgentSetup.Automatic, request.User));
 
         if (!installed.Ok)
         {
             return installed;
         }
 
-        var started = Tolerate(
-            Sc(["start", Autostart.ServiceName]), AlreadyRunning, "Der Agent läuft bereits.");
+        var started = Schtasks(["/Run", "/TN", AgentTask.Name]);
 
         return started.Ok
-            ? new RunResult(0, "Eingerichtet. Der Agent läuft.", string.Empty)
+            ? new RunResult(
+                0,
+                certificate.Ok
+                    ? "Eingerichtet. Der Agent läuft."
+                    : "Eingerichtet, der Agent läuft — nur das Zertifikat von Tailscale kam "
+                      + $"nicht: {certificate.Message}",
+                string.Empty)
             : new RunResult(
                 -1,
                 string.Empty,
@@ -249,11 +262,17 @@ public static class Elevation
     }
 
     /// <summary>
-    /// Der Dienst wird angelegt und beschrieben, aber nicht gestartet — das ist
-    /// ein eigener Knopf. Ein „Einrichten", das nebenbei losläuft, nähme dem
-    /// Nutzer die Entscheidung ab, die er gerade trifft.
+    /// Die Aufgabe wird angelegt, aber nicht gestartet — das ist ein eigener
+    /// Knopf. Ein „Einrichten", das nebenbei losläuft, nähme dem Nutzer die
+    /// Entscheidung ab, die er gerade trifft.
+    ///
+    /// <para>
+    /// Ein alter Dienst aus v1.2 wird dabei entfernt. Er muss weg, nicht nur der
+    /// Ordnung halber: er hielte Port 8443 belegt, und die Aufgabe käme gar
+    /// nicht erst zum Lauschen.
+    /// </para>
     /// </summary>
-    private static RunResult InstallService(string startType)
+    private static RunResult InstallTask(string argument)
     {
         var binary = AgentBinary.Locate();
 
@@ -265,44 +284,72 @@ public static class Elevation
                 + "Dann ist die Installation unvollständig — den Installer noch einmal ausführen.");
         }
 
-        var start = startType == "demand" ? "demand" : "auto";
+        var (atLogon, user) = AgentTask.ReadArgument(argument);
 
-        // Jedes Stück einzeln: `sc.exe` erwartet den Wert als eigenes Wort hinter
-        // dem Schlüssel mit Gleichheitszeichen. Als eine Zeichenkette
-        // („binPath= C:\…") käme beides zusammen an, und der Dienst zeigte auf
-        // nichts.
-        var created = Sc([
-            "create", Autostart.ServiceName,
-            "binPath=", binary,
-            "start=", start,
-            "DisplayName=", "RemoteDesktop Agent"
-        ]);
-
-        // 1073: den Dienst gibt es schon. Das ist kein Fehlschlag, sondern der
-        // Normalfall beim erneuten Durchlaufen der Einrichtung — dann wird der
-        // vorhandene Eintrag nachgezogen statt ein zweiter angelegt.
-        if (created.ExitCode == AlreadyExists)
+        if (user.Length == 0)
         {
-            created = Sc([
-                "config", Autostart.ServiceName,
-                "binPath=", binary,
-                "start=", start
-            ]);
+            // Ohne Benutzer wüsste die Aufgabe nicht, in wessen Sitzung sie
+            // laufen soll — und genau darum geht es bei diesem Umbau.
+            user = $"{Environment.UserDomainName}\\{Environment.UserName}";
         }
 
-        if (!created.Ok)
+        DropLegacyService();
+
+        var definition = Path.Combine(
+            Path.GetTempPath(), $"remotedesktop-task-{Guid.NewGuid():N}.xml");
+
+        try
         {
-            return created;
+            // UTF-16: `schtasks /Create /XML` liest die Datei als Unicode. Mit
+            // UTF-8 quittiert es mit „Die Datei ist ungültig" — ohne zu sagen,
+            // dass es an der Kodierung liegt.
+            File.WriteAllText(
+                definition,
+                AgentTask.Definition(binary, user, atLogon),
+                System.Text.Encoding.Unicode);
+
+            return Schtasks(["/Create", "/TN", AgentTask.Name, "/XML", definition, "/F"]);
         }
-
-        Sc([
-            "description", Autostart.ServiceName,
-            "Macht diesen Rechner über RemoteDesktop fernsteuerbar."
-        ]);
-
-
-        return created;
+        catch (Exception failure)
+        {
+            return new RunResult(-1, string.Empty, failure.Message);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(definition);
+            }
+            catch (IOException)
+            {
+                // Eine Datei im Temp-Ordner, die liegen bleibt, ist kein Grund,
+                // dem Nutzer etwas zu melden.
+            }
+        }
     }
+
+    private static RunResult Remove()
+    {
+        DropLegacyService();
+
+        return Schtasks(["/Delete", "/TN", AgentTask.Name, "/F"]);
+    }
+
+    /// <summary>
+    /// Der Dienst aus v1.2 — anhalten und austragen, falls er noch da ist.
+    ///
+    /// Sein Rückgabewert zählt nicht: dass es ihn nicht gibt, ist der
+    /// Normalfall und kein Fehler.
+    /// </summary>
+    private static void DropLegacyService()
+    {
+        Sc(["stop", Autostart.ServiceName]);
+        Sc(["delete", Autostart.ServiceName]);
+    }
+
+    private static RunResult Schtasks(IReadOnlyList<string> arguments) =>
+        ProcessRunner.Run(
+            Path.Combine(Environment.SystemDirectory, "schtasks.exe"), arguments);
 
     /// <summary>
     /// <c>tailscale cert</c> — mit ausdrücklichem Ziel.
@@ -354,28 +401,6 @@ public static class Elevation
             return new RunResult(-1, string.Empty, failure.Message);
         }
     }
-
-    /// <summary>Windows-Fehler 1073: den Dienst gibt es schon.</summary>
-    private const int AlreadyExists = 1073;
-
-    /// <summary>Windows-Fehler 1056: der Dienst läuft schon.</summary>
-    private const int AlreadyRunning = 1056;
-
-    /// <summary>Windows-Fehler 1062: der Dienst läuft gar nicht.</summary>
-    private const int NotRunning = 1062;
-
-    /// <summary>
-    /// Ein Rückgabewert, der gar kein Fehlschlag ist.
-    ///
-    /// <para>
-    /// „Starten“ an einem laufenden Dienst und „Beenden“ an einem stehenden sind
-    /// keine Fehler, sondern Wünsche, die schon erfüllt sind. <c>sc.exe</c> sieht
-    /// das anders und liefert einen Fehlercode; ungedeutet stand danach eine rote
-    /// Meldung im Fenster, obwohl alles in Ordnung war.
-    /// </para>
-    /// </summary>
-    private static RunResult Tolerate(RunResult result, int code, string message) =>
-        result.ExitCode == code ? new RunResult(0, message, string.Empty) : result;
 
     private static RunResult Sc(IReadOnlyList<string> arguments) =>
         ProcessRunner.Run(

@@ -1,6 +1,9 @@
 package app.remotedesktop.client.surfaces
 
+import android.content.Intent
+import android.provider.Settings
 import android.util.Base64
+import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
@@ -40,9 +43,30 @@ class CertificateTrustPlugin : Plugin() {
                 // Ab hier gehört der Vorgang dem System: es zeigt seinen eigenen
                 // Dialog samt Warnung, und der Nutzer darf ablehnen. Die App
                 // erfährt nur, dass sie gefragt hat.
-                activity.startActivity(CertificateTrust.installIntent(outcome.certificate))
+                //
+                // Ab Android 11 gibt es diesen Dialog für Zertifizierungsstellen
+                // nicht mehr. Dann wird die Datei abgelegt und die zuständige
+                // Seite der Einstellungen geöffnet — und die App sagt, was dort
+                // zu tun ist. Ein Knopf, der wortlos nichts tut, war der
+                // schlechteste aller Zustände.
+                val answer = JSObject()
 
-                call.resolve()
+                if (CertificateTrust.dialogWorks) {
+                    activity.startActivity(CertificateTrust.installIntent(outcome.certificate))
+                    answer.put("mode", "dialog")
+                } else {
+                    val file = CertificateTrust.saveForImport(activity, outcome.certificate)
+
+                    activity.startActivity(
+                        Intent(Settings.ACTION_SECURITY_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+
+                    answer.put("mode", "settings")
+                    answer.put("file", file ?: "")
+                }
+
+                call.resolve(answer)
             }
         }
     }

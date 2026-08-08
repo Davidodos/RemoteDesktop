@@ -32,10 +32,22 @@ public enum PartAction
 /// <param name="AgentRunning">Ob er gerade antwortet.</param>
 /// <param name="ClientFiles">Ob die Oberfläche für das Fernsteuerfenster daliegt.</param>
 /// <param name="WebView2">Ob die Anzeigekomponente von Windows vorhanden ist.</param>
+/// <param name="AgentProcess">
+/// Ob überhaupt ein Agent-Prozess läuft. Nicht dasselbe wie
+/// <paramref name="AgentRunning"/>: der sagt, ob er auch **antwortet**. Ein
+/// Prozess, der läuft und schweigt, ist eine eigene Auskunft — und die schickt
+/// beim Suchen an eine andere Stelle als „läuft gar nicht".
+/// </param>
+/// <param name="LegacyService">
+/// Ob noch der Windows-Dienst aus v1.2 eingetragen ist. Er antwortet zwar, kann
+/// aber weder Bild noch Eingabe — siehe <see cref="AgentTask"/>.
+/// </param>
 public sealed record Machine(
     bool AgentBinary = false,
     bool AgentService = false,
     bool AgentRunning = false,
+    bool AgentProcess = false,
+    bool LegacyService = false,
     bool ClientFiles = false,
     bool WebView2 = false,
     bool Tailscale = false,
@@ -96,7 +108,7 @@ public static class Inventory
     };
 
     /// <summary>
-    /// Der Dienst, der diesen Rechner steuerbar macht.
+    /// Der Agent, der diesen Rechner steuerbar macht.
     ///
     /// Ohne die Datei gibt es nichts einzurichten — dann ist die Installation
     /// unvollständig, und ein Knopf „Einrichten" liefe ins Leere.
@@ -115,6 +127,23 @@ public static class Inventory
                 []);
         }
 
+        // Der alte Dienst antwortet und sieht damit gesund aus. Er ist es
+        // nicht: in Sitzung 0 gibt es keinen Bildschirm, und jede Eingabe
+        // scheitert an der Trennung der Sitzungen. Am echten Gerät sah das aus
+        // wie ein kaputter Agent — dabei war es die falsche Startart.
+        if (machine.LegacyService)
+        {
+            return new Part(
+                AgentTitle,
+                "Macht diesen Rechner fernsteuerbar. Er läuft noch als Windows-Dienst — so "
+                + "sieht er keinen Bildschirm und kann keine Eingaben machen. Einmal neu "
+                + "einrichten stellt das um.",
+                "läuft als Dienst — muss umgestellt werden",
+                Ok: false,
+                Missing: false,
+                [PartAction.Install]);
+        }
+
         if (!machine.AgentService)
         {
             return new Part(
@@ -127,14 +156,28 @@ public static class Inventory
                 [PartAction.Install]);
         }
 
-        return machine.AgentRunning
-            ? new Part(
+        if (machine.AgentRunning)
+        {
+            return new Part(
                 AgentTitle,
                 "Macht diesen Rechner fernsteuerbar.",
                 "läuft",
                 Ok: true,
                 Missing: false,
-                [PartAction.Stop, PartAction.Remove])
+                [PartAction.Stop, PartAction.Remove]);
+        }
+
+        // Ein Prozess, der läuft und nicht antwortet, ist etwas anderes als
+        // keiner. Beides „gestoppt" zu nennen schickte am echten Gerät zum
+        // Startknopf — und der half nicht, weil der Agent ja lief.
+        return machine.AgentProcess
+            ? new Part(
+                AgentTitle,
+                "Macht diesen Rechner fernsteuerbar.",
+                "läuft, antwortet aber nicht",
+                Ok: false,
+                Missing: false,
+                [PartAction.Stop, PartAction.Start, PartAction.Remove])
             : new Part(
                 AgentTitle,
                 "Macht diesen Rechner fernsteuerbar.",

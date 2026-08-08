@@ -22,14 +22,20 @@ public sealed class WindowsAutostart : IAutostartHost
     public AutostartPlan Current() => new(ReadServiceStart(), ReadClientEntry());
 
     /// <summary>
-    /// Der Starttyp geht über <c>sc.exe</c> und nicht über die Registry: der
-    /// Dienstmanager merkt sich mehr als einen Schlüssel, und wer daran vorbei
-    /// schreibt, bekommt einen Zustand, den die Dienstverwaltung anders sieht als
-    /// er ist.
+    /// Ob der Agent bei der Anmeldung von allein startet.
     ///
-    /// Er verlangt Adminrechte — deshalb der Sprung. Ist der Dienst gar nicht
+    /// <para>
+    /// Umgestellt wird, indem die Aufgabe neu geschrieben wird — mit oder ohne
+    /// Auslöser. Einen Auslöser nachträglich zu ändern geht mit
+    /// <c>schtasks</c> nicht; die Beschreibung ist ohnehin die eine Quelle
+    /// (siehe <see cref="AgentTask"/>).
+    /// </para>
+    ///
+    /// <para>
+    /// Es verlangt Adminrechte — deshalb der Sprung. Ist der Agent gar nicht
     /// eingetragen, gibt es nichts umzustellen; eine Nachfrage nach Rechten für
     /// nichts wäre eine Zumutung.
+    /// </para>
     /// </summary>
     public void SetServiceStart(ServiceStart start)
     {
@@ -39,7 +45,8 @@ public sealed class WindowsAutostart : IAutostartHost
         }
 
         var result = Elevation.Run(
-            AdminTask.ServiceStartType, start == ServiceStart.Automatic ? "auto" : "demand");
+            AdminTask.ServiceStartType,
+            AgentTask.Argument(start == ServiceStart.Automatic, AgentService.InteractiveUser));
 
         if (!result.Ok)
         {
@@ -70,16 +77,14 @@ public sealed class WindowsAutostart : IAutostartHost
         }
     }
 
-    private static ServiceStart ReadServiceStart()
-    {
-        // 2 heißt automatisch, 3 auf Anforderung — so steht es im Dienstmanager.
-        using var key = Registry.LocalMachine.OpenSubKey(
-            $@"SYSTEM\CurrentControlSet\Services\{Autostart.ServiceName}");
-
-        return key?.GetValue("Start") is int start && start == 2
+    /// <summary>
+    /// Gefragt wird die Aufgabenplanung selbst, nicht die Registry: dort liegen
+    /// die Auslöser in einem undokumentierten Binärformat.
+    /// </summary>
+    private static ServiceStart ReadServiceStart() =>
+        AgentTask.StartsAtLogon(AgentService.Definition())
             ? ServiceStart.Automatic
             : ServiceStart.Manual;
-    }
 
     private bool ReadClientEntry()
     {
@@ -167,12 +172,96 @@ public static class AgentBinary
 }
 
 /// <summary>
-/// Der Dienst — ob er eingetragen ist und ob er antwortet.
+/// Der Agent auf diesem Rechner — ob er eingetragen ist, ob sein Prozess läuft
+/// und ob er antwortet.
+///
+/// <para>
+/// Seit v1.3.0 ist er eine geplante Aufgabe und kein Dienst mehr; warum, steht
+/// in <see cref="AgentTask"/>.
+/// </para>
 /// </summary>
 public static class AgentService
 {
-    /// <summary>Ob Windows ihn kennt.</summary>
+    /// <summary>Wie der Prozess des Agents heißt, ohne <c>.exe</c>.</summary>
+    private const string ProcessName = "RemoteDesktopAgent";
+
+    /// <summary>
+    /// Der Benutzer, in dessen Sitzung der Agent laufen soll. Wird beim Anlegen
+    /// der Aufgabe mitgegeben — der erhöhte Aufruf kann ihn nicht ermitteln.
+    /// </summary>
+    public static string InteractiveUser =>
+        $@"{Environment.UserDomainName}\{Environment.UserName}";
+
+    /// <summary>
+    /// Ob Windows die Aufgabe kennt.
+    ///
+    /// <para>
+    /// Zwei Wege, weil beide für sich unzuverlässig sind: die Registry der
+    /// Aufgabenplanung ist lesbar, aber undokumentiert, und die Datei unter
+    /// <c>System32\Tasks</c> ist je nach Rechtevergabe nicht lesbar. Findet
+    /// einer von beiden sie, ist sie da.
+    /// </para>
+    /// </summary>
     public static bool Installed
+    {
+        get
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(
+                @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\"
+                + AgentTask.Name);
+
+            return key is not null
+                   || File.Exists(Path.Combine(
+                       Environment.SystemDirectory, "Tasks", AgentTask.Name));
+        }
+    }
+
+    /// <summary>
+    /// Ob überhaupt ein Agent-Prozess läuft.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** das Fenster fragte allein <c>/health</c> und
+    /// meldete „gestoppt", sobald die Antwort ausblieb — auch dann, wenn der
+    /// Agent lief und nur nicht bedienen konnte. Das ist ein Unterschied, der
+    /// jemandem beim Suchen hilft: „läuft nicht" schickt zum Startknopf,
+    /// „antwortet nicht" zum Port und zum Zertifikat.
+    /// </para>
+    /// </summary>
+    public static bool ProcessRunning
+    {
+        get
+        {
+            try
+            {
+                var found = System.Diagnostics.Process.GetProcessesByName(ProcessName);
+
+                foreach (var process in found)
+                {
+                    process.Dispose();
+                }
+
+                return found.Length > 0;
+            }
+            catch (Exception)
+            {
+                // Die Prozessliste darf gesperrt sein. Dann zählt eben nur die
+                // Antwort auf /health.
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Ob der Dienst einer älteren Installation noch eingetragen ist.
+    ///
+    /// <para>
+    /// Er ist nicht bloß ein Überbleibsel: solange er läuft, hält er Port 8443
+    /// belegt und antwortet auch auf <c>/health</c> — von außen sieht alles in
+    /// Ordnung aus. Er kann nur eben nicht das, wofür er da ist, weil er in
+    /// Sitzung 0 keinen Bildschirm hat. Deshalb wird eigens darauf hingewiesen.
+    /// </para>
+    /// </summary>
+    public static bool LegacyService
     {
         get
         {
@@ -181,6 +270,17 @@ public static class AgentService
 
             return key is not null;
         }
+    }
+
+    /// <summary>Die Beschreibung der Aufgabe, als XML — oder <c>null</c>.</summary>
+    public static string? Definition()
+    {
+        var result = ProcessRunner.Run(
+            Path.Combine(Environment.SystemDirectory, "schtasks.exe"),
+            ["/Query", "/TN", AgentTask.Name, "/XML", "ONE"],
+            TimeSpan.FromSeconds(10));
+
+        return result.Ok ? result.Output : null;
     }
 
     /// <summary>
@@ -250,7 +350,10 @@ public sealed class WindowsProbe : ISetupProbe
     public async Task<Machine> SnapshotAsync(string? appDirectory) => new(
         AgentBinary: AgentBinary.Locate() is not null,
         AgentService: HasService,
-        AgentRunning: HasService && await AgentService.RespondsAsync(),
+        AgentRunning: (HasService || AgentService.LegacyService)
+                      && await AgentService.RespondsAsync(),
+        AgentProcess: (HasService || AgentService.LegacyService) && AgentService.ProcessRunning,
+        LegacyService: AgentService.LegacyService,
         ClientFiles: appDirectory is not null,
         WebView2: WebView2Runtime.InstalledVersion() is not null,
         Tailscale: HasTailscale,

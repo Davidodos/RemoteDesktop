@@ -272,11 +272,20 @@ public sealed class ShellWindow : Form
             return;
         }
 
-        var running = await AgentService.RespondsAsync();
+        if (await AgentService.RespondsAsync())
+        {
+            _rail.ShowAgent("Agent läuft", Theme.Online);
+
+            return;
+        }
+
+        // „Läuft nicht" und „antwortet nicht" schicken beim Suchen an
+        // verschiedene Stellen. Deshalb stehen sie auch verschieden da.
+        var alive = AgentService.ProcessRunning;
 
         _rail.ShowAgent(
-            running ? "Agent läuft" : "Agent gestoppt",
-            running ? Theme.Online : Theme.Danger);
+            alive ? "Agent antwortet nicht" : "Agent gestoppt",
+            alive ? Theme.Warn : Theme.Danger);
     }
 
     private void Say(string message, Tone tone = Tone.Neutral) => _status.Say(message, tone);

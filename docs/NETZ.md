@@ -35,6 +35,11 @@ beide einmalig:
 **Was Heimnetz nicht kann:** von unterwegs. Sobald das Handy im Mobilfunk ist,
 ist der Rechner weg. Dafür gibt es die anderen beiden Modi.
 
+> **Der Agent läuft in deiner Sitzung** (als geplante Aufgabe, ausgelöst bei der
+> Anmeldung) und nicht als Dienst. Nur dort sieht er einen Bildschirm und darf
+> Eingaben machen. Das heißt auch: nach dem Aufwecken ist der Rechner erst
+> erreichbar, wenn jemand angemeldet ist.
+
 > **Rechner wecken** geht im Heimnetz übrigens weiterhin — das Magic Packet
 > läuft ohnehin nur innerhalb eines Netzes, egal welchen Modus du wählst.
 

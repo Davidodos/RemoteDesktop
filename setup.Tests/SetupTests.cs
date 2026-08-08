@@ -926,3 +926,76 @@ public class SetupRequestTests
         Assert.Equal(AgentSetup.None, read.Agent);
     }
 }
+
+/// <summary>
+/// Der Agent als geplante Aufgabe. Sie ist der Grund, warum Bild und Eingabe
+/// überhaupt funktionieren — ein Dienst sieht in Sitzung 0 keinen Bildschirm.
+/// </summary>
+public class AgentTaskTests
+{
+    private const string Exe = @"C:\Program Files\RemoteDesktop\RemoteDesktopAgent.exe";
+
+    [Fact]
+    public void Die_Aufgabe_laeuft_in_der_Sitzung_des_Benutzers()
+    {
+        var xml = AgentTask.Definition(Exe, @"PC\David", atLogon: true);
+
+        // InteractiveToken heißt: in der Sitzung dessen, der angemeldet ist.
+        // Genau das fehlt einem Dienst, und deshalb ist er weg.
+        Assert.Contains("<LogonType>InteractiveToken</LogonType>", xml);
+        Assert.Contains("<RunLevel>HighestAvailable</RunLevel>", xml);
+        Assert.Contains(@"<UserId>PC\David</UserId>", xml);
+        Assert.Contains($"<Command>{Exe}</Command>", xml);
+    }
+
+    [Fact]
+    public void Ohne_Autostart_gibt_es_keinen_Ausloeser()
+    {
+        // „Nicht automatisch starten" heißt nicht „weg damit": die Aufgabe
+        // bleibt bestehen und lässt sich von Hand starten.
+        var xml = AgentTask.Definition(Exe, @"PC\David", atLogon: false);
+
+        Assert.DoesNotContain("<LogonTrigger>", xml);
+        Assert.Contains("<AllowStartOnDemand>true</AllowStartOnDemand>", xml);
+    }
+
+    [Fact]
+    public void Kein_Zeitlimit_und_kein_Anhalten_auf_Akku()
+    {
+        // Ohne beides beendet Windows die Aufgabe irgendwann von selbst — und
+        // der Rechner wäre unerreichbar, ohne dass jemand den Grund fände.
+        var xml = AgentTask.Definition(Exe, @"PC\David", atLogon: true);
+
+        Assert.Contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", xml);
+        Assert.Contains("<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>", xml);
+    }
+
+    [Fact]
+    public void Sonderzeichen_im_Pfad_zerlegen_die_Beschreibung_nicht()
+    {
+        var xml = AgentTask.Definition(@"C:\Ordner & Co\agent.exe", "PC\\Ann&Bob", atLogon: true);
+
+        Assert.Contains("Ordner &amp; Co", xml);
+        Assert.Contains("Ann&amp;Bob", xml);
+    }
+
+    [Fact]
+    public void Der_Ausloeser_wird_wiedererkannt()
+    {
+        Assert.True(AgentTask.StartsAtLogon(AgentTask.Definition(Exe, "PC\\D", atLogon: true)));
+        Assert.False(AgentTask.StartsAtLogon(AgentTask.Definition(Exe, "PC\\D", atLogon: false)));
+        Assert.False(AgentTask.StartsAtLogon(null));
+    }
+
+    [Theory]
+    [InlineData(true, @"PC\David")]
+    [InlineData(false, @"PC\David")]
+    [InlineData(true, "")]
+    public void Startart_und_Benutzer_ueberstehen_den_erhoehten_Aufruf(bool atLogon, string user)
+    {
+        var (readLogon, readUser) = AgentTask.ReadArgument(AgentTask.Argument(atLogon, user));
+
+        Assert.Equal(atLogon, readLogon);
+        Assert.Equal(user, readUser);
+    }
+}

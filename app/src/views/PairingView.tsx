@@ -216,9 +216,12 @@ function NameStep({
 
       {target.caFingerprint !== undefined && (
         <p>
-          Dieser Rechner läuft ohne Tailscale und weist sich mit einem selbst
-          ausgestellten Zertifikat aus. Beim Koppeln fragt Android einmal nach, ob du
-          der Stelle vertraust — der Fingerabdruck stand im QR-Code und wird geprüft.
+          Dieser Rechner weist sich mit einem <strong>selbst ausgestellten</strong>{' '}
+          Zertifikat aus. Beim Koppeln muss dein Handy der ausstellenden Stelle einmal
+          vertrauen; der Fingerabdruck stand im QR-Code und wird geprüft. Wenn der
+          Rechner Tailscale benutzt, ist das vermeidbar: dort unter „Netz“ das
+          Zertifikat von Tailscale holen und den Agent neu starten — dann entfällt
+          dieser Schritt ganz.
         </p>
       )}
 

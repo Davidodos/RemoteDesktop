@@ -41,6 +41,12 @@ public static class Theme
     public static readonly Color Online = Hex("3ddc84");
     public static readonly Color Danger = Hex("ff5c5c");
 
+    /// <summary>
+    /// Weder gut noch schlimm: etwas läuft, tut aber nicht, was es soll. Diese
+    /// Farbe steht auch in <c>app/src/styles.css</c> als <c>--warn</c>.
+    /// </summary>
+    public static readonly Color Warn = Hex("ffb454");
+
     public const int CardRadius = 12;
     public const int ControlRadius = 8;
 
