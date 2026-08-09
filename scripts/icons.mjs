@@ -225,6 +225,9 @@ for (const [density, factor] of Densities) {
   await write(join(target, 'ic_launcher_foreground.png'), await foreground(108 * factor))
 }
 
-for (const size of [192, 512]) {
-  await write(join(root, 'app', 'public', `icon-${size}.png`), await render(size))
-}
+// Keine PWA-Symbole mehr. Die App wird nur noch als APK und im Windows-Fenster
+// ausgeliefert; beide bringen ihre eigenen Symbole mit — die Mipmaps oben und
+// die .ico darüber. Das Manifest, das die beiden PNG referenzierte, gibt es
+// seit v1.3.6 nicht mehr (siehe app/vite.config.ts), und ein erzeugtes Symbol,
+// das niemand einbindet, ist eine Datei, die beim nächsten Aufräumen Fragen
+// aufwirft.

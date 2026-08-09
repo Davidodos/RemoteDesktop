@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { registerServiceWorker, removeServiceWorker } from './serviceWorker.ts'
+import { removeServiceWorker } from './serviceWorker.ts'
 
 /**
- * Der Service Worker gehört in den Browser und nicht in die APK.
+ * Erzeugt wird kein Service Worker mehr. Was zählt, ist das Aufräumen: auf
+ * bereits installierten Geräten ist noch einer angemeldet, und der lieferte
+ * sonst für immer die Fassung von vorgestern.
  *
  * Der Befund, den das verhindert: die APK lief nach jedem Update eine
  * Startphase hinterher — neue Versionsnummer, alte Oberfläche, und erst beim
@@ -13,19 +15,12 @@ interface FakeRegistration {
   unregister: () => Promise<boolean>
 }
 
-function stubServiceWorker(registrations: FakeRegistration[]): {
-  register: ReturnType<typeof vi.fn>
-} {
-  const register = vi.fn(() => Promise.resolve())
-
+function stubServiceWorker(registrations: FakeRegistration[]): void {
   vi.stubGlobal('navigator', {
     serviceWorker: {
-      register,
       getRegistrations: () => Promise.resolve(registrations),
     },
   })
-
-  return { register }
 }
 
 function stubCaches(names: string[]): { deleted: string[] } {
@@ -47,25 +42,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('im Browser', () => {
-  test('wird der Worker angemeldet', () => {
-    const { register } = stubServiceWorker([])
-
-    registerServiceWorker()
-
-    expect(register).toHaveBeenCalledWith('/sw.js')
-  })
-
-  test('geht es auch ohne Unterstützung weiter', () => {
-    vi.stubGlobal('navigator', {})
-
-    // Kein Wurf: eine Seite ohne Worker ist eine Seite ohne Offline-Betrieb
-    // und sonst nichts.
-    expect(() => registerServiceWorker()).not.toThrow()
-  })
-})
-
-describe('in APK und Windows-Fenster', () => {
+describe('Aufräumen', () => {
   test('wird ein bereits angemeldeter Worker abgemeldet', async () => {
     // Nicht bloß „nicht anmelden": wer die App schon hat, hat auch schon einen
     // angemeldeten Worker — und der lieferte sonst für immer die Fassung von
