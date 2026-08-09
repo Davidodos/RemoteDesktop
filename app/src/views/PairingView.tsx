@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CertificateTrustStep } from './CertificateTrustStep.tsx'
-import { fetchAgentCertificate } from '../lib/certificateTrust.ts'
+import { certificateFingerprint, fetchAgentCertificate } from '../lib/certificateTrust.ts'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
 import { suggestAlias } from '../lib/deviceNames.ts'
 import { pairWithAgent } from '../lib/pairing.ts'
@@ -74,7 +74,11 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
         onPaired={(devices, device, trusted) => {
           // Nichts zu bestätigen — oder eben schon bestätigt, bevor gekoppelt
           // wurde. Ein zweites Mal danach zu fragen wäre nur Weg.
-          if (device.caFingerprint === undefined || trusted) {
+          //
+          // Geprüft wird der Fingerabdruck und nicht bloß, ob das Feld gesetzt
+          // ist: ein `null` vom Agent bedeutet „nichts zu bestätigen", sah aber
+          // aus wie ein Wert. Siehe `certificateFingerprint`.
+          if (certificateFingerprint(device.caFingerprint) === undefined || trusted) {
             onPaired(devices, device)
 
             return
@@ -157,11 +161,13 @@ function NameStep({
    * </p>
    */
   const trust = async (): Promise<boolean> => {
-    if (target.caFingerprint === undefined || !platform.trust.available) {
+    const fingerprint = certificateFingerprint(target.caFingerprint)
+
+    if (fingerprint === undefined || !platform.trust.available) {
       return false
     }
 
-    const certificate = await fetchAgentCertificate(target.host, target.caFingerprint)
+    const certificate = await fetchAgentCertificate(target.host, fingerprint)
 
     await platform.trust.install(certificate.base64, certificate.fingerprint)
 
@@ -214,7 +220,7 @@ function NameStep({
         Namen.
       </p>
 
-      {target.caFingerprint !== undefined && (
+      {certificateFingerprint(target.caFingerprint) !== undefined && (
         <p>
           Dieser Rechner weist sich mit einem <strong>selbst ausgestellten</strong>{' '}
           Zertifikat aus. Beim Koppeln muss dein Handy der ausstellenden Stelle einmal

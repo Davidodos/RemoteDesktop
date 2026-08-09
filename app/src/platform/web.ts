@@ -116,6 +116,10 @@ const webUpdate: UpdateService = {
       new PlatformError('Die PWA aktualisiert sich selbst — hier gibt es nichts zu installieren.'),
     )
   },
+
+  installed(): Promise<string | undefined> {
+    return Promise.resolve(undefined)
+  },
 }
 
 const webQr: QrScanner = {

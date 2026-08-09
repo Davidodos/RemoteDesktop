@@ -48,3 +48,25 @@ describe('describeAppUpdate', () => {
     }
   })
 })
+
+describe('ausdrücklich nachgesehen', () => {
+  test('sagt auch, wenn es nichts Neues gibt', () => {
+    // Auf der Einstellungsseite ist „alles aktuell" die Antwort auf eine
+    // Frage, die gerade gestellt wurde. Zu schweigen sähe aus, als sei der
+    // Knopf kaputt.
+    const labels = describeAppUpdate({ kind: 'current' }, true)
+
+    expect(labels.visible).toBe(true)
+    expect(labels.action).toBe('Erneut suchen')
+  })
+
+  test('zeigt nebenbei nichts, solange alles aktuell ist', () => {
+    expect(describeAppUpdate({ kind: 'current' }).visible).toBe(false)
+    expect(describeAppUpdate({ kind: 'checking' }).visible).toBe(false)
+  })
+
+  test('meldet ein Angebot in jedem Fall', () => {
+    expect(describeAppUpdate({ kind: 'offer', version: '1.3.0' }).visible).toBe(true)
+    expect(describeAppUpdate({ kind: 'offer', version: '1.3.0' }, true).visible).toBe(true)
+  })
+})

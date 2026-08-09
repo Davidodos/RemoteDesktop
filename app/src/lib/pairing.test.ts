@@ -157,3 +157,31 @@ describe('mit einem Agent koppeln', () => {
     expect((failure as Error).message).toContain('pc.ts.net antwortet nicht')
   })
 })
+
+describe('der Fingerabdruck der Zertifizierungsstelle', () => {
+  async function pair(caFingerprint: unknown): Promise<{ caFingerprint?: string }> {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(respond(200, { ...ANSWER, caFingerprint }))),
+    )
+
+    return await pairWithAgent({ host: 'pc', port: 8443, code: '123456', label: 'Handy' })
+  }
+
+  test('bleibt weg, wenn der Agent null meldet', async () => {
+    // Genau das schreibt ein Agent mit Zertifikat von Tailscale. Kommt es
+    // durch, verlangt die App danach eine Bestätigung, die es nicht zu geben
+    // braucht — und der Knopf dafür kann nichts tun.
+    expect((await pair(null)).caFingerprint).toBeUndefined()
+  })
+
+  test('bleibt weg, wenn der Agent das Feld gar nicht meldet', async () => {
+    expect((await pair(undefined)).caFingerprint).toBeUndefined()
+  })
+
+  test('kommt an, wenn wirklich einer dasteht', async () => {
+    const wert = 'b'.repeat(64)
+
+    expect((await pair(wert)).caFingerprint).toBe(wert)
+  })
+})

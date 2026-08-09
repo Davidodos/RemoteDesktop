@@ -71,6 +71,12 @@ export interface UpdateService {
   /** `undefined` heißt: es gibt nichts Neues. */
   check(): Promise<UpdateInfo | undefined>
   install(update: UpdateInfo): Promise<void>
+  /**
+   * Welche Fassung gerade läuft — `undefined`, wo die Plattform das nicht
+   * sagen kann. Sie gehört auf die Einstellungsseite: „nach Updates suchen"
+   * ohne die Angabe, was man hat, ist eine Frage ohne Bezugspunkt.
+   */
+  installed(): Promise<string | undefined>
 }
 
 export interface ClipboardAccess {

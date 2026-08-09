@@ -20,6 +20,35 @@ export const TRUST_PORT = 8442
 
 export class TrustError extends Error {}
 
+/**
+ * Der Fingerabdruck einer eigenen Zertifizierungsstelle — oder `undefined`,
+ * wenn da keiner steht.
+ *
+ * **Der Befund dahinter:** der Agent schreibt bei einem Zertifikat von Tailscale
+ * ausdrücklich `"caFingerprint": null` in seine Antwort. Geprüft wurde aber auf
+ * `=== undefined`, und `null` ist nicht `undefined` — also übernahm die App
+ * `caFingerprint: null` in das Gerät und hielt jeden Rechner für einen mit
+ * selbst ausgestelltem Zertifikat.
+ *
+ * Am echten Gerät sah das so aus: nach dem Koppeln kam die Rückfrage
+ * „Zertifikat bestätigen", der Knopf tat nichts (es gab ja keinen
+ * Fingerabdruck zu vergleichen), und „Später" verband sofort und ohne
+ * Beanstandung — weil das Zertifikat längst in Ordnung war. Ein Schritt, den
+ * man überspringen kann und danach nie wieder sieht, ist genau die Art Fehler,
+ * die niemand meldet und die trotzdem jedes Koppeln verdirbt.
+ *
+ * Geprüft wird deshalb der Wert selbst: 64 Hexzeichen, sonst nichts.
+ */
+export function certificateFingerprint(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const trimmed = value.trim().toLowerCase()
+
+  return /^[0-9a-f]{64}$/.test(trimmed) ? trimmed : undefined
+}
+
 export interface AgentCertificate {
   /** Das Zertifikat selbst, als Base64 — so nimmt es die Android-Seite entgegen. */
   base64: string

@@ -3,13 +3,13 @@ import { probeAll } from '../lib/reachability.ts'
 import type { Device, DeviceStatus } from '../lib/types.ts'
 import { deviceLabel } from '../lib/deviceNames.ts'
 import {
-  DevicesIcon,
   type IconComponent,
   KeyboardIcon,
   MediaIcon,
   MouseIcon,
   PowerIcon,
   ScreenIcon,
+  SettingsIcon,
   ShortcutIcon,
 } from './icons.tsx'
 
@@ -28,8 +28,12 @@ export type Page =
    * Die Geräteliste als Seite — erreichbar, **während** etwas verbunden ist.
    * Vorher führte der Weg zurück nur über das Trennen, und wer ein zweites
    * Gerät koppeln oder eines umbenennen wollte, musste die Sitzung aufgeben.
+   *
+   * In der Leiste steht sie nicht mehr selbst: der Weg führt über die
+   * Einstellungen, wo auch alles andere steht, was die App betrifft.
    */
   | 'devices'
+  | 'settings'
 
 const PAGES: { id: Page; label: string; icon: IconComponent }[] = [
   { id: 'screen', label: 'Bildschirm', icon: ScreenIcon },
@@ -101,18 +105,6 @@ export function Sidebar({
 
         <span className="sidebar-label">Geräte</span>
 
-        <button
-          type="button"
-          className={page === 'devices' ? 'sidebar-entry active' : 'sidebar-entry'}
-          onClick={() => {
-            onPage('devices')
-            onClose()
-          }}
-        >
-          <DevicesIcon />
-          <span className="device-name">Alle Geräte verwalten</span>
-        </button>
-
         {devices.map((device) => (
           <button
             key={device.id}
@@ -127,6 +119,24 @@ export function Sidebar({
             <span className="device-name">{deviceLabel(device)}</span>
           </button>
         ))}
+
+        <span className="sidebar-label">App</span>
+
+        <button
+          type="button"
+          className={
+            page === 'settings' || page === 'devices'
+              ? 'sidebar-entry active'
+              : 'sidebar-entry'
+          }
+          onClick={() => {
+            onPage('settings')
+            onClose()
+          }}
+        >
+          <SettingsIcon />
+          <span className="device-name">Einstellungen</span>
+        </button>
 
         <span className="sidebar-label">Ansichten</span>
         {PAGES.map(({ id, label, icon: Glyph }) => (

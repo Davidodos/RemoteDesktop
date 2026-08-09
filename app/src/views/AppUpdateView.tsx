@@ -13,7 +13,8 @@ import { getPlatform, type UpdateInfo } from '../platform/index.ts'
  * die Plattform `selfUpdate: false`, weil ein Browser sich nicht selbst
  * austauscht und das Fenster über seinen eigenen Installer geht.
  */
-export function AppUpdateView(): React.JSX.Element | null {
+export function AppUpdateView({ asked = false }: { asked?: boolean } = {}):
+  React.JSX.Element | null {
   const platform = getPlatform()
   const [state, setState] = useState<AppUpdateState>({ kind: 'checking' })
   const [offer, setOffer] = useState<UpdateInfo | undefined>(undefined)
@@ -47,10 +48,15 @@ export function AppUpdateView(): React.JSX.Element | null {
   }, [platform, pruefen])
 
   if (!platform.capabilities.selfUpdate) {
-    return null
+    return asked ? (
+      <p className="agent-update-note" role="status">
+        Diese Fassung aktualisiert sich nicht selbst: im Browser übernimmt das die Seite
+        beim Neuladen, im Windows-Fenster der Installer.
+      </p>
+    ) : null
   }
 
-  const labels = describeAppUpdate(state)
+  const labels = describeAppUpdate(state, asked)
 
   if (!labels.visible) {
     return null
@@ -84,7 +90,10 @@ export function AppUpdateView(): React.JSX.Element | null {
       </p>
 
       {labels.action !== undefined && (
-        <button type="button" onClick={() => void installieren()}>
+        <button
+          type="button"
+          onClick={() => void (state.kind === 'offer' ? installieren() : pruefen())}
+        >
           {labels.action}
         </button>
       )}

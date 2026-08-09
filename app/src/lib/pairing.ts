@@ -1,5 +1,6 @@
 import { postJson } from '../transport/direct.ts'
 import { TransportError } from '../transport/index.ts'
+import { certificateFingerprint } from './certificateTrust.ts'
 import { createClientKey, type ClientKeyPair } from './clientKey.ts'
 import { storage } from './storage.ts'
 import type { Device } from './types.ts'
@@ -27,10 +28,13 @@ interface PairResponse {
   agentFingerprint?: string
   /**
    * Fingerabdruck der Zertifizierungsstelle, mit der sich der Agent ausweist.
-   * Fehlt bei einem Agent mit Zertifikat von Tailscale — dann gibt es nichts zu
-   * bestätigen.
+   *
+   * Bei einem Agent mit Zertifikat von Tailscale kommt hier ausdrücklich
+   * `null` — es gibt dann nichts zu bestätigen. Deshalb steht `| null` im Typ
+   * und nicht nur das Fragezeichen: genau diese Unterscheidung ging schief,
+   * siehe {@link fingerprintOf}.
    */
-  caFingerprint?: string
+  caFingerprint?: string | null
   /** `waker` bei einem Knoten, der nur wecken kann. */
   role?: string
   siteId?: string
@@ -89,6 +93,10 @@ export async function pairWithAgent(target: PairTarget): Promise<Device> {
 
   const waker = response.role === 'waker'
 
+  // Geprüft wird der Wert und nicht seine Abwesenheit — siehe
+  // `certificateFingerprint`. Ein `null` ist kein Fingerabdruck.
+  const caFingerprint = certificateFingerprint(response.caFingerprint)
+
   return {
     // Der Fingerabdruck des Agent-Schlüssels als Kennung: er bleibt gleich,
     // auch wenn der Rechner umbenannt wird oder eine andere Adresse bekommt.
@@ -103,9 +111,7 @@ export async function pairWithAgent(target: PairTarget): Promise<Device> {
     ...(response.agentFingerprint === undefined
       ? {}
       : { fingerprint: response.agentFingerprint }),
-    ...(response.caFingerprint === undefined
-      ? {}
-      : { caFingerprint: response.caFingerprint }),
+    ...(caFingerprint === undefined ? {} : { caFingerprint }),
     ...(waker ? { waker: true } : {}),
     ...(response.siteId === undefined ? {} : { siteId: response.siteId }),
     // Jeder Agent kann seit Phase 14 Nachbarn wecken, ein Waker kann sonst

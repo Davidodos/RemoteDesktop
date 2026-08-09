@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  certificateFingerprint,
   certificateUrl,
   fetchAgentCertificate,
   readable,
@@ -89,5 +90,32 @@ describe('Zertifikat eines Agents holen', () => {
   test('der Fingerabdruck lässt sich vorlesen', () => {
     // `a1b2c3…` vergleicht niemand von Hand, `a1:b2:c3` schon.
     expect(readable('a1b2c3')).toBe('a1:b2:c3')
+  })
+})
+
+describe('certificateFingerprint', () => {
+  test('nimmt einen echten Fingerabdruck an', () => {
+    const wert = 'a'.repeat(64)
+
+    expect(certificateFingerprint(wert)).toBe(wert)
+    expect(certificateFingerprint(wert.toUpperCase())).toBe(wert)
+    expect(certificateFingerprint(` ${wert} `)).toBe(wert)
+  })
+
+  test('behandelt null wie nicht vorhanden', () => {
+    // Der Agent schreibt bei einem Zertifikat von Tailscale ausdrücklich
+    // `"caFingerprint": null`. Die alte Prüfung auf `=== undefined` ließ das
+    // durch — und die App verlangte danach für jeden Rechner eine Bestätigung,
+    // die es gar nicht zu geben brauchte.
+    expect(certificateFingerprint(null)).toBeUndefined()
+    expect(certificateFingerprint(undefined)).toBeUndefined()
+  })
+
+  test('weist alles zurück, was kein Fingerabdruck ist', () => {
+    expect(certificateFingerprint('')).toBeUndefined()
+    expect(certificateFingerprint('abc')).toBeUndefined()
+    expect(certificateFingerprint('z'.repeat(64))).toBeUndefined()
+    expect(certificateFingerprint('a'.repeat(63))).toBeUndefined()
+    expect(certificateFingerprint(42)).toBeUndefined()
   })
 })

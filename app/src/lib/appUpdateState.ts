@@ -28,13 +28,25 @@ export interface AppUpdateLabels {
   visible: boolean
 }
 
-export function describeAppUpdate(state: AppUpdateState): AppUpdateLabels {
+/**
+ * @param asked Ob jemand ausdrücklich nachgesehen hat.
+ *
+ * Nebenbei am Rande einer anderen Seite hat „alles aktuell" nichts zu sagen und
+ * bleibt weg. Auf der Einstellungsseite ist es die Antwort auf eine Frage, die
+ * gerade gestellt wurde — dort verschwiegen zu werden sähe aus, als sei der
+ * Knopf kaputt.
+ */
+export function describeAppUpdate(state: AppUpdateState, asked = false): AppUpdateLabels {
   switch (state.kind) {
     case 'checking':
-      return { text: 'Suche nach einer neuen Fassung…', visible: false }
+      return { text: 'Suche nach einer neuen Fassung…', visible: asked }
 
     case 'current':
-      return { text: 'Die App ist auf dem neuesten Stand.', visible: false }
+      return {
+        text: 'Die App ist auf dem neuesten Stand.',
+        ...(asked ? { action: 'Erneut suchen' } : {}),
+        visible: asked,
+      }
 
     case 'offer':
       return {

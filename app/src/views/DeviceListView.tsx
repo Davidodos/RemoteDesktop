@@ -22,6 +22,14 @@ interface Props {
   onError: (message: string) => void
   /** Nach Umbenennen oder Entfernen: die Liste, wie sie jetzt aussieht. */
   onDevices: (devices: Device[]) => void
+  /**
+   * Zurück zu den Einstellungen — gesetzt, wenn die Liste von dort aus
+   * aufgerufen wurde. Ohne diesen Weg wäre sie eine Sackgasse: in der
+   * Seitenleiste steht sie nicht mehr.
+   */
+  onBack?: () => void
+  /** Zu den Einstellungen — solange noch kein Gerät verbunden ist. */
+  onSettings?: () => void
 }
 
 /**
@@ -41,6 +49,8 @@ export function DeviceListView({
   onPair,
   onError,
   onDevices,
+  onBack,
+  onSettings,
 }: Props): React.JSX.Element {
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
   const [waking, setWaking] = useState<string | undefined>(undefined)
@@ -99,7 +109,21 @@ export function DeviceListView({
 
   return (
     <div className="device-list">
-      <h1>Geräte</h1>
+      <div className="device-list-head">
+        {onBack !== undefined && (
+          <button type="button" className="link-button" onClick={onBack}>
+            ‹ Einstellungen
+          </button>
+        )}
+
+        <h1>Verbundene Geräte</h1>
+
+        {onSettings !== undefined && (
+          <button type="button" className="link-button" onClick={onSettings}>
+            Einstellungen ›
+          </button>
+        )}
+      </div>
 
       {hinweis !== undefined && (
         <p className="device-hint" role="status">

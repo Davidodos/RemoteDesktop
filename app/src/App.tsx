@@ -17,6 +17,7 @@ import { MediaView } from './views/MediaView.tsx'
 import { PairingView } from './views/PairingView.tsx'
 import { PowerView } from './views/PowerView.tsx'
 import { ScreenView } from './views/ScreenView.tsx'
+import { SettingsView } from './views/SettingsView.tsx'
 import { ActionsView } from './views/ActionsView.tsx'
 import { ShortcutsView } from './views/ShortcutsView.tsx'
 import { Sidebar, type Page } from './views/Sidebar.tsx'
@@ -244,13 +245,22 @@ export function App(): React.JSX.Element {
     return (
       <>
         <ErrorBanner message={error} onDismiss={() => setError(undefined)} />
-        <DeviceListView
-          devices={devices}
-          onDevices={applyDevices}
-          onError={setError}
-          onPair={() => setPairing(true)}
-          onSelect={(device) => void select(device)}
-        />
+        {/* Ohne verbundenes Gerät gibt es keine Seitenleiste. Damit die
+            Einstellungen trotzdem erreichbar bleiben — dort steckt die
+            Aktualisierung der App —, schalten die beiden Ansichten hier
+            gegenseitig um. */}
+        {page === 'settings' ? (
+          <SettingsView onDevices={() => setPage('devices')} />
+        ) : (
+          <DeviceListView
+            devices={devices}
+            onDevices={applyDevices}
+            onError={setError}
+            onPair={() => setPairing(true)}
+            onSelect={(device) => void select(device)}
+            onSettings={() => setPage('settings')}
+          />
+        )}
       </>
     )
   }
@@ -292,7 +302,9 @@ export function App(): React.JSX.Element {
 
         {/* Die Geräteseite braucht keine Verbindung — sie ist der Weg zurück,
             gerade auch wenn die Verbindung hakt. */}
-        {page === 'devices' ? (
+        {page === 'settings' ? (
+          <SettingsView onDevices={() => setPage('devices')} />
+        ) : page === 'devices' ? (
           <DeviceListView
             devices={devices}
             current={selected}
@@ -302,6 +314,7 @@ export function App(): React.JSX.Element {
             onSelect={(device) => {
               void select(device).then(() => setPage('screen'))
             }}
+            onBack={() => setPage('settings')}
           />
         ) : input === undefined || agent === undefined ? (
           <p className="placeholder">Verbinde…</p>

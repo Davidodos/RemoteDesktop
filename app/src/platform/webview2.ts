@@ -129,6 +129,10 @@ const update: UpdateService = {
       new PlatformError('Das Windows-Fenster aktualisiert sich noch nicht selbst.'),
     )
   },
+
+  installed(): Promise<string | undefined> {
+    return Promise.resolve(undefined)
+  },
 }
 
 const qr: QrScanner = {

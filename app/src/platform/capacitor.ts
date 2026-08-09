@@ -235,6 +235,19 @@ function updateService(plugins: CapacitorPlugins): UpdateService {
 
       await plugins.appUpdate.install({ url: update.url })
     },
+
+    async installed(): Promise<string | undefined> {
+      if (plugins.appUpdate === undefined) {
+        return undefined
+      }
+
+      // Ein Fehlschlag ist hier eine fehlende Auskunft und kein Fehler: die
+      // Einstellungsseite schreibt dann eben nichts hin.
+      return await plugins.appUpdate
+        .current()
+        .then(({ version }) => version)
+        .catch(() => undefined)
+    },
   }
 }
 
