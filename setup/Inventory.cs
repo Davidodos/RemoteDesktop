@@ -42,6 +42,11 @@ public enum PartAction
 /// Ob noch der Windows-Dienst aus v1.2 eingetragen ist. Er antwortet zwar, kann
 /// aber weder Bild noch Eingabe — siehe <see cref="AgentTask"/>.
 /// </param>
+/// <param name="CertificateOutdated">
+/// Ob das Zertifikat neuer ist als der laufende Agent. Er liest es genau
+/// einmal, beim Start; ein danach geholtes liegt zwar da, wirkt aber nicht.
+/// Genau das sah am echten Gerät aus wie „das Zertifikat kommt nicht an".
+/// </param>
 public sealed record Machine(
     bool AgentBinary = false,
     bool AgentService = false,
@@ -52,7 +57,8 @@ public sealed record Machine(
     bool WebView2 = false,
     bool Tailscale = false,
     bool TailscaleConnected = false,
-    bool Certificate = false);
+    bool Certificate = false,
+    bool CertificateOutdated = false);
 
 /// <summary>
 /// Ein Teil von RemoteDesktop, so wie es im Fenster steht.
@@ -243,6 +249,23 @@ public static class Inventory
             return new Part(
                 NetworkTitle, profile.Describe(), "Tailscale läuft, ist aber nicht angemeldet",
                 false, false, [PartAction.SignIn]);
+        }
+
+        // Ein Zertifikat, das daliegt, aber jünger ist als der laufende Agent,
+        // ist eines, das er noch nicht hat: gelesen wird es beim Start. Ohne
+        // diesen Hinweis sieht hier alles fertig aus, und auf dem Handy kommt
+        // trotzdem weiter die Rückfrage nach einem selbst ausgestellten.
+        if (machine.Certificate && machine.CertificateOutdated)
+        {
+            return new Part(
+                NetworkTitle,
+                profile.Describe()
+                + " Das Zertifikat kam, nachdem der Agent gestartet ist — er liest es nur "
+                + "beim Start. Unter „Agent“ einmal beenden und starten.",
+                "Zertifikat liegt bereit — der Agent läuft noch mit dem alten",
+                Ok: false,
+                Missing: false,
+                []);
         }
 
         // Das Zertifikat fehlt zu lassen ist kein Fehler mehr — der Agent stellt

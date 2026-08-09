@@ -40,6 +40,13 @@ var settings = AgentSettings.Load(builder.Configuration);
 // Installer legt ihn zwar an, aber ein Entwicklungsbau hat keinen Installer.
 Directory.CreateDirectory(settings.DataDirectory);
 
+// Der Agent ist eine WinExe und hat damit keine Konsole. Ohne diese Zeile
+// schreibt der voreingestellte Logger in ein Fenster, das es nicht gibt — und
+// alles, was er meldet, ist weg. Siehe AgentLog.
+var log = new AgentLog(settings.DataDirectory);
+
+builder.Logging.AddProvider(new AgentLogProvider(log));
+
 // Wie dieser Rechner erreichbar sein soll: im Heimnetz, über Tailscale oder
 // über ein fremdes VPN. Aus derselben Datei, die auch die Oberfläche schreibt.
 var profile = RemoteDesktopSetup.NetworkConfig.Read(
@@ -438,11 +445,22 @@ app.MapPost("/api/webrtc/{id}/monitor", async (
 
     if (session is null)
     {
+        app.Logger.LogWarning("Monitorwechsel auf unbekannte Sitzung {Id}.", id);
+
         return Results.NotFound(new { error = "Unbekannte Sitzung." });
     }
 
+    // Der Abbruch der Anfrage taugt hier **nicht** als Abbruchmarke für den
+    // Strom: er gehört zu diesem einen Aufruf, der Strom läuft danach weiter.
+    // Er begrenzt nur, wie lange auf das erste Bild gewartet wird.
     var switched = await session.SwitchMonitorAsync(
         Math.Max(request.Monitor, 0), context.RequestAborted);
+
+    app.Logger.LogInformation(
+        "Monitorwechsel auf {Wanted}: {Result}. Sitzung steht jetzt auf {Actual}.",
+        request.Monitor,
+        switched ? "übernommen" : "abgelehnt",
+        session.Monitor);
 
     return switched
         ? Results.Ok(new { monitor = session.Monitor, encoder = session.Encoder })

@@ -67,6 +67,9 @@ public static class Elevation
     public const string TaskSwitch = "--admin-task";
     public const string ResultSwitch = "--result";
 
+    /// <summary>Wie lange auf einen beendeten Agent gewartet wird, in Millisekunden.</summary>
+    private const int StopTimeout = 5000;
+
     /// <summary>
     /// Der Datenordner: <c>data\</c> neben dem Programm. Dort liegt alles, was
     /// Rechte verlangt — Schlüssel, Zertifikate, Kopplungen, Netzprofil.
@@ -227,6 +230,12 @@ public static class Elevation
 
         if (request.Agent == AgentSetup.None)
         {
+            // „Nur andere steuern" heißt: hier lauscht nichts. Ein Agent, der
+            // vom letzten Mal noch läuft und eingetragen ist, machte diese
+            // Antwort zur Unwahrheit.
+            StopAgent();
+            Remove();
+
             return new RunResult(0, "Eingerichtet — ohne Agent, dieser Rechner steuert nur.", string.Empty);
         }
 
@@ -236,6 +245,18 @@ public static class Elevation
         var certificate = request.Certificate
             ? FetchCertificate(request.Profile.AdvertisedAddress ?? string.Empty)
             : new RunResult(0, string.Empty, string.Empty);
+
+        // **Erst beenden, dann eintragen, dann starten.**
+        //
+        // Der Befund dahinter: die Aufgabe läuft mit
+        // `MultipleInstancesPolicy: IgnoreNew` (siehe AgentTask). `schtasks /Run`
+        // auf eine bereits laufende Aufgabe meldet Erfolg und tut nichts. Wer
+        // also die Einrichtung an einem Rechner durchlief, auf dem der Agent
+        // schon lief, bekam „Eingerichtet. Der Agent läuft." — und es lief der
+        // alte Prozess weiter, mit dem Zertifikat, das er bei *seinem* Start
+        // geladen hatte. Auf dem Handy war das dann weiter das selbst
+        // ausgestellte, obwohl daneben längst das von Tailscale lag.
+        StopAgent();
 
         var installed = InstallTask(
             AgentTask.Argument(request.Agent == AgentSetup.Automatic, request.User));
@@ -333,6 +354,43 @@ public static class Elevation
         DropLegacyService();
 
         return Schtasks(["/Delete", "/TN", AgentTask.Name, "/F"]);
+    }
+
+    /// <summary>
+    /// Einen laufenden Agent beenden — und dabei nicht darauf vertrauen, dass er
+    /// über die Aufgabenplanung gestartet wurde.
+    ///
+    /// <para>
+    /// <c>schtasks /End</c> beendet nur, was die Aufgabe selbst gestartet hat.
+    /// Ein Agent, den jemand von Hand aufgerufen hat, bliebe stehen — und
+    /// belegte Port 8443, sodass der neu gestartete sofort wieder ausginge. Der
+    /// Rückgabewert zählt in beiden Fällen nicht: dass gar keiner lief, ist der
+    /// Normalfall und kein Fehler.
+    /// </para>
+    /// </summary>
+    private static void StopAgent()
+    {
+        Schtasks(["/End", "/TN", AgentTask.Name]);
+
+        foreach (var process in
+                 System.Diagnostics.Process.GetProcessesByName(AgentService.ProcessName))
+        {
+            using (process)
+            {
+                try
+                {
+                    // Mitsamt ffmpeg: ein zurückbleibender Encoder hielte den
+                    // Hardware-Encoder besetzt.
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(StopTimeout);
+                }
+                catch (Exception)
+                {
+                    // Schon beendet, oder er gehört jemand anderem. Beides ist
+                    // kein Grund, die Einrichtung abzubrechen.
+                }
+            }
+        }
     }
 
     /// <summary>

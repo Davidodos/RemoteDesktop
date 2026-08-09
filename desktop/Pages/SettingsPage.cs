@@ -17,6 +17,13 @@ public sealed class SettingsPage : PageView
 {
     private const string Project = "https://github.com/Davidodos/RemoteDesktop";
 
+    /// <summary>
+    /// Wie die Protokolldatei des Agents heißt. Doppelt genannt statt geteilt:
+    /// das Fenster hängt nicht am Agent-Projekt, und ein Verweis dorthin wäre
+    /// eine Abhängigkeit für eine Zeichenkette.
+    /// </summary>
+    private const string AgentLogFile = "agent.log";
+
     private readonly IAutostartHost _autostart;
     private readonly ClientUpdate _update = new();
 
@@ -183,7 +190,28 @@ public sealed class SettingsPage : PageView
             + $"Anzeigekomponente WebView2: {WebView2Runtime.InstalledVersion() ?? "fehlt"}\n"
             + $"Datenordner des Agents: {Elevation.DataDirectory}"));
 
-        card.Body.Add(Row.Buttons(project));
+        // Der Agent hat kein Fenster und damit keine Konsole. Was er meldet,
+        // steht ausschließlich in dieser Datei — und ohne einen Weg dorthin ist
+        // sie so gut wie nicht vorhanden.
+        var logPath = Path.Combine(Elevation.DataDirectory, AgentLogFile);
+        var log = new ThemedButton("Protokoll des Agents öffnen");
+
+        log.Click += (_, _) =>
+        {
+            if (!File.Exists(logPath))
+            {
+                Report(
+                    "Es gibt noch kein Protokoll — der Agent hat auf diesem Rechner noch "
+                    + "nicht gelaufen.",
+                    Tone.Bad);
+
+                return;
+            }
+
+            OverviewPage.Open(logPath);
+        };
+
+        card.Body.Add(Row.Buttons(project, log));
 
         return card;
     }

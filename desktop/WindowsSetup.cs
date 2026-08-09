@@ -190,7 +190,7 @@ public static class AgentBinary
 public static class AgentService
 {
     /// <summary>Wie der Prozess des Agents heißt, ohne <c>.exe</c>.</summary>
-    private const string ProcessName = "RemoteDesktopAgent";
+    public const string ProcessName = "RemoteDesktopAgent";
 
     /// <summary>
     /// Der Benutzer, in dessen Sitzung der Agent laufen soll. Wird beim Anlegen
@@ -297,6 +297,52 @@ public static class AgentService
                 // Die Prozessliste darf gesperrt sein. Dann zählt eben nur die
                 // Antwort auf /health.
                 return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Seit wann der Agent läuft — <c>null</c>, wenn keiner läuft oder die
+    /// Prozessliste nichts hergibt.
+    ///
+    /// <para>
+    /// Gebraucht für eine Frage, die man sonst nicht beantworten kann: **hält
+    /// der laufende Agent das Zertifikat, das hier liegt?** Er liest es genau
+    /// einmal, beim Start. Ein danach geholtes Zertifikat liegt zwar da, ist
+    /// aber wirkungslos, bis er neu startet — und genau so sah es am echten
+    /// Gerät aus, als das Handy weiter nach einem selbst ausgestellten fragte.
+    /// </para>
+    /// </summary>
+    public static DateTime? StartedAt
+    {
+        get
+        {
+            try
+            {
+                var found = System.Diagnostics.Process.GetProcessesByName(ProcessName);
+
+                DateTime? earliest = null;
+
+                foreach (var process in found)
+                {
+                    using (process)
+                    {
+                        var start = process.StartTime.ToUniversalTime();
+
+                        if (earliest is null || start < earliest)
+                        {
+                            earliest = start;
+                        }
+                    }
+                }
+
+                return earliest;
+            }
+            catch (Exception)
+            {
+                // Die Startzeit eines fremden Prozesses zu lesen darf
+                // scheitern. Dann gibt es diesen Hinweis eben nicht.
+                return null;
             }
         }
     }
@@ -420,6 +466,36 @@ public sealed class WindowsProbe : ISetupProbe
     /// </summary>
     public bool HasCertificate => Certificate?.IsValidAt(DateTimeOffset.UtcNow) == true;
 
+    /// <summary>
+    /// Ob das Zertifikat neuer ist als der laufende Agent — dann hat er es noch
+    /// nicht in der Hand, und auf dem Handy erscheint weiter das selbst
+    /// ausgestellte.
+    ///
+    /// <c>false</c>, wenn gar keiner läuft: dann gibt es nichts zu erneuern,
+    /// sondern etwas zu starten, und das steht ohnehin schon da.
+    /// </summary>
+    public bool CertificateOutdated
+    {
+        get
+        {
+            if (AgentService.StartedAt is not { } started)
+            {
+                return false;
+            }
+
+            try
+            {
+                var file = Path.Combine(CertificateDirectory, "cert.crt");
+
+                return File.Exists(file) && File.GetLastWriteTimeUtc(file) > started;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+        }
+    }
+
     /// <summary>Ob das vorhandene Zertifikat auch auf diese Adresse lautet.</summary>
     public bool CertificateCovers(string? address) =>
         Certificate is { } certificate
@@ -443,7 +519,8 @@ public sealed class WindowsProbe : ISetupProbe
         WebView2: WebView2Runtime.InstalledVersion() is not null,
         Tailscale: HasTailscale,
         TailscaleConnected: IsConnected,
-        Certificate: HasCertificate);
+        Certificate: HasCertificate,
+        CertificateOutdated: CertificateOutdated);
 
     /// <summary>Nach einem Handgriff neu fragen, statt den alten Stand zu zeigen.</summary>
     public void Forget()

@@ -723,6 +723,34 @@ public class InventoryTests
         ClientFiles: true, WebView2: true,
         Tailscale: true, TailscaleConnected: true, Certificate: true);
 
+    [Fact]
+    public void Ein_Zertifikat_nach_dem_Start_des_Agents_ist_noch_keins()
+    {
+        // Der Agent liest es genau einmal, beim Start. Ohne diesen Hinweis sieht
+        // im Fenster alles fertig aus, und auf dem Handy kommt weiter die
+        // Rückfrage nach einem selbst ausgestellten Zertifikat.
+        var teil = Teil(
+            new Machine(
+                Tailscale: true, TailscaleConnected: true,
+                Certificate: true, CertificateOutdated: true),
+            Inventory.NetworkTitle);
+
+        Assert.False(teil.Ok);
+        Assert.Contains("noch mit dem alten", teil.State);
+        Assert.Contains("beenden und starten", teil.Purpose);
+    }
+
+    [Fact]
+    public void Ein_Zertifikat_von_vor_dem_Start_ist_in_Ordnung()
+    {
+        var teil = Teil(
+            new Machine(Tailscale: true, TailscaleConnected: true, Certificate: true),
+            Inventory.NetworkTitle);
+
+        Assert.True(teil.Ok);
+        Assert.Equal("verbunden", teil.State);
+    }
+
     private static Part Teil(Machine machine, string titel, NetworkProfile? profil = null) =>
         Inventory.For(machine, profil ?? NetworkProfile.Default)
             .Single(part => part.Title == titel);
