@@ -147,6 +147,7 @@ weggelassen hat.
 | Agent-Log sagt „Selbst-Update ist aus" | Schritt 2 fehlt: `ReleaseKeys.PublicKey` ist leer |
 | Agent lehnt das Update ab | Manifest mit einem anderen Schlüssel unterschrieben als dem einkompilierten. Nach einem Schlüsselwechsel muss jeder Agent einmal von Hand auf die neue Fassung |
 | Android sagt „App nicht installiert" | Die installierte Fassung trägt eine andere Signatur — siehe Schritt 5 |
+| APK installiert, App-Details zeigen die neue Fassung, die Oberfläche ist die alte — beim zweiten Start ist sie da | Der Service Worker der PWA hatte sich auch in der APK angemeldet und beantwortete jeden Start aus seinem Zwischenspeicher von gestern. Behoben ab v1.3.6: dort meldet sich die App beim ersten Start selbst ab. Der Übergang dorthin kostet noch einmal genau diesen zweiten Start, danach nie wieder |
 | Windows-Client findet nichts | Das Release hat keinen Anhang, der mit `RemoteDesktop-Setup` beginnt. Der Installer-Job im Workflow ist fehlgeschlagen |
 | Ein Skript im CI endet mit „Permission denied" (Exit 126) | Das Ausführbar-Bit fehlt in Git. In diesem Repository gilt `core.fileMode=false` (CIFS-Mount), deshalb landet alles als 644 — und lokal sieht man es nicht, weil der Mount 777 zeigt. Heilung: `git update-index --chmod=+x <datei>` |
 | Update bricht mit Dateizugriffsfehler ab | Der Agent-Dienst lief noch. Der Installer stoppt ihn (`PrepareToInstall`); schlägt das fehl, hilft `sc stop RemoteDesktopAgent` von Hand |

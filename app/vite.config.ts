@@ -8,6 +8,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+
+      // Nicht von allein in die index.html schreiben: die APK und das
+      // Windows-Fenster dürfen den Worker gar nicht erst anmelden — bei ihnen
+      // liegt die App in der Anwendung selbst, und der Worker verzögerte jedes
+      // Update um einen Start. Registriert wird deshalb in `main.tsx`, wo die
+      // Plattform bekannt ist.
+      injectRegister: null,
       manifest: {
         name: 'RemoteDesktop',
         short_name: 'Remote',
