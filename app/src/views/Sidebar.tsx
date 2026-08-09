@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { Capability } from '../lib/capabilities.ts'
 import { probeAll } from '../lib/reachability.ts'
 import type { Device, DeviceStatus } from '../lib/types.ts'
 import { deviceLabel } from '../lib/deviceNames.ts'
@@ -35,22 +36,46 @@ export type Page =
   | 'devices'
   | 'settings'
 
-const PAGES: { id: Page; label: string; icon: IconComponent }[] = [
-  { id: 'screen', label: 'Bildschirm', icon: ScreenIcon },
-  { id: 'mouse', label: 'Maus', icon: MouseIcon },
-  { id: 'keyboard', label: 'Tastatur', icon: KeyboardIcon },
-  { id: 'power', label: 'Power', icon: PowerIcon },
-  { id: 'media', label: 'Medien', icon: MediaIcon },
+/**
+ * Die Ansichten und die Fähigkeit, die jede von ihnen voraussetzt.
+ *
+ * Seit V4 steht am anderen Ende nicht mehr zwangsläufig ein Windows-Rechner.
+ * Was das Gerät nicht kann, steht hier gar nicht erst — eine ausgegraute
+ * Schaltfläche wäre nur eine Frage, auf die es keine Antwort gibt.
+ */
+const PAGES: { id: Page; label: string; icon: IconComponent; needs: Capability }[] = [
+  { id: 'screen', label: 'Bildschirm', icon: ScreenIcon, needs: 'screen' },
+  { id: 'mouse', label: 'Maus', icon: MouseIcon, needs: 'input' },
+  { id: 'keyboard', label: 'Tastatur', icon: KeyboardIcon, needs: 'input' },
+  { id: 'power', label: 'Power', icon: PowerIcon, needs: 'power' },
+  { id: 'media', label: 'Medien', icon: MediaIcon, needs: 'media' },
   // Vom Zielrechner, nicht aus dem Speicher dieses Handys — deshalb über den
   // Shortcuts, die nur lokal gelten.
-  { id: 'actions', label: 'Aktionen', icon: ShortcutIcon },
-  { id: 'shortcuts', label: 'Shortcuts', icon: ShortcutIcon },
+  { id: 'actions', label: 'Aktionen', icon: ShortcutIcon, needs: 'actions' },
+  // Ein Shortcut ist eine gespeicherte Tastenkombination. Wo keine Tasten
+  // ankommen, ist er ein Knopf, der nichts tut.
+  { id: 'shortcuts', label: 'Shortcuts', icon: ShortcutIcon, needs: 'keys' },
 ]
+
+/**
+ * Ob diese Ansicht am verbundenen Gerät überhaupt etwas bewirkt.
+ *
+ * `devices` und `settings` stehen absichtlich nicht in {@link PAGES}: sie
+ * betreffen die App und nicht das Gerät, und sie müssen gerade dann erreichbar
+ * bleiben, wenn mit dem Gerät etwas nicht stimmt.
+ */
+export function pageAvailable(page: Page, abilities: readonly Capability[]): boolean {
+  const entry = PAGES.find((candidate) => candidate.id === page)
+
+  return entry === undefined || abilities.includes(entry.needs)
+}
 
 interface Props {
   devices: Device[]
   current: Device
   page: Page
+  /** Was das verbundene Gerät kann — siehe `lib/capabilities.ts`. */
+  abilities: readonly Capability[]
   onDevice: (device: Device) => void
   onPage: (page: Page) => void
   onClose: () => void
@@ -67,6 +92,7 @@ export function Sidebar({
   devices,
   current,
   page,
+  abilities,
   onDevice,
   onPage,
   onClose,
@@ -139,7 +165,7 @@ export function Sidebar({
         </button>
 
         <span className="sidebar-label">Ansichten</span>
-        {PAGES.map(({ id, label, icon: Glyph }) => (
+        {PAGES.filter(({ needs }) => abilities.includes(needs)).map(({ id, label, icon: Glyph }) => (
           <button
             key={id}
             type="button"

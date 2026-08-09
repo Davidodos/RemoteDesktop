@@ -101,6 +101,11 @@ export interface AgentInfo {
   mac?: string
   /** Ob dieser Rechner seinerseits Nachbarn wecken kann. */
   canWake?: boolean
+  /**
+   * Was dieses Gerät kann — daraus baut die App ihre Seitenleiste. Fehlt das
+   * Feld, ist der Agent älter als V4; siehe `lib/capabilities.ts`.
+   */
+  capabilities?: string[]
 }
 
 /**

@@ -247,6 +247,13 @@ app.MapGet("/api/info", (InputExecutor executor) =>
         // Dieser Rechner kann seinerseits Nachbarn wecken.
         canWake = true,
 
+        // Woraus die App ihre Seitenleiste baut. Seit V4 steht am anderen Ende
+        // nicht mehr zwangsläufig Windows — ein Handy meldet hier drei Einträge
+        // statt sieben, und alles, was es nicht kann, ist dort schlicht nicht
+        // da. Ein Agent ohne dieses Feld ist älter als V4; die App nimmt dann
+        // die Liste von damals an.
+        capabilities = AgentCapabilities.Windows,
+
         // Womit dieser Rechner sich ausweist. Steht hier ein Fingerabdruck, hat
         // er sich selbst beglaubigt — der Client weiß dann, dass er die CA
         // einmal bestätigen muss, und woran er die richtige erkennt.

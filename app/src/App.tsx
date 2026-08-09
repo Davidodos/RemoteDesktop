@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
+import { capabilitiesOf } from './lib/capabilities.ts'
 import { deviceLabel } from './lib/deviceNames.ts'
 import { collectDevices, localDeviceSource, saveLocalDevice } from './lib/deviceSources.ts'
 import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
@@ -10,7 +11,7 @@ import { buildSurfaceBoard } from './lib/surfaceBoard.ts'
 import { rememberSite, siteChanged } from './lib/wake.ts'
 import { getPlatform } from './platform/index.ts'
 import { storage } from './lib/storage.ts'
-import type { ConnectionState, Device } from './lib/types.ts'
+import type { AgentInfo, ConnectionState, Device } from './lib/types.ts'
 import { DeviceListView } from './views/DeviceListView.tsx'
 import { KeyboardView } from './views/KeyboardView.tsx'
 import { MediaView } from './views/MediaView.tsx'
@@ -20,7 +21,7 @@ import { ScreenView } from './views/ScreenView.tsx'
 import { SettingsView } from './views/SettingsView.tsx'
 import { ActionsView } from './views/ActionsView.tsx'
 import { ShortcutsView } from './views/ShortcutsView.tsx'
-import { Sidebar, type Page } from './views/Sidebar.tsx'
+import { Sidebar, pageAvailable, type Page } from './views/Sidebar.tsx'
 import { TouchpadView } from './views/TouchpadView.tsx'
 import { MenuIcon } from './views/icons.tsx'
 
@@ -32,6 +33,12 @@ export function App(): React.JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const [connection, setConnection] = useState<ConnectionState>('disconnected')
   const [error, setError] = useState<string | undefined>(undefined)
+
+  /**
+   * Die Selbstauskunft des verbundenen Geräts. Daran hängt, welche Ansichten es
+   * überhaupt gibt — ein Handy hat kein „Ein/Aus" und keine Aktionen.
+   */
+  const [info, setInfo] = useState<AgentInfo | undefined>(undefined)
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
 
@@ -107,6 +114,43 @@ export function App(): React.JSX.Element {
   )
 
   /**
+   * Nachfragen, was das Gerät kann.
+   *
+   * Diese eine Stelle hält die Auskunft — `select` fragt zwar auch, aber nur um
+   * zu entscheiden, ob überhaupt verbunden wird, und über die Kopplung kommt
+   * man ganz ohne sie hierher. Zwei Besitzer derselben Angabe wären zwei
+   * Gelegenheiten, sie stehen zu lassen, wenn das Gerät wechselt.
+   *
+   * Bis die Antwort da ist, gilt die Liste von früher (siehe
+   * `capabilitiesOf`) — also alles außer den Dateien. Andersherum wäre die
+   * Leiste bei jedem Gerätewechsel für einen Moment fast leer.
+   */
+  useEffect(() => {
+    setInfo(undefined)
+
+    if (selected === undefined) {
+      return
+    }
+
+    let current = true
+
+    // Kommt die Auskunft nicht durch, gibt es hier nichts zu melden: der
+    // Eingabe-Socket steht auf demselben Rechner und sagt es ohnehin.
+    void new AgentClient(selected).getInfo().then(
+      (fresh) => {
+        if (current) {
+          setInfo(fresh)
+        }
+      },
+      () => undefined,
+    )
+
+    return () => {
+      current = false
+    }
+  }, [selected])
+
+  /**
    * Den Steckbrief für Widget, Tile und App-Kürzel nachführen.
    *
    * Er wird beim Verbinden geschrieben und nicht erst, wenn jemand die
@@ -141,30 +185,30 @@ export function App(): React.JSX.Element {
       return
     }
 
-    let info
+    let probe
 
     try {
-      info = await new AgentClient(device).getInfo()
+      probe = await new AgentClient(device).getInfo()
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))
       return
     }
 
-    if (isSelfConnection(info.hostname, getPlatform().machineName)) {
-      setError(selfConnectionMessage(info.hostname))
+    if (isSelfConnection(probe.hostname, getPlatform().machineName)) {
+      setError(selfConnectionMessage(probe.hostname))
       return
     }
 
     // Solange der Rechner wach ist, ist das der einzige Zeitpunkt, an dem sich
     // Standort und MAC erfahren lassen. Schläft er, sind sie die Grundlage
     // dafür, dass ihn überhaupt jemand wecken kann.
-    const aktuell = rememberSite(device, info)
+    const aktuell = rememberSite(device, probe)
 
     if (siteChanged(device, aktuell)) {
       setDevices(saveLocalDevice(aktuell))
     }
 
-    setError(protocolMismatch(info, device.name))
+    setError(protocolMismatch(probe, device.name))
     storage.setLastDevice(aktuell.id)
     setSelected(aktuell)
   }, [])
@@ -266,6 +310,18 @@ export function App(): React.JSX.Element {
   }
 
   const input = inputRef.current
+  const abilities = capabilitiesOf(info)
+
+  /**
+   * Die Seite, die wirklich zu sehen ist.
+   *
+   * Der Wunsch bleibt in `page` stehen, auch wenn das eben gewählte Gerät ihn
+   * nicht erfüllen kann — wer von einem Handy zurück auf den PC wechselt,
+   * landet wieder auf „Ein/Aus", statt eine Seite neu suchen zu müssen.
+   * Entschieden wird das hier und nicht in einem Effekt: sonst wäre ein
+   * Bilddurchlauf lang die Seite zu sehen, die es dort gar nicht gibt.
+   */
+  const view = pageAvailable(page, abilities) ? page : 'screen'
 
   return (
     <div className="app">
@@ -284,17 +340,17 @@ export function App(): React.JSX.Element {
 
       <ErrorBanner message={error} onDismiss={() => setError(undefined)} />
 
-      <main className={page === 'screen' ? 'app-body screen' : 'app-body'}>
+      <main className={view === 'screen' ? 'app-body screen' : 'app-body'}>
         {/* Die Bildschirmansicht bleibt auch auf den anderen Seiten bestehen,
             nur unsichtbar: sonst würde der Videostrom bei jedem Wechsel neu
             aufgebaut, und das dauert Sekunden. */}
         {input !== undefined && agent !== undefined && (
-          <div className="tab-panel" hidden={page !== 'screen'}>
+          <div className="tab-panel" hidden={view !== 'screen'}>
             <ScreenView
               device={selected}
               agent={agent}
               input={input}
-              visible={page === 'screen'}
+              visible={view === 'screen'}
               onError={setError}
             />
           </div>
@@ -302,9 +358,9 @@ export function App(): React.JSX.Element {
 
         {/* Die Geräteseite braucht keine Verbindung — sie ist der Weg zurück,
             gerade auch wenn die Verbindung hakt. */}
-        {page === 'settings' ? (
+        {view === 'settings' ? (
           <SettingsView onDevices={() => setPage('devices')} />
-        ) : page === 'devices' ? (
+        ) : view === 'devices' ? (
           <DeviceListView
             devices={devices}
             current={selected}
@@ -318,17 +374,17 @@ export function App(): React.JSX.Element {
           />
         ) : input === undefined || agent === undefined ? (
           <p className="placeholder">Verbinde…</p>
-        ) : page === 'mouse' ? (
+        ) : view === 'mouse' ? (
           <TouchpadView input={input} />
-        ) : page === 'keyboard' ? (
+        ) : view === 'keyboard' ? (
           <KeyboardView input={input} />
-        ) : page === 'media' ? (
+        ) : view === 'media' ? (
           <MediaView agent={agent} deviceName={selected.name} onError={setError} />
-        ) : page === 'power' ? (
+        ) : view === 'power' ? (
           <PowerView agent={agent} deviceName={selected.name} onError={setError} />
-        ) : page === 'actions' ? (
+        ) : view === 'actions' ? (
           <ActionsView agent={agent} deviceName={selected.name} onError={setError} />
-        ) : page === 'shortcuts' ? (
+        ) : view === 'shortcuts' ? (
           <ShortcutsView />
         ) : null}
       </main>
@@ -337,7 +393,8 @@ export function App(): React.JSX.Element {
         <Sidebar
           devices={devices}
           current={selected}
-          page={page}
+          page={view}
+          abilities={abilities}
           onDevice={(device) => {
             void select(device).then(() => setPage('screen'))
           }}

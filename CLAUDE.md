@@ -43,7 +43,7 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 | `desktop/` | C# / WinForms + WebView2, Tray | PC + Laptop — `RemoteDesktop.exe`, die einzige .exe, die ein Mensch startet |
 | `assets/` | SVG | Quelle des Symbols für alle drei Plattformen |
 | `waker/` | Node/TS + Express, Docker | NAS, Port 3080 |
-| `app/` | React + Vite, PWA | Handy (Browser/Homescreen) |
+| `app/` | React + Vite | Oberfläche für Handy **und** Windows-Fenster |
 | `clients/android/` | Capacitor + Java, APK | Handy, zeigt `app/dist` |
 
 ## Konventionen
@@ -74,8 +74,12 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
   wie in `app/src/styles.css`. Ändert sich eine, gehört sie an beiden Stellen
   nachgezogen.
 - Ein Symbol für alles: `assets/icon.svg` → `node scripts/icons.mjs` erzeugt
-  `.ico`, Android-Mipmaps und PWA-Icons. Nie eine der erzeugten Dateien von Hand
-  anfassen.
+  `.ico` und Android-Mipmaps. Nie eine der erzeugten Dateien von Hand anfassen.
+- **Kein Service Worker.** Die App liegt in der APK und neben der `.exe`; über
+  HTTP serviert sie niemand. Ein Worker hatte nichts zwischenzuspeichern, was
+  nicht ohnehin lokal lag, verzögerte aber jedes Update um einen Start
+  (`app/src/serviceWorker.ts` meldet nur noch ab, was ältere Fassungen
+  hinterlassen haben).
 - Der Agent läuft als **geplante Aufgabe in der Sitzung des Benutzers**, nicht
   als Dienst (`setup/AgentTask.cs`). Ein Dienst sitzt in Sitzung 0 und hat dort
   weder Bildschirm noch Desktop — Bild und Eingabe scheitern dort grundsätzlich.

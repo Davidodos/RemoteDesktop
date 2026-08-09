@@ -102,10 +102,12 @@ er *Hub* und konnte deutlich mehr; siehe oben, warum das weg ist.
 - Kopplung wie beim Agent: Code, öffentlicher Schlüssel, Challenge-Response
 - **Keine** Gerätekonfiguration, **keine** PWA-Auslieferung, **keine** Tokens
 
-### 3. App (`app/`) — React + Vite, PWA
+### 3. App (`app/`) — React + Vite
 
-Auf dem Homescreen installierbar (`display: standalone` — die
-Android-Navigationsleiste bleibt sichtbar).
+Dieselbe Oberfläche in der Android-APK und im Windows-Fenster. Bis v1.3.5 war
+sie zusätzlich eine PWA; das ist entfallen, seit sie niemand mehr über HTTP
+ausliefert (der Waker tut es seit Phase 14 nicht mehr). Der Service Worker
+verzögerte dabei jedes Update der APK um einen Start.
 
 **Aufbau:** Die Bildschirmansicht ist die Startseite. Navigiert wird über ein
 Burger-Menü oben links (Seitenleiste: verbundenes Gerät, alle bekannten Geräte
