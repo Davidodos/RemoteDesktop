@@ -29,8 +29,8 @@ public sealed class NetworkPage : PageView
     /// ausgeblendet — eine Beschriftung ohne Feld wäre die schlechtere Hälfte.
     /// </summary>
     private readonly TextBlock _coordinatorHint = new(
-        "Eigener Koordinator (Headscale) — nur, wenn du Tailscale nicht über "
-        + "deren Server betreibst.", Theme.Body, Theme.TextDim);
+        "Die Adresse deines Headscale-Servers — dorthin meldet sich der "
+        + "Tailscale-Client an.", Theme.Body, Theme.TextDim);
 
     /// <summary>Der Stapel, in dem beide stecken — er blendet sie aus.</summary>
     private Stack? _addressBody;
@@ -64,8 +64,13 @@ public sealed class NetworkPage : PageView
             "Auch von unterwegs. Braucht das Programm Tailscale auf beiden Seiten.");
 
         _kinds.Add(
+            NetworkKind.Headscale,
+            "Headscale",
+            "Derselbe Tailscale-Client, aber an deinem eigenen Koordinator.");
+
+        _kinds.Add(
             NetworkKind.Vpn,
-            "Eigenes VPN",
+            "Anderer VPN-Anbieter",
             "Du hast schon eins — WireGuard auf der Fritzbox oder etwas Ähnliches.");
 
         _kinds.Chosen += Choose;
@@ -159,29 +164,28 @@ public sealed class NetworkPage : PageView
     /// </summary>
     private void ApplyMode()
     {
-        // Die Adresse gilt in jedem Modus. Bei Tailscale ist sie freiwillig,
-        // aber sie ist der einzige Weg, den Namen im Tailnet in den QR-Code zu
-        // bekommen, solange kein Zertifikat von Tailscale danebenliegt: ein
-        // selbst ausgestelltes trägt den Windows-Rechnernamen, und unter dem
-        // findet das Handy nichts.
-        _suggest.Enabled = _chosen is NetworkKind.Lan or NetworkKind.Tailscale;
+        // Die Adresse gilt in jedem Modus und ist in jedem Pflicht: sie ist der
+        // Name, den der Agent bei den gekoppelten Geräten hinterlegt und der im
+        // QR-Code steht. Vorschlagen lässt sie sich nur dort, wo es etwas
+        // abzufragen gibt — im fremden VPN weiß RemoteDesktop nichts.
+        _suggest.Enabled = _chosen != NetworkKind.Vpn;
 
         // Ausgeblendet und nicht gesperrt: ein graues Feld sieht aus wie etwas,
         // das man gleich ausfüllen muss, und lässt die Frage offen, warum es
-        // nicht geht. Der eigene Koordinator gehört zu Tailscale und zu sonst
+        // nicht geht. Der eigene Koordinator gehört zu Headscale und zu sonst
         // nichts.
-        var ownCoordinator = _chosen == NetworkKind.Tailscale;
+        var ownCoordinator = _chosen == NetworkKind.Headscale;
 
         _addressBody?.Toggle(_coordinatorHint, ownCoordinator);
         _addressBody?.Toggle(_coordinator, ownCoordinator);
 
-        _address.Placeholder = _chosen == NetworkKind.Tailscale
+        _address.Placeholder = _chosen is NetworkKind.Tailscale or NetworkKind.Headscale
             ? "z. B. pc.tailnet-1234.ts.net"
             : "z. B. 192.168.178.33";
 
         _addressHint.Retext(_chosen switch
         {
-            NetworkKind.Tailscale =>
+            NetworkKind.Tailscale or NetworkKind.Headscale =>
                 "Der Name dieses Rechners im Tailnet. Genau er steht später im QR-Code, "
                 + "und genau ihn muss das Handy auflösen können. „Vorschlag“ liest ihn "
                 + "aus Tailscale aus.",
@@ -210,7 +214,7 @@ public sealed class NetworkPage : PageView
     /// </summary>
     private async Task SuggestAsync()
     {
-        if (_chosen == NetworkKind.Tailscale)
+        if (_chosen is NetworkKind.Tailscale or NetworkKind.Headscale)
         {
             // Der Aufruf von tailscale.exe darf das Fenster nicht anhalten.
             _probe.Forget();
@@ -249,7 +253,11 @@ public sealed class NetworkPage : PageView
     private void Save()
     {
         var profile = new NetworkProfile(
-            _chosen, _address.Value, Coordinator.From(_coordinator.Value)).Normalized();
+            _chosen,
+            _address.Value,
+            _chosen == NetworkKind.Headscale
+                ? Coordinator.From(_coordinator.Value)
+                : Coordinator.Default).Normalized();
 
         if (profile.Rejection is { } rejection)
         {

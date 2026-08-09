@@ -21,8 +21,17 @@ public sealed class WebRtcRegistry(
     private readonly ILogger _logger = loggerFactory.CreateLogger<WebRtcRegistry>();
 
     /// <summary>Baut eine Sitzung auf. Null heißt: kein H.264 möglich, App bleibt bei JPEG.</summary>
+    /// <param name="owner">
+    /// Wem der Strom gehört. Ohne diese Angabe ließe sich ein widerrufenes Gerät
+    /// nicht vom Bild trennen: die WebRTC-Verbindung läuft am HTTP-Weg vorbei und
+    /// wird nach dem Aufbau nie wieder geprüft.
+    /// </param>
     public async Task<WebRtcSession?> CreateAsync(
-        string offerSdp, int monitor, int framerate, CancellationToken cancellationToken)
+        string offerSdp,
+        int monitor,
+        int framerate,
+        string? owner,
+        CancellationToken cancellationToken)
     {
         await RemoveDeadAsync();
 
@@ -35,7 +44,10 @@ public sealed class WebRtcRegistry(
         var ffmpegPath = configuration["Agent:FfmpegPath"] ?? "ffmpeg";
         var source = new FfmpegVideoSource(ffmpegPath, loggerFactory.CreateLogger<FfmpegVideoSource>());
         var session = new WebRtcSession(
-            source, monitors, framerate, loggerFactory.CreateLogger<WebRtcSession>());
+            source, monitors, framerate, loggerFactory.CreateLogger<WebRtcSession>())
+        {
+            Owner = owner
+        };
 
         var answer = await session.AcceptOfferAsync(offerSdp, monitor, cancellationToken);
 
@@ -62,6 +74,29 @@ public sealed class WebRtcRegistry(
         await session.DisposeAsync();
 
         return true;
+    }
+
+    /// <summary>
+    /// Beendet jeden Strom, der diesem Gerät gehört — der Bildanteil eines
+    /// Widerrufs.
+    /// </summary>
+    /// <returns>Wie viele Sitzungen beendet wurden.</returns>
+    public async Task<int> CloseOwnedAsync(string owner)
+    {
+        var closed = 0;
+
+        foreach (var (id, session) in _sessions)
+        {
+            if (session.Owner != owner || !_sessions.TryRemove(id, out var removed))
+            {
+                continue;
+            }
+
+            await removed.DisposeAsync();
+            closed++;
+        }
+
+        return closed;
     }
 
     /// <summary>

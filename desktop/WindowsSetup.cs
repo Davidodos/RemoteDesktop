@@ -397,8 +397,34 @@ public sealed class WindowsProbe : ISetupProbe
 
     public string TailnetName => _name ??= Tailscale.Name();
 
-    public bool HasCertificate => File.Exists(Path.Combine(CertificateDirectory, "cert.crt"))
-                                  && File.Exists(Path.Combine(CertificateDirectory, "cert.key"));
+    /// <summary>
+    /// Das Zertifikat von Tailscale, so wie es dort liegt — <c>null</c>, wenn
+    /// keins dort liegt oder es sich nicht lesen lässt.
+    ///
+    /// <para>
+    /// Gelesen und nicht bloß gezählt: „die Datei ist da" war die Auskunft, die
+    /// am echten Gerät zu „Einrichtung abgeschlossen" führte, während das Handy
+    /// weiter nach einem selbst ausgestellten Zertifikat fragte. Siehe
+    /// <see cref="AgentCertificate"/>.
+    /// </para>
+    /// </summary>
+    public AgentCertificate? Certificate =>
+        File.Exists(Path.Combine(CertificateDirectory, "cert.key"))
+            ? AgentCertificate.Read(Path.Combine(CertificateDirectory, "cert.crt"))
+            : null;
+
+    /// <summary>
+    /// Ob ein **brauchbares** Zertifikat dort liegt: lesbar und noch gültig. Ein
+    /// abgelaufenes ist keins — der Agent zeigte es trotzdem vor, und jede
+    /// Verbindung scheiterte daran.
+    /// </summary>
+    public bool HasCertificate => Certificate?.IsValidAt(DateTimeOffset.UtcNow) == true;
+
+    /// <summary>Ob das vorhandene Zertifikat auch auf diese Adresse lautet.</summary>
+    public bool CertificateCovers(string? address) =>
+        Certificate is { } certificate
+        && certificate.IsValidAt(DateTimeOffset.UtcNow)
+        && certificate.Covers(address);
 
     public bool HasService => AgentService.Installed;
 

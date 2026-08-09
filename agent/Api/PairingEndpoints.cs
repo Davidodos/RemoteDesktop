@@ -1,4 +1,5 @@
 using RemoteDesktopAgent.Auth;
+using RemoteDesktopAgent.Capture.H264;
 
 namespace RemoteDesktopAgent.Api;
 
@@ -141,10 +142,34 @@ public static class PairingEndpoints
             })
         }));
 
-        app.MapDelete("/api/clients/{id}", (string id, PairingService pairing) =>
-            pairing.Revoke(id)
-                ? Results.Ok(new { revoked = id })
-                : Results.NotFound(new { error = "Unbekannter Client." }));
+        // Widerrufen heißt: ab jetzt **und** rückwirkend auf alles, was schon
+        // steht.
+        //
+        // Der Eintrag allein zu löschen genügte nicht. Am echten Gerät bekam ein
+        // entferntes Handy sofort die Meldung, es sei entfernt worden — und
+        // steuerte trotzdem weiter, bis jemand die App schloss. Bild und Eingabe
+        // laufen über WebSockets, das Video zusätzlich über WebRTC, und keine
+        // dieser Verbindungen wird nach dem Aufbau noch einmal geprüft. Also
+        // werden sie hier abgeschnitten.
+        app.MapDelete("/api/clients/{id}", async (
+            string id,
+            PairingService pairing,
+            LiveConnections live,
+            WebRtcRegistry streams,
+            ILogger<Program> logger) =>
+        {
+            if (!pairing.Revoke(id))
+            {
+                return Results.NotFound(new { error = "Unbekannter Client." });
+            }
+
+            var closed = live.Close(id) + await streams.CloseOwnedAsync(id);
+
+            logger.LogInformation(
+                "Client {Id} widerrufen, {Closed} laufende Verbindungen getrennt.", id, closed);
+
+            return Results.Ok(new { revoked = id, closed });
+        });
     }
 
     private static string Describe(PairOutcome outcome) => outcome switch

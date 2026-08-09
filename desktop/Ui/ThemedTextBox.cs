@@ -40,6 +40,7 @@ public sealed class ThemedTextBox : Control, IMeasurable
 
         _input.GotFocus += (_, _) => Mark(true);
         _input.LostFocus += (_, _) => Mark(false);
+        _input.TextChanged += (_, _) => ValueChanged?.Invoke(this, EventArgs.Empty);
 
         Controls.Add(_input);
         Height = LogicalToDeviceUnits(34);
@@ -51,6 +52,13 @@ public sealed class ThemedTextBox : Control, IMeasurable
         base.OnHandleCreated(e);
         Height = LogicalToDeviceUnits(34);
     }
+
+    /// <summary>
+    /// Bei jedem Zeichen. Die Einrichtung hängt daran, ob „Weiter" überhaupt
+    /// anklickbar ist — ein Knopf, der erst nach dem Verlassen des Feldes
+    /// aufwacht, sieht aus wie einer, der klemmt.
+    /// </summary>
+    public event EventHandler? ValueChanged;
 
     public string Value
     {

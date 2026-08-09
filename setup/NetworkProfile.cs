@@ -28,20 +28,43 @@ public enum NetworkKind
     /// RemoteDesktop richtet es nicht ein und prüft es nicht; es benutzt nur die
     /// Adresse, die dort gilt. Die Anleitung dazu steht in <c>docs/NETZ.md</c>.
     /// </summary>
-    Vpn
+    Vpn,
+
+    /// <summary>
+    /// Headscale — derselbe Tailscale-Client, aber am eigenen Koordinator statt
+    /// an dem der Firma.
+    ///
+    /// <para>
+    /// **Warum es ein eigener Modus ist und kein Feld unter „Tailscale":** bis
+    /// v1.3.0 stand die Koordinator-Adresse als Zusatzfeld im Tailscale-Schritt.
+    /// Wer sie ausfüllte, hatte damit still etwas anderes gewählt, ohne dass das
+    /// irgendwo stand — und bekam dieselben Schritte angeboten, obwohl einer
+    /// davon bei Headscale gar nicht funktioniert: Zertifikate stellt der Dienst
+    /// von Tailscale aus, ein Headscale-Server in aller Regel nicht.
+    /// </para>
+    /// </summary>
+    Headscale
 }
 
 /// <summary>
 /// Der gewählte Modus samt der Adresse, unter der dieser Rechner erreichbar ist.
 /// </summary>
 /// <param name="Address">
-/// Bei <see cref="NetworkKind.Lan"/> und <see cref="NetworkKind.Vpn"/> Pflicht.
+/// In **jedem** Modus Pflicht.
 ///
-/// Bei Tailscale freiwillig: normalerweise steht der Name im Zertifikat, das
-/// <c>tailscale cert</c> ausstellt. Wer keins geholt hat, bekommt ein selbst
-/// ausgestelltes — und darin steht der Windows-Rechnername, nicht der Name im
-/// Tailnet. Genau der landete dann im QR-Code, und das Handy suchte einen
-/// Rechner, den es unter dem Namen nirgends gibt. Steht hier etwas, gilt es.
+/// <para>
+/// Bis v1.3.0 durfte sie bei Tailscale leer bleiben — dann kam der Name aus dem
+/// Zertifikat. Wer aber keins geholt hatte, bekam ein selbst ausgestelltes, und
+/// darin steht der Windows-Rechnername und nicht der Name im Tailnet. Genau der
+/// landete im QR-Code, und das Handy suchte einen Rechner, den es unter dem
+/// Namen nirgends gibt. Eine Adresse, die man weglassen darf, ist eine, die
+/// irgendwann fehlt.
+/// </para>
+/// </param>
+/// <param name="Coordinator">
+/// Nur bei <see cref="NetworkKind.Headscale"/> eine Entscheidung. In allen
+/// anderen Modi steht dort der Dienst von Tailscale, und
+/// <see cref="Normalized"/> setzt ihn auch dorthin zurück.
 /// </param>
 public sealed partial record NetworkProfile(NetworkKind Kind, string Address, Coordinator Coordinator)
 {
@@ -55,19 +78,30 @@ public sealed partial record NetworkProfile(NetworkKind Kind, string Address, Co
     public static NetworkProfile Default { get; } =
         new(NetworkKind.Tailscale, string.Empty, Coordinator.Default);
 
-    /// <summary>Ob in diesem Modus überhaupt Tailscale eingerichtet werden muss.</summary>
-    public bool NeedsTailscale => Kind == NetworkKind.Tailscale;
+    /// <summary>
+    /// Ob dieser Modus den Tailscale-Client braucht. Headscale zählt dazu: es
+    /// ist derselbe Client, nur an einem anderen Koordinator.
+    /// </summary>
+    public bool NeedsTailscale => Kind is NetworkKind.Tailscale or NetworkKind.Headscale;
 
-    /// <summary>Ob der Nutzer die Adresse selbst nennen muss.</summary>
-    public bool NeedsOwnAddress => Kind is NetworkKind.Lan or NetworkKind.Vpn;
+    /// <summary>
+    /// Ob sich in diesem Modus ein Zertifikat von der Gegenstelle holen lässt.
+    ///
+    /// <para>
+    /// Nur bei Tailscale. <c>tailscale cert</c> lässt sich den Namen vom
+    /// Koordinator beglaubigen, und das kann der Dienst von Tailscale; ein
+    /// Headscale-Server bringt diese Stelle nicht mit. Dort stellt der Agent
+    /// sich sein Zertifikat selbst aus, und das Handy bestätigt es einmal —
+    /// unschön, aber ehrlich, und es funktioniert. Angeboten wird der Schritt
+    /// bei Headscale deshalb gar nicht: ein Knopf, der fast immer scheitert,
+    /// wäre kein Angebot, sondern eine Falle.
+    /// </para>
+    /// </summary>
+    public bool CanFetchCertificate => Kind == NetworkKind.Tailscale;
 
     /// <summary>
     /// Die Adresse, auf die das Zertifikat lauten muss und die im QR-Code steht —
     /// <c>null</c>, solange keine eingetragen ist.
-    ///
-    /// Sie gilt in jedem Modus. Bei Tailscale ist sie freiwillig, schlägt aber
-    /// den Namen aus dem Zertifikat: ein selbst ausgestelltes trägt den
-    /// Windows-Rechnernamen, und unter dem findet das Handy im Tailnet nichts.
     /// </summary>
     public string? AdvertisedAddress =>
         Address.Trim().Length > 0 ? Address.Trim() : null;
@@ -84,19 +118,22 @@ public sealed partial record NetworkProfile(NetworkKind Kind, string Address, Co
     {
         get
         {
-            if (Coordinator.Rejection is { } coordinator && Kind == NetworkKind.Tailscale)
+            if (Kind == NetworkKind.Headscale)
             {
-                return coordinator;
+                if (Coordinator.IsTailscale)
+                {
+                    return "Trage die Adresse deines Headscale-Servers ein — etwa "
+                           + "https://headscale.example.org. Ohne sie wäre es kein Headscale, "
+                           + "sondern Tailscale.";
+                }
+
+                if (Coordinator.Rejection is { } coordinator)
+                {
+                    return coordinator;
+                }
             }
 
-            if (NeedsOwnAddress)
-            {
-                return RejectAddress(Address);
-            }
-
-            // Bei Tailscale darf das Feld leer bleiben — was aber daraufsteht,
-            // muss taugen: es geht unverändert ins Zertifikat und in den QR-Code.
-            return AdvertisedAddress is null ? null : RejectAddress(Address);
+            return RejectAddress(Address);
         }
     }
 
@@ -145,21 +182,41 @@ public sealed partial record NetworkProfile(NetworkKind Kind, string Address, Co
             "Nur im eigenen Netz — Handy und Rechner hängen am selben Router. "
             + "Kein VPN nötig, dafür geht es von unterwegs nicht.",
         NetworkKind.Vpn =>
-            "Über dein eigenes VPN. RemoteDesktop benutzt nur die Adresse, die dort gilt; "
-            + "Verbindung und Einrichtung bleiben deine Sache.",
+            "Über einen anderen VPN-Anbieter. RemoteDesktop benutzt nur die Adresse, die dort "
+            + "gilt; Verbindung und Einrichtung bleiben deine Sache.",
+        NetworkKind.Headscale =>
+            "Über Headscale — derselbe Tailscale-Client, aber an deinem eigenen Koordinator "
+            + "statt an dem der Firma.",
         _ =>
             "Über Tailscale — verbindet deine Geräte direkt miteinander, auch von unterwegs, "
             + "ohne dass du am Router etwas freigeben musst."
+    };
+
+    /// <summary>Der Name des Modus, wie er in der Oberfläche steht.</summary>
+    public string Name() => Kind switch
+    {
+        NetworkKind.Lan => "Heimnetz",
+        NetworkKind.Vpn => "Anderer VPN-Anbieter",
+        NetworkKind.Headscale => "Headscale",
+        _ => "Tailscale"
     };
 
     /// <summary>
     /// Kleinbuchstaben und ohne Klammern: so steht der Name später im Zertifikat
     /// und im QR-Code. Wer „PC.Fritz.Box" einträgt, soll nicht an der
     /// Groß-/Kleinschreibung scheitern.
+    ///
+    /// <para>
+    /// Der Koordinator fällt außerhalb von Headscale auf die Vorgabe zurück. Ein
+    /// stehengebliebener Eintrag aus einem Modus, den man wieder verlassen hat,
+    /// wäre sonst genau das, was <c>tailscale up</c> beim nächsten Mal an den
+    /// falschen Server schickt.
+    /// </para>
     /// </summary>
     public NetworkProfile Normalized() => this with
     {
-        Address = Address.Trim().Trim('[', ']').ToLowerInvariant()
+        Address = Address.Trim().Trim('[', ']').ToLowerInvariant(),
+        Coordinator = Kind == NetworkKind.Headscale ? Coordinator : Coordinator.Default
     };
 
     [GeneratedRegex(@"^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$")]
@@ -210,6 +267,16 @@ public static class NetworkConfig
                 ? value.GetString() ?? string.Empty
                 : string.Empty;
 
+            // Vor v1.3.0 gab es Headscale nur als Zusatzfeld unter „Tailscale":
+            // wer eine eigene Koordinator-Adresse eintrug, betrieb damit
+            // Headscale, ohne dass es irgendwo so hieß. Genau das ist es, also
+            // heißt es beim Lesen jetzt auch so — sonst verlöre ein Update die
+            // Unterscheidung, die es gerade einführt.
+            if (kind == NetworkKind.Tailscale && !coordinator.IsTailscale)
+            {
+                kind = NetworkKind.Headscale;
+            }
+
             return new NetworkProfile(kind, own, coordinator);
         }
         catch (System.Text.Json.JsonException)
@@ -237,6 +304,7 @@ public static class NetworkConfig
     {
         "lan" => NetworkKind.Lan,
         "vpn" => NetworkKind.Vpn,
+        "headscale" => NetworkKind.Headscale,
         _ => NetworkKind.Tailscale
     };
 }

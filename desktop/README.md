@@ -8,7 +8,7 @@ Infobereich und hat **ein** Fenster mit fünf Seiten:
 | Übersicht | Zustand aller Teile, und je Teil der Knopf, der ihn ändert |
 | Fernsteuerung | dieselbe React-App wie auf dem Handy, in einer WebView2 |
 | Geräte | Kopplungscode, QR-Code, gekoppelte Geräte widerrufen |
-| Netz | Heimnetz · Tailscale · eigenes VPN, und Zertifikate anderer Rechner |
+| Netz | Heimnetz · Tailscale · Headscale · anderer VPN-Anbieter, und Zertifikate anderer Rechner |
 | Einstellungen | Autostart, Updates, Fassungen |
 
 Bis V3 waren das drei getrennte Fenster. Sie sind zusammengelegt, weil sie nie

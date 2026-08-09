@@ -22,12 +22,13 @@ Mitte, der mitliest. Die Verbindung geht direkt von deinem Handy zu deinem PC.
 |---|---|---|
 | **Heimnetz** | Handy und Rechner hängen am selben Router. Kein VPN, kein Konto, nichts einzurichten | nein |
 | **Tailscale** | Du willst auch aus dem Mobilfunknetz ran. Kostenlos, Anmeldung mit einem Konto, das du schon hast | ja |
-| **Eigenes VPN** | Du betreibst schon WireGuard, OpenVPN, ZeroTier … — dann behältst du es | ja |
+| **Headscale** | Du betreibst den Koordinator selbst — derselbe Client, dein Server | ja |
+| **Anderer VPN-Anbieter** | Du betreibst schon WireGuard, OpenVPN, ZeroTier … — dann behältst du es | ja |
 
 Das Fenster fragt dich beim Einrichten danach und führt dich durch den Rest.
 Ausführlich steht das in [`docs/NETZ.md`](docs/NETZ.md).
 
-Wichtig in allen drei Fällen: **von außen ist nichts erreichbar**. Es gibt keine
+Wichtig in allen Fällen: **von außen ist nichts erreichbar**. Es gibt keine
 offene Tür ins Internet, die jemand ausprobieren könnte.
 
 ---

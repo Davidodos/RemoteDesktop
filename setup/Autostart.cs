@@ -24,14 +24,45 @@ public static class AutostartModes
     public static bool Starts(this AutostartMode mode, AutostartMode part) =>
         (mode & part) == part && part != AutostartMode.None;
 
+    /// <summary>
+    /// Ob überhaupt etwas mit Windows hochkommt — die erste der beiden Fragen,
+    /// die die Einrichtung stellt.
+    /// </summary>
+    public static bool WithWindows(this AutostartMode mode) => mode != AutostartMode.None;
+
+    /// <summary>
+    /// Aus den beiden Ja/Nein-Fragen der Einrichtung einen Modus machen.
+    ///
+    /// <para>
+    /// **Warum aus vier Möglichkeiten zwei Fragen wurden:** die vier Modi
+    /// standen als gleichrangige Auswahl da, und drei davon musste man erst
+    /// durchlesen, um zu merken, dass sie einen nicht betreffen. Gefragt ist
+    /// aber zuerst nur eines — soll das Programm mit Windows starten? Erst wer
+    /// darauf Ja sagt, hat überhaupt eine zweite Entscheidung.
+    /// </para>
+    ///
+    /// <para>
+    /// „Nur der Agent, kein Fenster" (<see cref="AutostartMode.Agent"/>) wird
+    /// dabei nicht mehr angeboten. Der Modus bleibt lesbar, damit eine
+    /// bestehende Einstellung nicht falsch angezeigt wird — aber neu wählen
+    /// lässt sich ein Rechner, der erreichbar ist und dabei nichts zeigt, nicht
+    /// mehr.
+    /// </para>
+    /// </summary>
+    public static AutostartMode From(bool withWindows, bool withAgent) =>
+        !withWindows
+            ? AutostartMode.None
+            : withAgent
+                ? AutostartMode.Both
+                : AutostartMode.Client;
+
     /// <summary>Ein Satz für die Oberfläche, kein Aufzählungsname.</summary>
     public static string Describe(this AutostartMode mode) => mode switch
     {
-        AutostartMode.Both => "Agent und Client starten mit Windows",
+        AutostartMode.Both => "RemoteDesktop und der Agent starten mit Windows",
         AutostartMode.Agent => "Nur der Agent startet mit Windows — dieser Rechner ist erreichbar, "
             + "zeigt aber kein Fenster",
-        AutostartMode.Client => "Nur der Client startet mit Windows — dieser Rechner steuert andere, "
-            + "ist selbst aber nicht erreichbar",
+        AutostartMode.Client => "RemoteDesktop startet mit Windows, der Agent nicht",
         _ => "Nichts startet mit Windows"
     };
 }

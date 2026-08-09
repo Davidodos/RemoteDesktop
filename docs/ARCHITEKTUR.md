@@ -42,16 +42,19 @@ Let's-Encrypt-Zertifikat für ihren `*.ts.net`-Namen → die App darf ohne
 Mixed-Content-Block direkt per WSS zum Agent verbinden. Im LAN routet Tailscale
 direkt, ohne Umweg über die Cloud.
 
-## Netzwerk: drei Modi, ein Code
+## Netzwerk: vier Modi, ein Code
 
-Seit V3 (`setup/NetworkProfile.cs`) gibt es drei Wege, und der Code kennt den
-Unterschied nicht: er benutzt die Adresse aus `setup.json`, sonst nichts.
+Seit V3 (`setup/NetworkProfile.cs`) gibt es vier Wege, und der Code kennt den
+Unterschied nicht: er benutzt die Adresse aus `setup.json`, sonst nichts. Die
+Adresse ist in **jedem** Modus Pflicht — sie steht im QR-Code, und ein Modus, in
+dem sie fehlen durfte, war der Modus, in dem sie fehlte.
 
 | Modus | Adresse | Zertifikat |
 |---|---|---|
 | **Heimnetz** | die LAN-Adresse dieses Rechners | selbst ausgestellt |
-| **Tailscale** | der MagicDNS-Name aus dem Zertifikat | von Tailscale |
-| **Eigenes VPN** | was der Nutzer einträgt | selbst ausgestellt |
+| **Tailscale** | der Name im Tailscale-Netz | von Tailscale, Pflicht vor „Weiter" |
+| **Headscale** | der Name am eigenen Koordinator | selbst ausgestellt |
+| **Anderer VPN-Anbieter** | was der Nutzer einträgt | selbst ausgestellt |
 
 Es gibt **keine** Fallunterscheidung „zuhause vs. unterwegs" im Code und **kein**
 Port-Forwarding. Wer Tailscale benutzt, bekommt die direkte LAN-Route

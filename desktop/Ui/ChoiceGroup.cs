@@ -49,6 +49,13 @@ public sealed class ChoiceGroup<T> : Control, IMeasurable
         Invalidate();
     }
 
+    /// <summary>
+    /// Was gerade ausgewählt ist. Nötig, sobald zwei Auswahlen zusammen eine
+    /// Einstellung ergeben — dann kann keine der beiden allein aus ihrem
+    /// eigenen Ereignis heraus antworten.
+    /// </summary>
+    public T? Selected => _chosen;
+
     private int Gap => LogicalToDeviceUnits(8);
 
     private int Inset => LogicalToDeviceUnits(14);

@@ -6,6 +6,21 @@ namespace RemoteDesktopAgent.Api;
 public static class ClientAuthMiddleware
 {
     /// <summary>
+    /// Unter diesem Schlüssel steht das Gerät, dem die Anfrage gehört. Es wird
+    /// hier hinterlegt und nicht später noch einmal ermittelt: die Prüfung ist
+    /// bereits gelaufen, und ein zweiter Weg zu derselben Auskunft wäre ein
+    /// zweiter Weg, sie falsch zu beantworten.
+    /// </summary>
+    private const string ClientIdItem = "RemoteDesktop.ClientId";
+
+    /// <summary>
+    /// Wem diese Anfrage gehört — <c>null</c> beim alten Sammel-Token, das kein
+    /// einzelnes Gerät kennt.
+    /// </summary>
+    public static string? ClientId(HttpContext context) =>
+        context.Items.TryGetValue(ClientIdItem, out var value) ? value as string : null;
+
+    /// <summary>
     /// Endpunkte, die von außen gar nicht erreichbar sein dürfen: den
     /// Kopplungscode anzeigen und Clients widerrufen. Beides setzt voraus, dass
     /// jemand am Rechner sitzt — wer das kann, könnte den Agent ohnehin
@@ -68,6 +83,8 @@ public static class ClientAuthMiddleware
 
             if (result.IsAllowed)
             {
+                context.Items[ClientIdItem] = result.ClientId;
+
                 await next();
                 return;
             }

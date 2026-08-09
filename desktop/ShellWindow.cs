@@ -342,8 +342,12 @@ public sealed class ShellWindow : Form
                     break;
 
                 case PartAction.Certificate:
-                    Report(await Task.Run(() =>
-                        Elevation.Run(AdminTask.FetchCertificate, _probe.TailnetName)));
+                    // Die eingetragene Adresse schlägt den Namen, den Tailscale
+                    // gerade meldet: genau sie steht später im QR-Code, und ein
+                    // Zertifikat auf einen anderen Namen nützt dort nichts.
+                    Report(await Task.Run(() => Elevation.Run(
+                        AdminTask.FetchCertificate,
+                        NetworkStore.Read().AdvertisedAddress ?? _probe.TailnetName)));
 
                     break;
 

@@ -37,10 +37,12 @@ public sealed class NavigationRail : Control
         (Page.Remote, "Fernsteuerung"),
         (Page.Devices, "Geräte"),
         (Page.Network, "Netz"),
-        // Sie steht in der Leiste und nicht nur beim ersten Start: genau die
-        // Frage, die man beim ersten Mal falsch beantwortet, wäre sonst die
-        // unerreichbare.
-        (Page.Setup, "Einrichtung"),
+
+        // Die Einrichtung steht hier bewusst **nicht**. Sie ist kein Ort, an dem
+        // man sich aufhält, sondern ein Weg, den man einmal geht: beim ersten
+        // Start ruft das Fenster sie von allein auf, und wer sie wiederholen
+        // will, findet sie unter „Einstellungen". In der Leiste wäre sie eine
+        // ständige Einladung, eine fertige Einrichtung noch einmal anzufassen.
         (Page.Settings, "Einstellungen")
     ];
 

@@ -48,13 +48,22 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 
 ## Konventionen
 
-- Netzwerk: **drei Modi, keine Fallunterscheidung im Code** (`setup/NetworkProfile.cs`
-  — Heimnetz · Tailscale · eigenes VPN). Keine Adresse steht im Quelltext; sie
+- Netzwerk: **vier Modi, keine Fallunterscheidung im Code** (`setup/NetworkProfile.cs`
+  — Heimnetz · Tailscale · Headscale · anderer VPN-Anbieter). Die Adresse ist in
+  jedem Modus Pflicht. Keine Adresse steht im Quelltext; sie
   kommt aus `setup.json`. Kein Port-Forwarding, keine Sonderbehandlung
   „zuhause vs. unterwegs" — der Modus entscheidet, nicht der Ort. Anleitung:
   `docs/NETZ.md`.
 - Der Agent hat volle Kontrolle über den PC. Jeder neue Endpoint braucht
   Token-Auth — keine Ausnahmen, auch nicht „nur zum Testen".
+- Ein Widerruf wirkt **sofort und rückwirkend**: `agent/Auth/LiveConnections.cs`
+  trennt die laufenden WebSockets, `WebRtcRegistry.CloseOwnedAsync` den
+  Videostrom. Jede neue Dauerverbindung meldet sich dort an — sonst überlebt sie
+  ihre eigene Berechtigung, weil sie nur beim Aufbau geprüft wird.
+- Der Einrichtungsassistent (`desktop/Pages/SetupPage.cs`) fragt **eine Sache je
+  Schritt** und lässt „Weiter" erst zu, wenn diese Sache steht. Er steht nicht in
+  der Seitenleiste: beim ersten Start ruft ihn das Fenster auf, danach führt der
+  Weg über „Einstellungen".
 - Input-Events laufen über einen **eigenen** WebSocket, getrennt vom
   Video-Stream. Die Eingabe-Latenz darf nie am Bild hängen.
 - Win32-Aufrufe im Agent gebündelt unter `agent/Native/`, nicht verstreut.

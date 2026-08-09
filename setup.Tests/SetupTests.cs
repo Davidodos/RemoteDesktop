@@ -209,7 +209,16 @@ public class SetupStepsTests
             Selection.Default,
             new Probe(HasTailscale: true, IsConnected: true, TailnetName: "pc.example.ts.net"));
 
-        Assert.Equal("Zertifikat holen", SetupSteps.Next(steps)?.Title);
+        // Die Adresse kommt vor dem Zertifikat: sie ist der Name, auf den das
+        // Zertifikat lauten muss. Andersherum holte man eins auf gut Glück.
+        Assert.Equal(SetupSteps.AddressStep, SetupSteps.Next(steps)?.Title);
+
+        var mitAdresse = SetupSteps.For(
+            Selection.Default,
+            new Probe(HasTailscale: true, IsConnected: true, TailnetName: "pc.example.ts.net"),
+            new NetworkProfile(NetworkKind.Tailscale, "pc.example.ts.net", Coordinator.Default));
+
+        Assert.Equal("Zertifikat holen", SetupSteps.Next(mitAdresse)?.Title);
     }
 
     [Fact]
@@ -227,7 +236,8 @@ public class SetupStepsTests
         var steps = SetupSteps.For(
             Selection.Default,
             new Probe(HasTailscale: true, IsConnected: true, HasCertificate: true,
-                HasService: true));
+                HasService: true),
+            new NetworkProfile(NetworkKind.Tailscale, "pc.example.ts.net", Coordinator.Default));
 
         Assert.True(SetupSteps.Ready(steps));
         Assert.Equal("Handy koppeln", SetupSteps.Next(steps)?.Title);
@@ -401,13 +411,62 @@ public class NetworkProfileTests
     }
 
     [Fact]
-    public void Bei_Tailscale_wird_keine_Adresse_verlangt()
+    public void Auch_bei_Tailscale_wird_die_Adresse_verlangt()
     {
-        // Sie steht im Zertifikat. Eine zweite, von Hand gepflegte Quelle wäre
-        // eine, die irgendwann abweicht.
-        Assert.False(NetworkProfile.Default.NeedsOwnAddress);
-        Assert.Null(NetworkProfile.Default.Rejection);
+        // Sie durfte einmal fehlen — dann kam der Name aus dem Zertifikat. Wer
+        // aber keins geholt hatte, bekam ein selbst ausgestelltes mit dem
+        // Windows-Rechnernamen darin, und genau der landete im QR-Code. Eine
+        // Adresse, die man weglassen darf, ist eine, die irgendwann fehlt.
+        Assert.NotNull(NetworkProfile.Default.Rejection);
         Assert.Null(NetworkProfile.Default.AdvertisedAddress);
+
+        foreach (var kind in Enum.GetValues<NetworkKind>())
+        {
+            Assert.NotNull(new NetworkProfile(kind, "", Coordinator.Default).Rejection);
+        }
+    }
+
+    [Fact]
+    public void Headscale_ist_ein_eigener_Modus_und_verlangt_seinen_Server()
+    {
+        var ohne = new NetworkProfile(NetworkKind.Headscale, "pc", Coordinator.Default);
+        var mit = new NetworkProfile(
+            NetworkKind.Headscale, "pc", Coordinator.From("https://headscale.example.org"));
+
+        Assert.NotNull(ohne.Rejection);
+        Assert.Null(mit.Rejection);
+
+        // Derselbe Client, nur ein anderer Koordinator — und kein Zertifikat:
+        // die Stelle, die eins ausstellt, gehört zum Dienst von Tailscale.
+        Assert.True(mit.NeedsTailscale);
+        Assert.False(mit.CanFetchCertificate);
+        Assert.True(NetworkProfile.Default.CanFetchCertificate);
+    }
+
+    [Fact]
+    public void Ein_Koordinator_ausserhalb_von_Headscale_faellt_weg()
+    {
+        // Sonst schickte ein stehengebliebener Eintrag aus einem verlassenen
+        // Modus das nächste `tailscale up` an den falschen Server.
+        var profil = new NetworkProfile(
+            NetworkKind.Tailscale, "pc.tailnet-1234.ts.net",
+            Coordinator.From("https://headscale.example.org")).Normalized();
+
+        Assert.Equal(Coordinator.Default, profil.Coordinator);
+    }
+
+    [Fact]
+    public void Eine_alte_Tailscale_Datei_mit_eigenem_Koordinator_ist_Headscale()
+    {
+        // Vor v1.3.0 gab es Headscale nur als Zusatzfeld unter „Tailscale". Ein
+        // Update darf die Unterscheidung nicht dadurch verlieren, dass es sie
+        // einführt.
+        var gelesen = NetworkConfig.Read("""
+            { "network": "tailscale", "address": "pc", "coordinator": "https://hs.example.org" }
+            """);
+
+        Assert.Equal(NetworkKind.Headscale, gelesen.Kind);
+        Assert.Equal("https://hs.example.org", gelesen.Coordinator.Address);
     }
 
     [Fact]
@@ -515,13 +574,19 @@ public class NetworkConfigTests
     [Fact]
     public void Eine_Datei_aus_der_Zeit_davor_meint_Tailscale()
     {
-        // Sie führt nur den Koordinator. Ein Update darf den Modus nicht stumm
-        // wechseln — der Rechner wäre danach über Tailscale nicht mehr
-        // erreichbar und niemand wüsste warum.
-        var alt = NetworkConfig.Read("""{ "coordinator": "https://headscale.example.org" }""");
+        // Sie führt keinen Modus. Ein Update darf ihn nicht stumm wechseln — der
+        // Rechner wäre danach über Tailscale nicht mehr erreichbar und niemand
+        // wüsste warum.
+        var alt = NetworkConfig.Read($$"""{ "coordinator": "{{Coordinator.TailscaleAddress}}" }""");
 
         Assert.Equal(NetworkKind.Tailscale, alt.Kind);
-        Assert.Equal("https://headscale.example.org", alt.Coordinator.Address);
+
+        // Steht dort ein eigener Koordinator, war es von jeher Headscale — nur
+        // hieß es damals nicht so.
+        var eigener = NetworkConfig.Read("""{ "coordinator": "https://headscale.example.org" }""");
+
+        Assert.Equal(NetworkKind.Headscale, eigener.Kind);
+        Assert.Equal("https://headscale.example.org", eigener.Coordinator.Address);
     }
 
     [Fact]

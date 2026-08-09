@@ -50,6 +50,12 @@ public sealed class WebRtcSession : IAsyncDisposable
 
     public string Id { get; } = Guid.NewGuid().ToString("n");
 
+    /// <summary>
+    /// Welchem gekoppelten Gerät dieser Strom gehört — <c>null</c> beim alten
+    /// Sammel-Token. Er entscheidet, was ein Widerruf trifft.
+    /// </summary>
+    public string? Owner { get; init; }
+
     public int Monitor { get; private set; }
 
     /// <summary>Die Antwort auf das Angebot der App, erst nach <see cref="AcceptOfferAsync"/> gesetzt.</summary>

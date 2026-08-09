@@ -105,6 +105,10 @@ builder.Services.AddSingleton(new ClientStore(settings.ClientsPath));
 builder.Services.AddSingleton<PairingCodes>();
 builder.Services.AddSingleton<ChallengeStore>();
 builder.Services.AddSingleton<SessionStore>();
+
+// Wer gerade Bild oder Eingabe offen hält. Ohne diese Liste überlebte eine
+// stehende Verbindung ihren eigenen Widerruf — siehe LiveConnections.
+builder.Services.AddSingleton<LiveConnections>();
 builder.Services.AddSingleton<PairingService>();
 builder.Services.AddSingleton(provider =>
     new ClientAuth(provider.GetRequiredService<SessionStore>(), settings.Token));
@@ -348,20 +352,29 @@ app.MapPost("/api/media", async (
     }
 });
 
-app.MapGet("/ws/input", async (HttpContext context, InputSocket socket) =>
+// Die beiden Dauerverbindungen melden sich an, solange sie stehen. Der Token,
+// mit dem sie arbeiten, endet damit auch beim Widerruf des Geräts und nicht
+// erst, wenn die Gegenseite von sich aus auflegt.
+app.MapGet("/ws/input", async (HttpContext context, InputSocket socket, LiveConnections live) =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
         return Results.BadRequest(new { error = "Erwartet wird eine WebSocket-Verbindung." });
     }
 
+    using var lease = live.Open(ClientAuthMiddleware.ClientId(context), context.RequestAborted);
     using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-    await socket.HandleAsync(webSocket, context.RequestAborted);
+
+    // Abbrechen allein genügt nicht immer: hängt der Sendepuffer, wartet die
+    // Schleife weiter. Abort() reißt die Verbindung sofort ab.
+    using var cut = lease.Token.Register(webSocket.Abort);
+
+    await socket.HandleAsync(webSocket, lease.Token);
 
     return Results.Empty;
 });
 
-app.MapGet("/ws/screen", async (HttpContext context, ScreenSocket screen) =>
+app.MapGet("/ws/screen", async (HttpContext context, ScreenSocket screen, LiveConnections live) =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
     {
@@ -370,8 +383,11 @@ app.MapGet("/ws/screen", async (HttpContext context, ScreenSocket screen) =>
 
     var options = ScreenStreamOptions.FromQuery(context.Request.Query);
 
+    using var lease = live.Open(ClientAuthMiddleware.ClientId(context), context.RequestAborted);
     using var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-    await screen.HandleAsync(webSocket, options, context.RequestAborted);
+    using var cut = lease.Token.Register(webSocket.Abort);
+
+    await screen.HandleAsync(webSocket, options, lease.Token);
 
     return Results.Empty;
 });
@@ -394,6 +410,7 @@ app.MapPost("/api/webrtc/offer", async (
         request.Sdp,
         Math.Max(request.Monitor ?? 0, 0),
         Math.Clamp(request.Fps ?? 30, 1, 60),
+        ClientAuthMiddleware.ClientId(context),
         context.RequestAborted);
 
     if (session is null)

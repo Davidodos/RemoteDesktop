@@ -20,7 +20,25 @@ public sealed class SettingsPage : PageView
     private readonly IAutostartHost _autostart;
     private readonly ClientUpdate _update = new();
 
-    private readonly ChoiceGroup<AutostartMode> _modes = new();
+    /// <summary>
+    /// Zwei Ja/Nein-Fragen statt vier gleichrangiger Modi — dieselben wie in der
+    /// Einrichtung, siehe <see cref="AutostartModes.From"/>. Die zweite kommt
+    /// nur, wenn die erste ein Ja war; sonst gibt es nichts zu entscheiden.
+    /// </summary>
+    private readonly ChoiceGroup<bool> _withWindows = new();
+    private readonly ChoiceGroup<bool> _withAgent = new();
+    private readonly TextBlock _agentQuestion = new("Soll der Agent auch automatisch starten?");
+
+    /// <summary>Der Stapel, in dem die zweite Frage steckt — er blendet sie aus.</summary>
+    private Stack? _autostartBody;
+
+    /// <summary>
+    /// Ob gerade der gespeicherte Stand eingelesen wird. Ohne diese Sperre löste
+    /// das Einlesen dieselben Ereignisse aus wie ein Klick — und schriebe die
+    /// Einstellung, die es gerade nur anzeigen wollte.
+    /// </summary>
+    private bool _reading;
+
     private readonly TextBlock _updateState;
     private readonly ThemedButton _updateAct = new("Nach Updates suchen", ButtonTone.Primary);
 
@@ -36,16 +54,30 @@ public sealed class SettingsPage : PageView
 
         _updateState = new TextBlock($"Fassung {ClientUpdate.InstalledVersion()}");
 
-        foreach (var mode in new[]
-                 {
-                     AutostartMode.Both, AutostartMode.Agent,
-                     AutostartMode.Client, AutostartMode.None
-                 })
-        {
-            _modes.Add(mode, mode.Describe(), Explain(mode));
-        }
+        _withWindows.Add(
+            true,
+            "Ja",
+            "Das Fenster wartet nach dem Anmelden im Infobereich, ohne sich in den "
+            + "Vordergrund zu drängen.");
 
-        _modes.Chosen += Apply;
+        _withWindows.Add(
+            false,
+            "Nein",
+            "Nichts startet von allein. Du öffnest RemoteDesktop, wenn du es brauchst.");
+
+        _withAgent.Add(
+            true,
+            "Ja",
+            "Dieser Rechner ist erreichbar, sobald du angemeldet bist.");
+
+        _withAgent.Add(
+            false,
+            "Nein",
+            "Den Agent startest du selbst — hier oder aus dem Infobereich.");
+
+        _withWindows.Chosen += _ => Apply();
+        _withAgent.Chosen += _ => Apply();
+
         _updateAct.Click += async (_, _) => await UpdateStepAsync();
 
         Body.Add(AutostartCard());
@@ -57,33 +89,41 @@ public sealed class SettingsPage : PageView
     /// <summary>Was gerade eingestellt ist, ohne dabei etwas auszulösen.</summary>
     public override Task RefreshAsync()
     {
-        _modes.Select(Autostart.Read(_autostart));
+        Show(Autostart.Read(_autostart));
 
         return Task.CompletedTask;
     }
 
-    private static string Explain(AutostartMode mode) => mode switch
+    private void Show(AutostartMode mode)
     {
-        AutostartMode.Both =>
-            "Der Rechner ist erreichbar, sobald er an ist, und das Fenster wartet im "
-            + "Infobereich.",
+        _reading = true;
 
-        AutostartMode.Agent =>
-            "Der Rechner ist erreichbar, sobald er an ist. Das Fenster startest du "
-            + "selbst, wenn du es brauchst.",
+        try
+        {
+            _withWindows.Select(mode.WithWindows());
+            _withAgent.Select(mode.Starts(AutostartMode.Agent));
 
-        AutostartMode.Client =>
-            "Nur das Fenster. Den Agent musst du dann von Hand starten — von hier aus "
-            + "oder aus dem Infobereich.",
-
-        _ => "Nichts startet von allein."
-    };
+            // Die zweite Frage ist ausgeblendet und nicht gesperrt: eine graue
+            // Auswahl sieht aus wie etwas, das klemmt, und lässt offen, warum.
+            _autostartBody?.Toggle(_agentQuestion, mode.WithWindows());
+            _autostartBody?.Toggle(_withAgent, mode.WithWindows());
+        }
+        finally
+        {
+            _reading = false;
+        }
+    }
 
     private Card AutostartCard()
     {
         var card = new Card("Beim Anmelden starten");
 
-        card.Body.Add(_modes);
+        card.Body.Add(new TextBlock("Soll RemoteDesktop mit Windows starten?"));
+        card.Body.Add(_withWindows);
+        card.Body.Add(_agentQuestion);
+        card.Body.Add(_withAgent);
+
+        _autostartBody = card.Body;
 
         return card;
     }
@@ -101,9 +141,11 @@ public sealed class SettingsPage : PageView
         again.Click += (_, _) => _openSetup();
 
         card.Body.Add(new TextBlock(
-            "Nachträglich den Agent einrichten, den Netzmodus wechseln oder die "
-            + "Adresse ändern — dieselben vier Fragen wie beim ersten Start. Die "
-            + "Adresse allein steht auch unter „Netz“."));
+            "Nachträglich den Agent einrichten, den Netzmodus wechseln, die Adresse "
+            + "ändern oder das Zertifikat neu holen — derselbe Weg wie beim ersten "
+            + "Start. Er steht nur hier: in der Seitenleiste wäre er eine ständige "
+            + "Einladung, eine fertige Einrichtung noch einmal anzufassen. Die Adresse "
+            + "allein steht auch unter „Netz“."));
 
         card.Body.Add(Row.Buttons(again));
 
@@ -146,11 +188,19 @@ public sealed class SettingsPage : PageView
         return card;
     }
 
-    private void Apply(AutostartMode mode)
+    private void Apply()
     {
+        if (_reading)
+        {
+            return;
+        }
+
+        var mode = AutostartModes.From(_withWindows.Selected, _withAgent.Selected);
+
         try
         {
             Autostart.Apply(_autostart, mode);
+            Show(mode);
             Report("Gespeichert.", Tone.Good);
         }
         catch (Exception failure)
@@ -159,7 +209,7 @@ public sealed class SettingsPage : PageView
             // sie bleibt die Einstellung, wie sie war — das muss dastehen, sonst
             // glaubt jemand, er habe etwas eingestellt.
             Report($"Nicht gespeichert: {failure.Message}", Tone.Bad);
-            _modes.Select(Autostart.Read(_autostart));
+            Show(Autostart.Read(_autostart));
         }
     }
 

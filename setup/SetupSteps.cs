@@ -65,11 +65,16 @@ public static class SetupSteps
     {
         var steps = profile.NeedsTailscale
             ? TailscaleSteps(probe)
-            : AddressSteps(profile);
+            : [];
+
+        // Die Adresse gehört in jeden Modus. Sie durfte bei Tailscale einmal
+        // fehlen — und dann stand der Windows-Rechnername im QR-Code, unter dem
+        // im Tailnet niemand zu finden ist.
+        steps.AddRange(AddressSteps(profile));
 
         if (selection.Has(SetupComponent.Agent))
         {
-            if (profile.NeedsTailscale)
+            if (profile.CanFetchCertificate)
             {
                 steps.Add(new SetupStep(
                     CertificateStep,
@@ -100,8 +105,9 @@ public static class SetupSteps
     }
 
     /// <summary>
-    /// Der Weg über Tailscale: erst das Programm, dann die Anmeldung. Beides
-    /// fremde Schritte, die RemoteDesktop nur anstößt.
+    /// Der Weg über den Tailscale-Client: erst das Programm, dann die Anmeldung.
+    /// Beides fremde Schritte, die RemoteDesktop nur anstößt — bei Headscale
+    /// dieselben, nur gegen einen anderen Koordinator.
     /// </summary>
     private static List<SetupStep> TailscaleSteps(ISetupProbe probe) =>
     [
@@ -120,23 +126,31 @@ public static class SetupSteps
     ];
 
     /// <summary>
-    /// Der Weg ohne Tailscale: es genügt zu wissen, wie dieser Rechner heißt.
+    /// Wie dieser Rechner heißt — die eine Angabe, ohne die nichts geht.
     ///
     /// Im Heimnetz ist das die Adresse, die der Router vergeben hat; bei einem
-    /// eigenen VPN die, die dort gilt. Verbinden und Einrichten des VPN bleibt
-    /// Sache dessen, der es betreibt — RemoteDesktop startet fremde Programme
-    /// nicht und prüft sie nicht.
+    /// fremden VPN die, die dort gilt; bei Tailscale und Headscale der Name im
+    /// Tailnet. Verbinden und Einrichten eines fremden VPN bleibt Sache dessen,
+    /// der es betreibt — RemoteDesktop startet fremde Programme nicht und prüft
+    /// sie nicht.
     /// </summary>
     private static List<SetupStep> AddressSteps(NetworkProfile profile) =>
     [
         new(
             AddressStep,
-            profile.Kind == NetworkKind.Lan
-                ? "Unter welcher Adresse dein Handy diesen Rechner im Heimnetz findet. "
-                  + "Meistens steht sie schon da — du musst sie nur bestätigen."
-                : "Trage die Adresse ein, unter der dieser Rechner in deinem VPN erreichbar "
-                  + "ist. Wie du das herausfindest, steht in der Anleitung „Anderes VPN "
-                  + "benutzen“.",
+            profile.Kind switch
+            {
+                NetworkKind.Lan =>
+                    "Unter welcher Adresse dein Handy diesen Rechner im Heimnetz findet. "
+                    + "Meistens steht sie schon da — du musst sie nur bestätigen.",
+                NetworkKind.Vpn =>
+                    "Trage die Adresse ein, unter der dieser Rechner in deinem VPN erreichbar "
+                    + "ist. Wie du das herausfindest, steht in der Anleitung „Anderes VPN "
+                    + "benutzen“.",
+                _ =>
+                    "Der Name dieses Rechners im Tailscale-Netz. Genau er steht später im "
+                    + "QR-Code, und genau ihn muss das Handy auflösen können."
+            },
             profile.AdvertisedAddress is not null)
     ];
 
