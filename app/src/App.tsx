@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
+import { completeBackPairing } from './lib/backPairing.ts'
 import { capabilitiesOf } from './lib/capabilities.ts'
 import { deviceLabel } from './lib/deviceNames.ts'
 import { collectDevices, localDeviceSource, saveLocalDevice } from './lib/deviceSources.ts'
@@ -25,6 +26,9 @@ import { ShortcutsView } from './views/ShortcutsView.tsx'
 import { Sidebar, pageAvailable, type Page } from './views/Sidebar.tsx'
 import { TouchpadView } from './views/TouchpadView.tsx'
 import { MenuIcon } from './views/icons.tsx'
+
+/** Wie oft nach einer angebotenen Gegenkopplung gesehen wird. */
+const BACK_PAIRING_INTERVAL_MS = 5000
 
 export function App(): React.JSX.Element {
   const [devices, setDevices] = useState<Device[]>([])
@@ -72,6 +76,40 @@ export function App(): React.JSX.Element {
         setError(failure instanceof Error ? failure.message : String(failure))
       }
     })
+  }, [])
+
+  /**
+   * Nachsehen, ob die Gegenseite eine Gegenkopplung hinterlassen hat.
+   *
+   * Beim Start und danach im Takt: wer am anderen Gerät koppelt, hat dieses
+   * hier meist gerade in der Hand — die Wartezeit soll Sekunden betragen und
+   * nicht bis zum nächsten Start dauern.
+   *
+   * Ein Fehlschlag bleibt still. Das Angebot ist eine Zugabe; die Kopplung, um
+   * die es ging, steht längst.
+   */
+  useEffect(() => {
+    let current = true
+
+    const look = (): void => {
+      void completeBackPairing().then(
+        (all) => {
+          if (all !== undefined && current) {
+            setDevices(all)
+          }
+        },
+        () => undefined,
+      )
+    }
+
+    look()
+
+    const timer = window.setInterval(look, BACK_PAIRING_INTERVAL_MS)
+
+    return () => {
+      current = false
+      window.clearInterval(timer)
+    }
   }, [])
 
   // Eingabe-Socket an das gewählte Gerät binden.

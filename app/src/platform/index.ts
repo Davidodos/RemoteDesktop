@@ -1,5 +1,6 @@
 import { webPlatform } from './web.ts'
 import type { HostService } from './host.ts'
+import type { LocalNode } from './localNode.ts'
 import type { SessionKeepAlive } from './session.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
 
@@ -203,11 +204,22 @@ export interface Platform {
    * sein. Wo es das nicht kann, steht `noHost`.
    */
   readonly host: HostService
+  /**
+   * Dieses Gerät als Gegenstelle — für die Kopplung in beide Richtungen.
+   * Siehe `platform/localNode.ts`.
+   */
+  readonly node: LocalNode
 }
 
 export { PlatformError } from './errors.ts'
 export { noSessionKeepAlive, type SessionKeepAlive } from './session.ts'
 export { noSurfaces, type SurfaceBoardPublisher } from './surfaces.ts'
+export {
+  noLocalNode,
+  usableOffer,
+  type BackPairing,
+  type LocalNode,
+} from './localNode.ts'
 export {
   noHost,
   type HostClient,

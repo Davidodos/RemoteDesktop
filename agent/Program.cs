@@ -111,6 +111,10 @@ builder.Services.AddSingleton(AgentIdentity.LoadOrCreate(settings.IdentityPath))
 builder.Services.AddSingleton(new ClientStore(settings.ClientsPath));
 builder.Services.AddSingleton<PairingCodes>();
 builder.Services.AddSingleton<ChallengeStore>();
+
+// Angebote zur Gegenkopplung. Sie liegen hier, bis die Oberfläche dieses
+// Rechners sie abholt — einlösen kann sie nur, wer den Geräteschlüssel hält.
+builder.Services.AddSingleton<PendingPairings>();
 builder.Services.AddSingleton<SessionStore>();
 
 // Wer gerade Bild oder Eingabe offen hält. Ohne diese Liste überlebte eine

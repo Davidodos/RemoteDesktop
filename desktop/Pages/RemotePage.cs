@@ -309,6 +309,12 @@ public sealed class RemotePage : Control
 
                 "trust-install" => TrustAuthority(request.Fingerprint),
 
+                // Die Gegenkopplung. Beide Wege führen zum eigenen Agent — die
+                // Seite käme nicht an ihn heran, ohne ihm vorher zu vertrauen.
+                "local-offer" => new { offer = await LocalNode.OfferAsync() },
+
+                "local-pending" => new { pending = await LocalNode.PendingAsync() },
+
                 _ => throw new InvalidOperationException(
                     $"Das Fenster kennt '{request.Kind}' nicht.")
             };

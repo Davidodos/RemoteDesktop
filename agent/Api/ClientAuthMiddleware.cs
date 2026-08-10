@@ -27,7 +27,15 @@ public static class ClientAuthMiddleware
     /// beenden. Über das Netz wäre es dagegen genau der Weg, den die Kopplung
     /// verhindern soll.
     /// </summary>
-    private static readonly string[] LocalOnly = ["/api/pair/code", "/api/clients"];
+    /// <remarks>
+    /// <c>/api/pair/pending</c> steht hier und nicht bloß unter den freien
+    /// Pfaden: es liegt unterhalb von <c>/api/pair</c>, und das ist absichtlich
+    /// ohne Ausweis erreichbar — der Kopplungsaufruf erzeugt die Berechtigung ja
+    /// erst. Ohne diesen Eintrag käme jeder im Netz an ein Angebot heran, in dem
+    /// ein gültiger Kopplungscode der Gegenseite steht.
+    /// </remarks>
+    private static readonly string[] LocalOnly =
+        ["/api/pair/code", "/api/pair/pending", "/api/clients"];
 
     /// <summary>
     /// Endpunkte, die ohne Berechtigung auskommen, weil sie selbst die

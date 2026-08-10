@@ -1,3 +1,5 @@
+using System.Reflection;
+using RemoteDesktopAgent.Api;
 using RemoteDesktopAgent.Auth;
 using Xunit;
 
@@ -66,5 +68,25 @@ public class AgentScopesTests
 
         Assert.All(AgentScopes.All, scope => Assert.True(AgentScopes.IsKnown(scope)));
         Assert.False(AgentScopes.IsKnown("alles"));
+    }
+}
+
+/// <summary>
+/// Das Angebot zur Gegenkopplung enthält einen gültigen Kopplungscode der
+/// anderen Seite. Es liegt unterhalb von <c>/api/pair</c> — und das ist
+/// absichtlich ohne Ausweis erreichbar, weil der Kopplungsaufruf die
+/// Berechtigung erst erzeugt. Ohne einen eigenen Eintrag käme es damit jedem im
+/// Netz zu.
+/// </summary>
+public class PendingPairingReachabilityTests
+{
+    [Fact]
+    public void Das_Angebot_ist_nur_am_Rechner_selbst_zu_holen()
+    {
+        var localOnly = typeof(ClientAuthMiddleware)
+            .GetField("LocalOnly", BindingFlags.NonPublic | BindingFlags.Static)!
+            .GetValue(null) as string[];
+
+        Assert.Contains("/api/pair/pending", localOnly!);
     }
 }

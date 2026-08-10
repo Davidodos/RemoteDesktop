@@ -62,8 +62,34 @@ public static class PairingEndpoints
             });
         });
 
+        // Ebenfalls nur vom Rechner selbst: das Angebot der Gegenseite abholen.
+        // Einlösen kann es nur, wer den privaten Geräteschlüssel hält — auf
+        // Windows das Fenster, am Handy die App. Der Agent hebt es bloß auf.
+        app.MapGet("/api/pair/pending", (PendingPairings pending) =>
+        {
+            var offer = pending.Take();
+
+            return offer is null
+                ? Results.Ok(new { pending = (object?)null })
+                : Results.Ok(new
+                {
+                    pending = new
+                    {
+                        host = offer.Host,
+                        port = offer.Port,
+                        code = offer.Code,
+                        caFingerprint = offer.CaFingerprint,
+                        name = offer.Name
+                    }
+                });
+        });
+
         app.MapPost("/api/pair", (
-            PairRequest request, PairingService pairing, AgentIdentity identity) =>
+            PairRequest request,
+            PairingService pairing,
+            AgentIdentity identity,
+            PendingPairings pending,
+            ILogger<Program> logger) =>
         {
             var result = pairing.Pair(
                 request.Code ?? string.Empty,
@@ -74,6 +100,27 @@ public static class PairingEndpoints
             if (result.Outcome != PairOutcome.Ok || result.Client is null)
             {
                 return Results.BadRequest(new { error = Describe(result.Outcome) });
+            }
+
+            // Die Gegenkopplung: die andere Seite legt ihre eigene Adresse und
+            // einen frischen Code ihres Agents bei. Aufgehoben wird das erst
+            // **nach** bestandener Kopplung — vorher wäre es ein Weg, jedem
+            // Rechner ein Angebot unterzuschieben, indem man Codes rät.
+            var back = request.Back is null
+                ? null
+                : PendingPairings.Sanitize(
+                    request.Back.Host,
+                    request.Back.Port,
+                    request.Back.Code,
+                    request.Back.CaFingerprint,
+                    request.Back.Name);
+
+            if (back is not null)
+            {
+                pending.Offer(back);
+
+                logger.LogInformation(
+                    "Gegenkopplung angeboten von {Host}:{Port}.", back.Host, back.Port);
             }
 
             return Results.Ok(new
@@ -182,7 +229,12 @@ public static class PairingEndpoints
     };
 }
 
-internal sealed record PairRequest(string? Code, string? Label, string? PublicKey, string[]? Scopes);
+internal sealed record PairRequest(
+    string? Code, string? Label, string? PublicKey, string[]? Scopes, BackRequest? Back);
+
+/// <summary>Was die Gegenseite braucht, damit man sich bei ihr melden kann.</summary>
+internal sealed record BackRequest(
+    string? Host, int? Port, string? Code, string? CaFingerprint, string? Name);
 
 internal sealed record ChallengeRequest(string? ClientId);
 

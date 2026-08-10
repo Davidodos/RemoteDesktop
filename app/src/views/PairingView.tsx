@@ -218,11 +218,17 @@ function NameStep({
 
       const trusted = await trust()
 
+      // Das eigene Angebot für die Gegenrichtung. Ist dieses Gerät nicht
+      // steuerbar, gibt es keins — dann bleibt es bei der einen Richtung, und
+      // das ist kein Fehler.
+      const back = await platform.node.offer().catch(() => undefined)
+
       const paired = await pairWithAgent({
         host: target.host,
         port: target.port,
         code: target.code,
         label: label.trim(),
+        ...(back === undefined ? {} : { back }),
       })
 
       // Der eigene Name geht nirgendwo hin — er steht neben den Zugangsdaten

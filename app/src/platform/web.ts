@@ -1,6 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
-import { noHost, noTrust } from './index.ts'
+import { noHost, noLocalNode, noTrust } from './index.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
@@ -146,4 +146,5 @@ export const webPlatform: Platform = {
   surfaces: noSurfaces,
   trust: noTrust,
   host: noHost,
+  node: noLocalNode,
 }

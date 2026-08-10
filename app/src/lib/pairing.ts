@@ -2,6 +2,7 @@ import { postJson } from '../transport/direct.ts'
 import { TransportError } from '../transport/index.ts'
 import { certificateFingerprint } from './certificateTrust.ts'
 import { createClientKey, type ClientKeyPair } from './clientKey.ts'
+import type { BackPairing } from '../platform/index.ts'
 import { storage } from './storage.ts'
 import type { Device } from './types.ts'
 
@@ -48,6 +49,12 @@ export interface PairTarget {
   code: string
   /** Wie dieses Gerät in der Liste am Rechner heißen soll. */
   label: string
+  /**
+   * Das eigene Angebot für die Gegenrichtung. Geht mit, wenn dieses Gerät
+   * selbst steuerbar ist — siehe `platform/localNode.ts`. Die Gegenseite hebt
+   * es auf, bis ihre Oberfläche danach fragt.
+   */
+  back?: BackPairing
 }
 
 /**

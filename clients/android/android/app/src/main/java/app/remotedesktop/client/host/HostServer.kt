@@ -29,6 +29,7 @@ class HostServer(
     private val port: Int = DEFAULT_PORT,
     private val trustPort: Int = DEFAULT_TRUST_PORT,
     private val sessions: SessionStore,
+    private val pending: PendingPairings = PendingPairings(),
     private val screen: () -> Screen,
     private val address: () -> String?,
     /**
@@ -84,6 +85,9 @@ class HostServer(
         secure.start()
         plain.start()
     }
+
+    /** Das Angebot der Gegenseite, einmalig. Siehe [PendingPairings]. */
+    fun takePending(): BackPairing? = pending.take()
 
     fun stop() {
         secure.stop()
@@ -359,6 +363,12 @@ class HostServer(
         if (result.outcome != PairOutcome.OK || client == null) {
             return HttpServer.Response.error(400, describe(result.outcome))
         }
+
+        // Die Gegenkopplung: die andere Seite legt ihre eigene Adresse und einen
+        // frischen Code ihres Agents bei. Aufgehoben wird das erst **nach**
+        // bestandener Kopplung — vorher wäre es ein Weg, jedem Gerät ein
+        // Angebot unterzuschieben, indem man Codes rät.
+        PendingPairings.sanitize(body.optJSONObject("back"))?.let(pending::offer)
 
         val json = JSONObject()
             .put("clientId", client.id)

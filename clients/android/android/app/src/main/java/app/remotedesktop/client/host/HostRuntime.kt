@@ -148,6 +148,27 @@ class HostRuntime private constructor(
 
     fun issueCode(): PairingCodes = codes
 
+    /** Was die Gegenseite an Gegenkopplung hinterlassen hat — einmalig. */
+    fun takePending(): BackPairing? = server.takePending()
+
+    /**
+     * Das eigene Angebot: Adresse, Port, ein frischer Code und der eigene
+     * Fingerabdruck. Der geht damit über eine Verbindung, die bereits
+     * beglaubigt ist — niemand muss ihn mehr ablesen und vergleichen.
+     *
+     * `null`, solange der Host nicht läuft: ein Angebot ohne Server wäre eine
+     * Einladung in ein leeres Zimmer.
+     */
+    fun backOffer(): BackPairing? {
+        if (!isRunning) {
+            return null
+        }
+
+        val address = addresses().firstOrNull() ?: return null
+
+        return BackPairing(address, port, codes.issue(), material.fingerprint, deviceName)
+    }
+
     fun clients(): List<PairedClient> = pairing.listClients()
 
     fun revoke(id: String): Boolean = pairing.revoke(id)

@@ -306,26 +306,47 @@ Derselbe Anker wie beim Scannen, nur mit dem Auge statt der Kamera.
 `cd desktop && dotnet build` · `npm run apk` baut durch. Am echten Gerät noch
 nicht geprüft.
 
-## Phase 31b — Kopplung in beide Richtungen (offen)
+## Phase 31b — Kopplung in beide Richtungen ✅
 
-Wunsch vom 10.08.2026: wer am PC ein Handy koppelt, soll damit zugleich die
+Wunsch vom 10.08.2026: wer ein Gerät koppelt, soll damit zugleich die
 Gegenrichtung eingerichtet haben.
 
-Das ist mehr als Bequemlichkeit — es löst den Vertrauensanker sauberer. Wird
-einmal **vom Handy aus** gekoppelt (Kamera, QR-Code, funktionierender Weg), kann
-der Fingerabdruck des Handys über die bereits beglaubigte Verbindung zum PC
-wandern, statt am PC von einem Menschen abgelesen zu werden.
+**Das ist mehr als Bequemlichkeit.** Der Fingerabdruck der Gegenstelle wandert
+damit über eine Verbindung, die gerade beglaubigt wurde — statt am zweiten
+Gerät von einem Menschen abgelesen zu werden. Der Weg über das Auge aus Phase
+31a bleibt, ist aber nur noch der Notweg.
 
-Skizze:
+**Wie es läuft.** Wer koppelt, legt sein eigenes Angebot bei: Adresse, Port, ein
+frischer Kopplungscode **seines** Agents und sein Fingerabdruck. Die Gegenseite
+hebt es auf — erst **nach** bestandener Kopplung, sonst wäre es ein Weg, jedem
+Gerät ein Angebot unterzuschieben, indem man Codes rät.
 
-- Die koppelnde Seite legt ihre eigenen Angaben bei: Adresse, Port,
-  Fingerabdruck und einen frischen Kopplungscode ihres eigenen Agents
-- Die Gegenseite merkt sich das als offene Gegenkopplung
-- Abgeschlossen wird sie von der **Client**-Seite der Gegenstelle, die den
-  privaten Schlüssel und die Geräteliste hält — am PC das Fenster, am Handy die
-  App. Beide fragen ihren eigenen Agent nach `/api/pair/pending`
+Einlösen kann es der Agent nicht: koppeln heißt, einen privaten
+Geräteschlüssel zu benutzen und ein Gerät in eine Liste einzutragen, und beides
+liegt in der Oberfläche. Sie sieht alle fünf Sekunden nach — wer am anderen
+Gerät koppelt, hat dieses hier meist gerade in der Hand.
 
-Noch nicht gebaut.
+- `agent/Auth/PendingPairing.cs` · `host/PendingPairings.kt` — dasselbe auf
+  beiden Seiten: eines, kurz gültig, einmal abzuholen
+- `GET /api/pair/pending` ist **nur am Rechner selbst** erreichbar. Es liegt
+  unterhalb von `/api/pair`, und das ist absichtlich ohne Ausweis erreichbar —
+  ohne eigenen Eintrag in `LocalOnly` käme jeder im Netz an einen gültigen
+  Kopplungscode der Gegenseite. Ein Test hält das fest
+- `platform/localNode.ts` — das eigene Gerät als Gegenstelle. Am Handy über das
+  Plugin, im Fenster über die Brücke: der eigene Agent weist sich selbst
+  ausgestellt aus, und die Seite müsste ihm erst vertrauen, um ihn nach dem
+  Vertrauen fragen zu können
+- `lib/backPairing.ts` — holt das Angebot, vertraut, koppelt, trägt ein. Ohne
+  Rückfrage: dieselbe Entscheidung ein zweites Mal zu verlangen wäre keine
+  Sicherheit, sondern eine Zumutung
+
+**Damit gilt für alle drei Wege dasselbe.** Handy scannt den QR-Code am PC ·
+zwei Handys scannen sich · zwei PCs tippen Adresse und Code — danach ist jedes
+Paar in beide Richtungen gekoppelt.
+
+**Abnahme (10.08.2026):** App-Tests **368 grün** (vorher 361) · Agent-Tests
+**364 grün** (vorher 353) · Kotlin-Tests **89 grün** (vorher 83) · desktop baut
+· `npm run apk` baut. Am echten Gerät noch nicht geprüft.
 
 ## Phase 31 — Beide Richtungen im Fenster und in der App
 

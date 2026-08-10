@@ -1,6 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
-import { noHost } from './index.ts'
+import { noHost, usableOffer } from './index.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
@@ -9,6 +9,8 @@ import type {
   Platform,
   QrScanner,
   SecretStore,
+  BackPairing,
+  LocalNode,
   TrustService,
   UpdateInfo,
   UpdateService,
@@ -156,6 +158,20 @@ const windowTrust: TrustService = {
   },
 }
 
+/**
+ * Dieser Rechner als Gegenstelle. Gefragt wird der eigene Agent — aber über die
+ * Wirtsanwendung, nicht über HTTP: er weist sich mit einem selbst ausgestellten
+ * Zertifikat aus, und die Seite müsste ihm erst vertrauen, um ihn überhaupt
+ * fragen zu können.
+ */
+const windowNode: LocalNode = {
+  offer: async (): Promise<BackPairing | undefined> =>
+    usableOffer((await ask<{ offer?: unknown }>({ kind: 'local-offer' })).offer),
+
+  take: async (): Promise<BackPairing | undefined> =>
+    usableOffer((await ask<{ pending?: unknown }>({ kind: 'local-pending' })).pending),
+}
+
 /** Ob die App gerade im Windows-Fenster läuft. */
 export function isWebView2(): boolean {
   return typeof window !== 'undefined' && window.remoteDesktopHost !== undefined
@@ -282,5 +298,6 @@ export function webview2Platform(host: WebView2Host): Platform {
     // Das Fenster ist die Fernbedienung; steuerbar macht diesen Rechner der
     // Agent daneben, nicht die Oberfläche.
     host: noHost,
+    node: windowNode,
   }
 }

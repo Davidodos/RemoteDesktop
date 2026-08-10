@@ -13,6 +13,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
+import org.json.JSONObject
 
 /**
  * Die Brücke, über die die App dieses Gerät steuerbar macht.
@@ -137,6 +138,37 @@ class HostPlugin : Plugin() {
         context.startActivity(intent)
 
         call.resolve()
+    }
+
+    /**
+     * Das eigene Angebot zur Gegenkopplung — geht mit, wenn dieses Handy sich
+     * bei einem anderen Gerät koppelt.
+     */
+    @PluginMethod
+    fun backOffer(call: PluginCall) {
+        val offer = HostRuntime.of(context).backOffer()
+
+        call.resolve(
+            if (offer == null) {
+                JSObject().put("offer", JSONObject.NULL)
+            } else {
+                JSObject().put("offer", JSObject.fromJSONObject(offer.toJson()))
+            },
+        )
+    }
+
+    /** Was die Gegenseite hinterlassen hat. Einmalig: beim Lesen verbraucht. */
+    @PluginMethod
+    fun takePending(call: PluginCall) {
+        val offer = HostRuntime.of(context).takePending()
+
+        call.resolve(
+            if (offer == null) {
+                JSObject().put("pending", JSONObject.NULL)
+            } else {
+                JSObject().put("pending", JSObject.fromJSONObject(offer.toJson()))
+            },
+        )
     }
 
     @PluginMethod

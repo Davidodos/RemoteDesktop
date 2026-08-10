@@ -2,12 +2,13 @@ import type { SurfaceBoard } from '../lib/surfaceBoard.ts'
 import { findLatestApk, isDifferentVersion } from './appUpdate.ts'
 import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
-import { noHost, noTrust } from './index.ts'
+import { noHost, noLocalNode, noTrust, usableOffer } from './index.ts'
 import type {
   HostClient,
   HostPairingCode,
   HostService,
   HostStatus,
+  LocalNode,
   Capabilities,
   ClipboardAccess,
   KeyValueStore,
@@ -109,6 +110,8 @@ interface HostPlugin {
   enableScreen(): Promise<HostStatus>
   disableScreen(): Promise<HostStatus>
   openInputSettings(): Promise<void>
+  backOffer(): Promise<{ offer?: unknown }>
+  takePending(): Promise<{ pending?: unknown }>
   clients(): Promise<{ clients: HostClient[] }>
   revoke(options: { id: string }): Promise<void>
 }
@@ -388,6 +391,24 @@ export function capacitorPlatform(
     surfaces: surfaceBoardPublisher(plugins),
     trust: certificateTrust(plugins),
     host: hostService(plugins),
+    node: localNode(plugins),
+  }
+}
+
+/**
+ * Dieses Handy als Gegenstelle. Läuft der Host nicht, gibt es nichts
+ * anzubieten — dann bleibt es bei der einen Richtung, und das ist kein Fehler.
+ */
+function localNode(plugins: CapacitorPlugins): LocalNode {
+  const plugin = plugins.host
+
+  if (plugin === undefined || typeof plugin.backOffer !== 'function') {
+    return noLocalNode
+  }
+
+  return {
+    offer: async () => usableOffer((await plugin.backOffer()).offer),
+    take: async () => usableOffer((await plugin.takePending()).pending),
   }
 }
 
