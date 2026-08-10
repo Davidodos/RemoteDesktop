@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Die Bedienungshilfe, über die dieses Gerät ferngesteuert wird.
+
+    `canPerformGestures` ist der Grund, warum es sie gibt: ohne sie darf keine
+    App Berührungen in eine fremde App schicken. Angemeldet sind **keine**
+    Ereignistypen (`accessibilityEventTypes="typeViewFocused"` als Kleinstmaß) —
+    dieser Dienst hört nicht zu, er handelt nur. Was er nicht abonniert, bekommt
+    er auch nicht.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeViewFocused"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/input_service_description"
+    android:notificationTimeout="100" />

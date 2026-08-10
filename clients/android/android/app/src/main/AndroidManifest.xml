@@ -52,7 +52,27 @@
         <service
             android:name=".host.HostService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync|mediaProjection" />
+
+        <!-- Eingaben auf diesem Gerät (Phase 30).
+
+             Freigegeben sein muss sie, weil das System sie bindet; die
+             Erlaubnis stellt sicher, dass das auch wirklich nur das System
+             kann. Eingeschaltet wird sie ausschließlich von Hand in den
+             Systemeinstellungen — eine App kann das nicht für sich
+             entscheiden, und sie soll es auch nicht können. -->
+        <service
+            android:name=".host.RemoteInputService"
+            android:exported="true"
+            android:label="@string/input_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/remote_input" />
+        </service>
 
         <!-- Die drei Flächen aus Phase 15. Sie laufen ohne die App: angetippt
              wird ein Knopf, und was danach passiert, macht der native Teil
@@ -118,6 +138,11 @@
          Erlaubnis. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- Die Bildschirmaufnahme des Hosts (Phase 29). Die Erlaubnis allein
+         genügt nicht: Android fragt bei jeder Aufnahme zusätzlich mit einem
+         Systemdialog nach, und das lässt sich ohne Root nicht umgehen. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Selbst-Update über die GitHub-Releases. Android zeigt dabei immer einen

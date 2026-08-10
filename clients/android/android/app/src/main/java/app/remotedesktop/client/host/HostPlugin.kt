@@ -1,10 +1,17 @@
 package app.remotedesktop.client.host
 
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.media.projection.MediaProjectionManager
+import android.provider.Settings
+import androidx.activity.result.ActivityResult
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
+import com.getcapacitor.annotation.ActivityCallback
 import com.getcapacitor.annotation.CapacitorPlugin
 
 /**
@@ -63,6 +70,75 @@ class HostPlugin : Plugin() {
         )
     }
 
+    /**
+     * Fragt die Bildschirmaufnahme an.
+     *
+     * Der Systemdialog kommt von Android und lässt sich nicht umgehen. Er
+     * kommt auch nicht einmalig: nach einem Neustart des Geräts ist die
+     * Erlaubnis weg. Das steht auf der Freigabeseite, damit niemand sein Handy
+     * in dem Glauben weglegt, es bleibe einsehbar.
+     */
+    @PluginMethod
+    fun enableScreen(call: PluginCall) {
+        val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
+            as MediaProjectionManager
+
+        startActivityForResult(call, manager.createScreenCaptureIntent(), "screenResult")
+    }
+
+    @PluginMethod
+    fun disableScreen(call: PluginCall) {
+        ScreenCapture.forget()
+
+        // Der Dienst meldet sich neu an, damit der Typ „nimmt den Bildschirm
+        // auf" wieder verschwindet — sonst behauptet die Benachrichtigung
+        // etwas, das nicht mehr stimmt.
+        HostService.start(context)
+
+        call.resolve(describe())
+    }
+
+    @ActivityCallback
+    private fun screenResult(call: PluginCall?, result: ActivityResult) {
+        if (call == null) {
+            return
+        }
+
+        val data = result.data
+
+        if (result.resultCode != Activity.RESULT_OK || data == null) {
+            call.reject("Die Bildschirmaufnahme wurde nicht bestätigt.")
+            return
+        }
+
+        ScreenCapture.remember(result.resultCode, data)
+
+        // Erst der Dienst mit dem passenden Typ, dann darf jemand aufnehmen.
+        // Andersherum zieht Android seit Fassung 14 die Erlaubnis wortlos
+        // zurück, und die App stünde vor einem schwarzen Bild ohne Erklärung.
+        HostService.start(context)
+
+        call.resolve(describe())
+    }
+
+    /**
+     * Führt in die Systemeinstellungen, wo die Bedienungshilfe eingeschaltet
+     * wird.
+     *
+     * Mehr kann eine App hier nicht tun: einschalten muss es ein Mensch. Der
+     * Weg dorthin führt über eine Liste, in der „RemoteDesktop-Fernsteuerung"
+     * steht — deshalb sagt die Freigabeseite den Namen dazu.
+     */
+    @PluginMethod
+    fun openInputSettings(call: PluginCall) {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        context.startActivity(intent)
+
+        call.resolve()
+    }
+
     @PluginMethod
     fun clients(call: PluginCall) {
         val array = JSArray()
@@ -102,6 +178,8 @@ class HostPlugin : Plugin() {
             .put("deviceName", runtime.deviceName)
             .put("port", runtime.port)
             .put("caFingerprint", runtime.material.fingerprint)
+            .put("sharingScreen", runtime.isSharingScreen)
+            .put("acceptingInput", runtime.isAcceptingInput(context))
             .put("addresses", JSArray(runtime.addresses().toTypedArray()))
     }
 }

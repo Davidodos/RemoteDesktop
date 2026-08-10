@@ -28,6 +28,26 @@ export interface HostService {
    */
   pairingCode(): Promise<HostPairingCode>
 
+  /**
+   * Fragt die Bildschirmaufnahme an. Android zeigt dabei seinen eigenen
+   * Dialog — die App kann ihn weder umgehen noch vorwegnehmen.
+   *
+   * Die Erlaubnis hält, solange der Dienst lebt, und ist nach einem Neustart
+   * des Geräts weg. Das steht so auf der Seite: wer sein Handy weglegt, soll
+   * nicht glauben, es bleibe für immer einsehbar.
+   */
+  enableScreen(): Promise<HostStatus>
+
+  /** Beendet die Aufnahme. Der Host bleibt erreichbar, nur ohne Bild. */
+  disableScreen(): Promise<HostStatus>
+
+  /**
+   * Öffnet die Systemeinstellungen, in denen die Fernsteuerung freigeschaltet
+   * wird. Mehr kann die App nicht tun — einschalten muss es ein Mensch, und
+   * das ist bei einem Recht dieser Größe richtig so.
+   */
+  openInputSettings(): Promise<void>
+
   /** Wer dieses Gerät steuern darf. */
   clients(): Promise<HostClient[]>
 
@@ -50,6 +70,17 @@ export interface HostStatus {
   addresses: string[]
   /** Fingerabdruck der eigenen Zertifizierungsstelle. */
   caFingerprint?: string
+  /**
+   * Ob die Bildschirmaufnahme bestätigt ist. Ohne sie ist das Gerät zwar
+   * erreichbar und steuerbar, aber nicht zu sehen.
+   */
+  sharingScreen?: boolean
+  /**
+   * Ob die Bedienungshilfe läuft. Ohne sie ist das Gerät zu sehen, aber nicht
+   * zu bedienen — und das ist der Zustand, den man aus der Ferne nicht von
+   * einem hängenden Gerät unterscheiden kann.
+   */
+  acceptingInput?: boolean
 }
 
 export interface HostPairingCode {
@@ -75,6 +106,9 @@ export const noHost: HostService = {
   start: () => unavailable(),
   stop: () => unavailable(),
   pairingCode: () => unavailable(),
+  enableScreen: () => unavailable(),
+  disableScreen: () => unavailable(),
+  openInputSettings: () => unavailable(),
   clients: (): Promise<HostClient[]> => Promise.resolve([]),
   revoke: () => unavailable(),
 }

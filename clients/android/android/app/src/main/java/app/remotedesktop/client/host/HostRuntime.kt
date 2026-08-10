@@ -64,8 +64,12 @@ class HostRuntime private constructor(
                 deviceName = name,
                 version = versionOf(context),
                 sessions = sessions,
-                screen = { screenOf(context) },
+                screen = { ScreenCapture.scaled(screenOf(context)) },
                 address = { HttpServer.localAddresses().firstOrNull() },
+                screenSource = { ScreenCapture.open(context, screenOf(context)) },
+                input = { command ->
+                    RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
+                },
             )
 
             return HostRuntime(server, codes, pairing, material, name)
@@ -117,6 +121,12 @@ class HostRuntime private constructor(
     val isRunning: Boolean get() = server.isRunning
 
     val port: Int get() = if (server.isRunning) server.boundPort else HostServer.DEFAULT_PORT
+
+    /** Ob jemand die Bildschirmaufnahme bestätigt hat. */
+    val isSharingScreen: Boolean get() = ScreenCapture.isPermitted
+
+    /** Ob die Bedienungshilfe läuft — ohne sie kommt keine Eingabe an. */
+    fun isAcceptingInput(context: Context): Boolean = RemoteInputService.isEnabled(context)
 
     /** Unter welchen Adressen dieses Handy gerade erreichbar ist. */
     fun addresses(): List<String> = HttpServer.localAddresses()

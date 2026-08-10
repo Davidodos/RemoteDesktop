@@ -31,6 +31,18 @@ class HostServer(
     private val sessions: SessionStore,
     private val screen: () -> Screen,
     private val address: () -> String?,
+    /**
+     * Woher die Bilder kommen. Ein Lambda und kein Feld, weil die Aufnahme erst
+     * beim Verbinden geöffnet wird — und weil der Server damit ohne Android
+     * unter Test steht.
+     */
+    private val screenSource: () -> FrameSource? = { null },
+    /**
+     * Wohin die Eingaben gehen. Gibt eine Meldung zurück, wenn es nicht geht —
+     * etwa weil die Bedienungshilfe aus ist. Ein Lambda, damit der Server ohne
+     * Android unter Test steht.
+     */
+    private val input: (InputCommand) -> String? = { NO_INPUT },
     private val live: LiveConnections = LiveConnections(),
 ) {
 
@@ -45,6 +57,15 @@ class HostServer(
          * Seite nicht mehr versteht.
          */
         const val PROTOCOL = 1
+
+        /**
+         * Was der Client hört, solange niemand die Bedienungshilfe
+         * eingeschaltet hat. Ein Gerät, das Berührungen wortlos verschluckt,
+         * sieht aus der Ferne aus wie ein hängendes.
+         */
+        const val NO_INPUT =
+            "Dieses Gerät nimmt noch keine Eingaben an. Am Handy unter " +
+                "„Dieses Gerät freigeben\" die Fernsteuerung einschalten."
     }
 
     /** Der Bildschirm dieses Handys, in echten Pixeln. */
@@ -154,8 +175,107 @@ class HostServer(
         request.path.startsWith("/api/clients/") && request.method == "DELETE" ->
             revoke(request.path.removePrefix("/api/clients/"))
 
+        request.path == "/ws/screen" -> screenSocket(request)
+
+        request.path == "/ws/input" -> inputSocket(request)
+
         else -> HttpServer.Response.error(404, "Diesen Endpunkt gibt es hier nicht.")
     }
+
+    /**
+     * Der Bild-Stream.
+     *
+     * Die Aufnahme wird hier geöffnet und nicht vorgehalten: sie kostet einen
+     * virtuellen Bildschirm und Strom, und beides soll nur laufen, solange
+     * jemand zusieht.
+     */
+    private fun screenSocket(request: HttpServer.Request): HttpServer.Response =
+        HttpServer.Response(101) { socket ->
+            val source = screenSource()
+
+            if (source == null) {
+                // Kein Fehler im Sinne von kaputt: es hat nur noch niemand die
+                // Aufnahme bestätigt. Die App zeigt den Satz an, statt ein
+                // schwarzes Bild stehen zu lassen.
+                socket.sendText(
+                    JSONObject()
+                        .put("t", "error")
+                        .put(
+                            "message",
+                            "Dieses Gerät gibt seinen Bildschirm noch nicht frei. " +
+                                "Am Handy unter „Dieses Gerät freigeben\" die " +
+                                "Bildschirmaufnahme einschalten.",
+                        )
+                        .toString(),
+                )
+
+                socket.close()
+                return@Response
+            }
+
+            val display = screen()
+            val stream = ScreenStream(source, display.width, display.height)
+
+            val release = live.register(clientOf(request)) { socket.close() }
+
+            // Zwei Schleifen: das Bild geht in einem eigenen Thread hinaus,
+            // während dieser hier auf Steuerbefehle hört. Sie in einer zu
+            // führen hieße, dass ein „Pause" erst nach dem nächsten Bild
+            // ankommt — und bei einem hängenden Encoder gar nicht.
+            val sender = Thread({ stream.run(socket) }, "remotedesktop-screen").apply {
+                isDaemon = true
+                start()
+            }
+
+            try {
+                socket.listen(onText = stream::apply)
+            } finally {
+                socket.close()
+                sender.join(2000)
+                release()
+            }
+        }
+
+    /**
+     * Der Eingabe-Socket.
+     *
+     * Getrennt vom Bild, wie beim Agent: ein volles Bild im Sendepuffer darf
+     * keinen Klick aufhalten. Hier ist das noch wichtiger als dort — ein Bild
+     * dieses Handys ist ein ganzes JPEG und kein Ausschnitt.
+     */
+    private fun inputSocket(request: HttpServer.Request): HttpServer.Response =
+        HttpServer.Response(101) { socket ->
+            val release = live.register(clientOf(request)) { socket.close() }
+
+            // Je Verbindung höchstens eine Meldung derselben Art. Ohne das
+            // stünde bei jedem Antippen dieselbe Zeile in der Statuszeile, und
+            // die eine, auf die es ankommt, ginge darin unter.
+            val reported = HashSet<String>()
+
+            try {
+                socket.listen(onText = { message ->
+                    val command = InputCommands.parse(message) ?: return@listen
+                    val failure = input(command)
+
+                    if (failure != null && reported.add(failure)) {
+                        socket.sendText(
+                            JSONObject().put("t", "error").put("message", failure).toString(),
+                        )
+                    }
+                })
+            } finally {
+                socket.close()
+                release()
+            }
+        }
+
+    /**
+     * Wem diese Verbindung gehört. Gebraucht für den Widerruf: eine
+     * Dauerverbindung wird nach dem Aufbau nie wieder geprüft und überlebte
+     * sonst ihre eigene Berechtigung.
+     */
+    private fun clientOf(request: HttpServer.Request): String? =
+        credentialOf(request)?.let { sessions.find(it)?.clientId }
 
     /**
      * Was dieses Gerät ist und kann.

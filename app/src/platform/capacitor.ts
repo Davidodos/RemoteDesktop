@@ -105,6 +105,9 @@ interface HostPlugin {
   start(): Promise<HostStatus>
   stop(): Promise<HostStatus>
   pairingCode(): Promise<HostPairingCode>
+  enableScreen(): Promise<HostStatus>
+  disableScreen(): Promise<HostStatus>
+  openInputSettings(): Promise<void>
   clients(): Promise<{ clients: HostClient[] }>
   revoke(options: { id: string }): Promise<void>
 }
@@ -407,6 +410,9 @@ function hostService(plugins: CapacitorPlugins): HostService {
     start: () => plugin.start(),
     stop: () => plugin.stop(),
     pairingCode: () => plugin.pairingCode(),
+    enableScreen: () => plugin.enableScreen(),
+    disableScreen: () => plugin.disableScreen(),
+    openInputSettings: () => plugin.openInputSettings(),
     clients: async () => (await plugin.clients()).clients,
     revoke: (id) => plugin.revoke({ id }),
   }

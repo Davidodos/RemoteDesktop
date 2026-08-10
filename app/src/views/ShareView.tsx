@@ -171,6 +171,70 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
 
       {running && (
         <section className="settings-group">
+          <h2>Bildschirm</h2>
+          <p className="settings-hint">
+            {status?.sharingScreen === true
+              ? 'Die Aufnahme läuft. Sie endet, wenn dieses Handy neu startet — ' +
+                'danach muss sie hier wieder eingeschaltet werden.'
+              : 'Ohne Aufnahme lässt sich dieses Gerät steuern, aber nicht ' +
+                'ansehen. Android fragt beim Einschalten selbst noch einmal nach.'}
+          </p>
+
+          <button
+            type="button"
+            className="settings-entry"
+            onClick={() => {
+              const action =
+                status?.sharingScreen === true ? host.disableScreen() : host.enableScreen()
+
+              void action.then(setStatus, describe(setError))
+            }}
+          >
+            <span>
+              {status?.sharingScreen === true
+                ? 'Bildschirmaufnahme beenden'
+                : 'Bildschirm freigeben'}
+            </span>
+          </button>
+        </section>
+      )}
+
+      {running && (
+        <section className="settings-group">
+          <h2>Fernsteuerung</h2>
+          <p className="settings-hint">
+            {status?.acceptingInput === true
+              ? 'Eingaben kommen an. Tippen, wischen und Text in das gerade ' +
+                'geöffnete Eingabefeld — echte Tastenkombinationen kennt ' +
+                'Android nicht.'
+              : 'Noch nicht eingeschaltet. Android verlangt dafür den Gang in ' +
+                'die Einstellungen unter „Bedienungshilfen" und dort ' +
+                '„RemoteDesktop-Fernsteuerung". Das ist ein großes Recht: der ' +
+                'Dienst darf überall hintippen. Deshalb kann die App es nicht ' +
+                'für dich einschalten.'}
+          </p>
+
+          {status?.acceptingInput !== true && (
+            <button
+              type="button"
+              className="settings-entry"
+              onClick={() => {
+                void host.openInputSettings().then(
+                  // Beim Zurückkommen ist der Stand ein anderer — nachgefragt
+                  // wird deshalb hier und nicht erst beim nächsten Öffnen.
+                  () => window.setTimeout(refresh, 500),
+                  describe(setError),
+                )
+              }}
+            >
+              <span>Bedienungshilfen öffnen</span>
+            </button>
+          )}
+        </section>
+      )}
+
+      {running && (
+        <section className="settings-group">
           <h2>Gerät koppeln</h2>
 
           {pairing === undefined ? (

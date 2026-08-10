@@ -86,11 +86,18 @@ class HttpServer(
         fun text(): String = String(body, Charsets.UTF_8)
     }
 
+    /**
+     * @param upgrade Statt einer Antwort: die Verbindung wird zum WebSocket.
+     *   Der Rückruf läuft auf demselben Thread und bleibt dort, solange die
+     *   Verbindung steht — ein WebSocket ist nichts, was man beantwortet und
+     *   dann vergisst.
+     */
     data class Response(
         val status: Int,
         val contentType: String = "application/json; charset=utf-8",
         val body: ByteArray = ByteArray(0),
         val headers: Map<String, String> = emptyMap(),
+        val upgrade: ((WebSocketConnection) -> Unit)? = null,
     ) {
         companion object {
             fun json(status: Int, json: String): Response =
@@ -186,6 +193,21 @@ class HttpServer(
                     Response.error(500, "Im Host ist etwas schiefgegangen: ${it.message}")
                 }
 
+                val upgrade = response.upgrade
+
+                if (upgrade != null) {
+                    // Ab hier gehört die Verbindung dem WebSocket. Kein
+                    // Zeitlimit mehr: ein Eingabe-Socket ist minutenlang still,
+                    // wenn niemand tippt, und wäre nach dreißig Sekunden weg.
+                    connection.soTimeout = 0
+
+                    if (openSocket(request, input, output, upgrade)) {
+                        return
+                    }
+
+                    continue
+                }
+
                 try {
                     write(output, response)
                 } catch (broken: IOException) {
@@ -196,6 +218,50 @@ class HttpServer(
                     return
                 }
             }
+        }
+    }
+
+    /**
+     * Vollzieht den Handschlag und übergibt.
+     *
+     * @return `false`, wenn die Anfrage gar keine Aufrüstung war — dann geht es
+     *   als gewöhnliche Antwort weiter, statt eine Verbindung stillschweigend
+     *   fallen zu lassen.
+     */
+    private fun openSocket(
+        request: Request,
+        input: InputStream,
+        output: BufferedOutputStream,
+        upgrade: (WebSocketConnection) -> Unit,
+    ): Boolean {
+        val key = request.header("sec-websocket-key")
+
+        if (key.isNullOrBlank() ||
+            request.header("upgrade")?.lowercase(Locale.ROOT) != "websocket"
+        ) {
+            runCatching {
+                write(output, Response.error(400, "Erwartet wird eine WebSocket-Verbindung."))
+            }
+
+            return false
+        }
+
+        return try {
+            output.write(
+                (
+                    "HTTP/1.1 101 Switching Protocols\r\n" +
+                        "Upgrade: websocket\r\n" +
+                        "Connection: Upgrade\r\n" +
+                        "Sec-WebSocket-Accept: " + WebSocketFrames.accept(key) + "\r\n\r\n"
+                    ).toByteArray(Charsets.US_ASCII),
+            )
+            output.flush()
+
+            upgrade(WebSocketConnection(input, output))
+
+            true
+        } catch (broken: IOException) {
+            true
         }
     }
 

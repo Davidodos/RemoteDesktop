@@ -188,44 +188,76 @@ zwei Geräte: freigeben, Code anzeigen, vom PC-Fenster aus koppeln. Bild und
 Eingabe gibt es dabei noch nicht; die Kopplung muss stehen, bevor es etwas zu
 übertragen gibt.
 
-## Phase 29 — Bild vom Handy
+## Phase 29 — Bild vom Handy ✅
 
-- Abhängigkeit `io.github.webrtc-sdk:android` mit `ScreenCapturerAndroid`:
-  MediaProjection → Hardware-H.264 → PeerConnection. Der Weg über eine fertige
-  Bibliothek statt eines eigenen `MediaCodec`-Stroms, weil die App-Seite dann
-  **unverändert** bleibt — sie schickt dasselbe Angebot wie an den PC
-- `POST /api/webrtc/offer` beantwortet das Angebot, `DELETE /api/webrtc/{id}`
-  räumt auf. `/monitor` antwortet mit 400: ein Handy hat einen Bildschirm
-- Vordergrunddienst vom Typ `mediaProjection` (ab Android 14 Pflicht), eigene
-  Benachrichtigung, getrennt vom bestehenden `dataSync`-Dienst der Client-Seite
-- Die Freigabeseite sagt klar, was der Systemdialog bedeutet und dass er nach
-  einem Neustart des Handys wiederkommt
-- Kein JPEG-Rückfall auf dem Handy: ohne Hardware-Encoder gibt es kein Android
+- `WebSocketFrames.kt` · `WebSocketConnection.kt` — das Rahmenformat von
+  RFC 6455 und die stehende Verbindung. Zwei Bildschirmseiten Festlegung, und
+  die drei Stellen, an denen eine eigene Fassung erfahrungsgemäß scheitert
+  (erweiterte Länge, Maske, Fortsetzungsrahmen), stehen je einmal unter Test
+- `ScreenCapture.kt` — MediaProjection → virtueller Bildschirm → `ImageReader`
+  → Bitmap → JPEG. Längste Kante 1280: die vollen 2400 Pixel eines Handys zu
+  übertragen kostet mehr, als es zeigt
+- `ScreenStream.kt` — `/ws/screen` mit demselben Achtbyte-Kopf, denselben
+  Textnachrichten und derselben Qualitätsregelung wie beim Agent
+- Vordergrunddienst meldet sich nach der Bestätigung mit dem Typ
+  `mediaProjection` neu an — vorher, und Android zieht seit Fassung 14 die
+  Erlaubnis wortlos zurück
 
-**Abnahme:** vom PC-Fenster aus das Handybild sehen, Drehung inbegriffen.
+**Die Entscheidung, die im Plan noch anders stand: JPEG statt WebRTC.**
 
-## Phase 30 — Eingabe auf dem Handy
+Der Plan sah `io.github.webrtc-sdk:android` vor. Dagegen spricht dasselbe wie
+gegen Ktor und BouncyCastle in Phase 28 — rund zehn Megabyte, bei jedem
+Selbst-Update aufs Neue —, und dafür spricht weniger als gedacht: die App kann
+den JPEG-Weg längst, es ist Stufe 1 aus `docs/ARCHITEKTUR.md`. Kein neuer
+Kanal, keine neue Aushandlung, keine Abhängigkeit. Reicht es am echten Gerät
+nicht, ist H.264 der nächste Schritt — dann aber mit einem Grund statt auf
+Verdacht.
 
-- `RemoteInputService : AccessibilityService`
-- `dispatchGesture` für Tippen, langes Drücken, Ziehen und Wischen;
-  `performGlobalAction` für Zurück, Home, Übersicht, Benachrichtigungen
-- **Der Zeiger ist erfunden.** Android kennt keinen Mauszeiger. Der Host merkt
-  sich die zuletzt gemeldete Position aus `move`, und `click` tippt dort. Damit
-  passen das Zeiger-Overlay und der direkte Tipp aufs Bild aus der App
-  unverändert
-- `moverel` vom Touchpad verschiebt dieselbe gemerkte Position
-- `scroll` wird zu einer Wischgeste
-- **Text**: in den fokussierten Knoten über `ACTION_SET_TEXT`, Rücktaste durch
-  Kürzen desselben Textes, `Enter` über die Editor-Aktion. Was nicht geht, geht
-  sichtbar nicht: der Host antwortet auf dem Input-Socket mit einer Meldung,
-  und die App zeigt sie in der Statuszeile, statt sie zu verschlucken
-- Die Bildschirmtastatur zeigt ohne `keys` nur, was ankommt: keine `Fn`-Seite,
-  keine Kombi-Sammlung. Statt dessen Zurück, Home und Übersicht
-- Die Freigabeseite führt mit einem Knopf direkt in die Bedienungshilfen und
-  sagt, was dort einzuschalten ist
+Ruft die App `/api/webrtc/offer`, antwortet das Handy mit 404, und sie fällt von
+allein auf den JPEG-Stream zurück. Genau dafür ist der Rückfall gebaut.
 
-**Abnahme:** vom zweiten Handy aus auf dem ersten eine App öffnen und in einem
-Textfeld schreiben.
+**Abnahme (10.08.2026):** Kotlin-Tests **70 grün** (vorher 53).
+
+## Phase 30 — Eingabe auf dem Handy ✅
+
+- `InputCommands.kt` — dieselben Nachrichten wie an den Windows-Agent, gelesen
+  ohne Android-Bezug und deshalb unter Test
+- `RemoteInputService.kt` — die Bedienungshilfe. `dispatchGesture` für Tippen,
+  langes Drücken, Ziehen und Wischen; `performGlobalAction` für Zurück, Home
+  und Übersicht; Text über den Knoten mit dem Eingabefokus
+- `/ws/input` im Server, getrennt vom Bild wie beim Agent
+
+**Der Zeiger ist erfunden.** Android kennt keinen Mauszeiger, die App schickt
+aber Bewegung und Klick getrennt — weil sie mit einem PC redet. Der Host führt
+deshalb eine Position und tippt beim Klick dorthin. Damit funktionieren das
+Zeiger-Overlay und der direkte Tipp aufs Bild unverändert. Ein Rechtsklick wird
+zum langen Drücken; die mittlere Maustaste gibt es nicht und sagt das auch.
+
+**Was nicht geht, sagt es.** Jede abgelehnte Eingabe schickt einen Satz über den
+Eingabe-Socket, den die App in ihrer Statuszeile zeigt — je Verbindung einmal,
+sonst stünde bei jedem Antippen dieselbe Zeile. Der wichtigste Fall ist die
+ausgeschaltete Bedienungshilfe: ein Gerät, das Berührungen wortlos verschluckt,
+sieht aus der Ferne aus wie ein hängendes.
+
+**Eingeschaltet wird von Hand.** Android verlangt den Gang in die
+Systemeinstellungen, und die App kann das weder abkürzen noch heimlich tun. Die
+Freigabeseite führt hin und sagt, was dort zu suchen ist — und dass der Dienst
+überall hintippen darf.
+
+**Abnahme (10.08.2026):** Kotlin-Tests **83 grün** (vorher 70) · App-Tests
+**358 grün** · `npm run apk` baut durch.
+
+**Am echten Gerät noch nicht geprüft.** Das ist jetzt dran und braucht zwei
+Geräte:
+
+1. Am Handy: Einstellungen → „Dieses Gerät freigeben" → einschalten,
+   Bildschirm freigeben (Systemdialog bestätigen), Bedienungshilfen öffnen und
+   „RemoteDesktop-Fernsteuerung" einschalten
+2. Am PC-Fenster oder am zweiten Handy: koppeln — QR scannen oder Adresse,
+   Port und Code eintippen
+3. Erwartet: Bild des Handys, Tippen aufs Bild löst dort einen Tipp aus, langes
+   Drücken hält, die Bildschirmtastatur schreibt in ein geöffnetes Textfeld.
+   Power, Medien, Aktionen und Shortcuts sind **nicht** in der Leiste
 
 ## Phase 31 — Beide Richtungen im Fenster und in der App
 

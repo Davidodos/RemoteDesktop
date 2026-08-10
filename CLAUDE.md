@@ -7,7 +7,8 @@ Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.
 
 **V4 (läuft):** beide Richtungen — ein Handy lässt sich ebenso steuern wie ein
 PC — und ein Dateimanager. Arbeitsanweisung in **`docs/TASKS-V4.md`**.
-Stand 10.08.2026: **Phasen 27–28 erledigt**, am echten Gerät noch nicht geprüft.
+Stand 10.08.2026: **Phasen 27–30 erledigt** — das Handy liefert Bild und nimmt
+Eingaben an —, am echten Gerät noch nicht geprüft.
 Leitsatz: das Handy wird ein Agent und spricht dasselbe Protokoll; was ein Gerät
 kann, sagt es selbst über `capabilities` in `/api/info`.
 

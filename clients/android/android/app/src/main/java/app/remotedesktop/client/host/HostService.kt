@@ -134,10 +134,27 @@ class HostService : Service() {
             .createNotificationChannel(channel)
     }
 
-    private fun foregroundType(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-        } else {
-            0
+    /**
+     * Der Typ, mit dem sich der Dienst anmeldet.
+     *
+     * `mediaProjection` kommt dazu, sobald jemand die Aufnahme bestätigt hat —
+     * und **muss** dazukommen, bevor `getMediaProjection` gerufen wird: seit
+     * Android 14 zieht das System die Erlaubnis sonst wortlos zurück. Deshalb
+     * meldet sich der Dienst nach der Bestätigung ein zweites Mal an, statt den
+     * Typ von Anfang an zu führen — ein Dienst, der dauerhaft „nimmt gerade den
+     * Bildschirm auf" behauptet, wäre eine Unwahrheit im Benachrichtigungstext.
+     */
+    private fun foregroundType(): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return 0
         }
+
+        val base = ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+
+        return if (ScreenCapture.isPermitted) {
+            base or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        } else {
+            base
+        }
+    }
 }
