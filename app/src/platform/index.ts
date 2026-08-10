@@ -1,4 +1,5 @@
 import { webPlatform } from './web.ts'
+import type { HostService } from './host.ts'
 import type { SessionKeepAlive } from './session.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
 
@@ -167,11 +168,23 @@ export interface Platform {
    * überall dort, wo kein Tailscale läuft — also im Heimnetz und im eigenen VPN.
    */
   readonly trust: TrustService
+  /**
+   * Dieses Gerät steuerbar machen — seit V4 kann ein Handy auch die Gegenseite
+   * sein. Wo es das nicht kann, steht `noHost`.
+   */
+  readonly host: HostService
 }
 
 export { PlatformError } from './errors.ts'
 export { noSessionKeepAlive, type SessionKeepAlive } from './session.ts'
 export { noSurfaces, type SurfaceBoardPublisher } from './surfaces.ts'
+export {
+  noHost,
+  type HostClient,
+  type HostPairingCode,
+  type HostService,
+  type HostStatus,
+} from './host.ts'
 
 let current: Platform = webPlatform
 

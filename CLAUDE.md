@@ -5,7 +5,13 @@ Handy-App (Android) zur Fernsteuerung von PC und Laptop (beide Windows 10/11).
 Veröffentlichen und Updates: **`docs/RELEASE.md`**
 Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
 
-**V3 (läuft):** gemeinsame Oberfläche für alle Teile, Tailscale optional.
+**V4 (läuft):** beide Richtungen — ein Handy lässt sich ebenso steuern wie ein
+PC — und ein Dateimanager. Arbeitsanweisung in **`docs/TASKS-V4.md`**.
+Stand 10.08.2026: **Phasen 27–28 erledigt**, am echten Gerät noch nicht geprüft.
+Leitsatz: das Handy wird ein Agent und spricht dasselbe Protokoll; was ein Gerät
+kann, sagt es selbst über `capabilities` in `/api/info`.
+
+**V3 (abgeschlossen):** gemeinsame Oberfläche für alle Teile, Tailscale optional.
 Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 08.08.2026: **Phasen 21–26
 erledigt**, dazu die Nachträge vom 07. und 08.08. (Live-Aktualisierung im
 Fenster, Rollen, Tailnet-Name im QR-Code, Geräteverwaltung in der App;
@@ -44,7 +50,7 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 | `assets/` | SVG | Quelle des Symbols für alle drei Plattformen |
 | `waker/` | Node/TS + Express, Docker | NAS, Port 3080 |
 | `app/` | React + Vite | Oberfläche für Handy **und** Windows-Fenster |
-| `clients/android/` | Capacitor + Java, APK | Handy, zeigt `app/dist` |
+| `clients/android/` | Capacitor + Java/Kotlin, APK | Handy — zeigt `app/dist`, und ist seit V4 unter `.../host/` selbst ein Agent |
 
 ## Konventionen
 

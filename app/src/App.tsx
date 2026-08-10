@@ -19,6 +19,7 @@ import { PairingView } from './views/PairingView.tsx'
 import { PowerView } from './views/PowerView.tsx'
 import { ScreenView } from './views/ScreenView.tsx'
 import { SettingsView } from './views/SettingsView.tsx'
+import { ShareView } from './views/ShareView.tsx'
 import { ActionsView } from './views/ActionsView.tsx'
 import { ShortcutsView } from './views/ShortcutsView.tsx'
 import { Sidebar, pageAvailable, type Page } from './views/Sidebar.tsx'
@@ -293,8 +294,13 @@ export function App(): React.JSX.Element {
             Einstellungen trotzdem erreichbar bleiben — dort steckt die
             Aktualisierung der App —, schalten die beiden Ansichten hier
             gegenseitig um. */}
-        {page === 'settings' ? (
-          <SettingsView onDevices={() => setPage('devices')} />
+        {page === 'share' ? (
+          <ShareView onBack={() => setPage('settings')} />
+        ) : page === 'settings' ? (
+          <SettingsView
+            onDevices={() => setPage('devices')}
+            onShare={() => setPage('share')}
+          />
         ) : (
           <DeviceListView
             devices={devices}
@@ -358,8 +364,13 @@ export function App(): React.JSX.Element {
 
         {/* Die Geräteseite braucht keine Verbindung — sie ist der Weg zurück,
             gerade auch wenn die Verbindung hakt. */}
-        {view === 'settings' ? (
-          <SettingsView onDevices={() => setPage('devices')} />
+        {view === 'share' ? (
+          <ShareView onBack={() => setPage('settings')} />
+        ) : view === 'settings' ? (
+          <SettingsView
+            onDevices={() => setPage('devices')}
+            onShare={() => setPage('share')}
+          />
         ) : view === 'devices' ? (
           <DeviceListView
             devices={devices}

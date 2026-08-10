@@ -41,6 +41,19 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Der Server, der dieses Gerät steuerbar macht (Phase 28).
+
+             Auch hier dataSync und nicht connectedDevice: übertragen wird
+             fortlaufend Bild und Eingabe über das Netz, nur in die andere
+             Richtung als bei SessionService. Ein eigener Dienst und nicht
+             derselbe, weil beide unabhängig voneinander laufen — dieses Handy
+             kann steuern und gesteuert werden, und das Ende des einen darf das
+             andere nicht mitnehmen. -->
+        <service
+            android:name=".host.HostService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- Die drei Flächen aus Phase 15. Sie laufen ohne die App: angetippt
              wird ein Knopf, und was danach passiert, macht der native Teil
              allein (siehe surfaces/). -->

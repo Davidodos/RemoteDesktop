@@ -2,8 +2,12 @@ import type { SurfaceBoard } from '../lib/surfaceBoard.ts'
 import { findLatestApk, isDifferentVersion } from './appUpdate.ts'
 import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
-import { noTrust } from './index.ts'
+import { noHost, noTrust } from './index.ts'
 import type {
+  HostClient,
+  HostPairingCode,
+  HostService,
+  HostStatus,
   Capabilities,
   ClipboardAccess,
   KeyValueStore,
@@ -85,6 +89,24 @@ export interface CapacitorPlugins {
   surfaces?: SurfacesPlugin
   /** Ebenso freiwillig: eine ältere APK kennt das Plugin nicht. */
   trust?: TrustPlugin
+  /** Ebenso — dieses Plugin kam erst mit V4 dazu. */
+  host?: HostPlugin
+}
+
+/**
+ * Das fünfte eigene Plugin: dieses Handy als Ziel.
+ *
+ * Der Kopplungscode kommt über die Brücke und nicht über HTTP. Der Endpunkt
+ * dafür ist absichtlich nur vom Gerät selbst erreichbar — und „vom Gerät
+ * selbst" ist genau das hier.
+ */
+interface HostPlugin {
+  status(): Promise<HostStatus>
+  start(): Promise<HostStatus>
+  stop(): Promise<HostStatus>
+  pairingCode(): Promise<HostPairingCode>
+  clients(): Promise<{ clients: HostClient[] }>
+  revoke(options: { id: string }): Promise<void>
 }
 
 /**
@@ -361,6 +383,32 @@ export function capacitorPlatform(
     session: sessionKeepAlive(plugins),
     surfaces: surfaceBoardPublisher(plugins),
     trust: certificateTrust(plugins),
+    host: hostService(plugins),
+  }
+}
+
+/**
+ * Dieses Handy steuerbar machen.
+ *
+ * Fehlt das Plugin, bleibt es bei `noHost` — eine APK, die noch ohne gebaut
+ * wurde, soll weiterlaufen und die Freigabeseite gar nicht erst anbieten,
+ * statt an einem Aufruf ins Leere zu scheitern.
+ */
+function hostService(plugins: CapacitorPlugins): HostService {
+  const plugin = plugins.host
+
+  if (plugin === undefined) {
+    return noHost
+  }
+
+  return {
+    available: true,
+    status: () => plugin.status(),
+    start: () => plugin.start(),
+    stop: () => plugin.stop(),
+    pairingCode: () => plugin.pairingCode(),
+    clients: async () => (await plugin.clients()).clients,
+    revoke: (id) => plugin.revoke({ id }),
   }
 }
 
@@ -417,6 +465,7 @@ async function registerCapacitorPlugins(): Promise<CapacitorPlugins> {
     appUpdate: registerPlugin<AppUpdatePlugin>('AppUpdate'),
     surfaces: registerPlugin<SurfacesPlugin>('Surfaces'),
     trust: registerPlugin<TrustPlugin>('CertificateTrust'),
+    host: registerPlugin<HostPlugin>('Host'),
   }
 }
 

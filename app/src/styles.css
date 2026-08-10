@@ -275,6 +275,33 @@ input[type='password'] {
   border-radius: 10px;
 }
 
+.settings-entry:disabled {
+  opacity: 0.5;
+}
+
+/* Der Kopplungscode wird abgetippt — von jemandem, der ihn quer über den Tisch
+   liest. Groß und mit Ziffernabstand, nicht als Fließtext. */
+.pairing-code {
+  margin: 0.4rem 0 0;
+  font-size: 2.4rem;
+  font-weight: 600;
+  letter-spacing: 0.35rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Weißer Grund, auch im dunklen Thema: ein QR-Code mit invertierten Farben
+   wird von den meisten Scannern nicht gelesen. */
+.pairing-qr {
+  display: block;
+  width: 260px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0.6rem;
+  background: #fff;
+  border-radius: 10px;
+}
+
 .device-list h1 {
   margin: 0 0 0.5rem;
   font-size: 1.4rem;

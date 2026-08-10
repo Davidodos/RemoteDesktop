@@ -129,28 +129,64 @@ Nachgetragen aus dem Bauen: `keys` steuert in dieser Phase nur die
 Shortcuts-Seite. Welche Tasten die Bildschirmtastatur am Handy noch anbieten
 darf, entscheidet sich in Phase 30 — vorher weiß niemand, was dort ankommt.
 
-## Phase 28 — Der Handy-Agent: Server, TLS, Kopplung
+## Phase 28 — Der Handy-Agent: Server, TLS, Kopplung ✅
 
-Neues Kotlin-Paket `clients/android/.../host/`. Kein Capacitor-Plugin-Kram im
-Kern: reines Kotlin, damit `./gradlew testDebugUnitTest` es prüfen kann.
+Neues Kotlin-Paket `clients/android/.../host/`. Kein Capacitor-Kram im Kern:
+reines Kotlin, damit `./gradlew testDebugUnitTest` es prüfen kann — und das tut
+es, bis hinunter zum TLS-Handschlag.
 
-- **HTTP-Server**: Ktor (CIO) mit TLS und WebSockets. Er läuft in einem
-  Vordergrunddienst, nicht in der Activity — sonst endet er mit dem Wegwischen
-- **Zertifikat**: eine eigene kleine CA plus Blattzertifikat, beim ersten Start
-  erzeugt (BouncyCastle) und im App-eigenen Speicher abgelegt. Genau wie beim
-  Windows-Agent: der Fingerabdruck geht über den QR-Code, und ein zweiter,
-  unverschlüsselter Port liefert `/ca.crt` — sonst gäbe es das Henne-Ei-Problem
-- **Kopplung**: Code, ECDSA P-256, Challenge/Response, Sitzungstoken,
-  `clients.json`. Portierung von `agent/Auth/` nach Kotlin, mit denselben Tests
-- **Rechte**: `screen`, `input`, `files` — mehr gibt es hier nicht
-- **Freigabeseite in der App**: „Dieses Gerät steuerbar machen" mit
-  Ein/Aus-Schalter, Adresse, Kopplungscode und QR-Code. Das Handy zeigt Adresse
-  und Code **auch als Text**, weil am PC keine Kamera sitzt
-- **Widerruf wirkt sofort**: dieselbe Regel wie im Agent — jede Dauerverbindung
-  meldet sich an und wird beim Entfernen des Clients getrennt
+**Was gebaut wurde**
 
-**Abnahme:** Kotlin-Tests für Kopplung, Challenge und Zertifikatserzeugung;
-`/api/info` und `/health` am echten Gerät aus dem Browser erreichbar.
+- `Der.kt` · `HostCertificate.kt` — eigene CA plus Serverzertifikat, beim ersten
+  Start erzeugt. Der Fingerabdruck geht über den QR-Code, ein zweiter,
+  unverschlüsselter Port liefert `/ca.crt`. Genau wie beim Windows-Agent, damit
+  derselbe Client beides versteht
+- `HttpServer.kt` — HTTP/1.1 über `SSLServerSocket`, ein Thread je Verbindung
+- `HostServer.kt` — `/health`, `/api/info`, `/api/pair`, `/api/session`,
+  `/api/clients` und die Zugangsprüfung als Sperre für den ganzen Baum
+- `HostIdentity` · `PairingCodes` · `ChallengeStore` · `SessionStore` ·
+  `ClientStore` · `PairingService` — Zeile für Zeile dasselbe wie
+  `agent/Auth/`. Kein Zufall: die Gegenseite ist derselbe Client
+- `HostService.kt` — Vordergrunddienst, damit der Server das Wegwischen der App
+  überlebt. `HostPlugin.kt` als Brücke, `views/ShareView.tsx` als Oberfläche
+
+**Drei Entscheidungen, die im Plan noch offen waren**
+
+- **Weder Ktor noch BouncyCastle.** Android kann keine Zertifikate ausstellen,
+  und die übliche Antwort darauf — BouncyCastle — kostet rund acht Megabyte.
+  Ktor für sechs Endpunkte noch einmal vier bis fünf. Beides fällt bei jedem
+  Selbst-Update wieder an. Stattdessen ein DER-Schreiber und ein HTTP-Server
+  von Hand, zusammen keine tausend Zeilen und vollständig unter Test. Der
+  entscheidende Test ist `HostServerTest`: er geht über eine **echte**
+  TLS-Verbindung von außen durch Kopplung und Anmeldung. Wäre am selbst
+  kodierten Zertifikat ein Byte falsch, käme er nicht bis zur ersten Antwort
+- **WebSockets sind noch nicht dabei.** Sie kommen mit dem Eingabe-Socket in
+  Phase 30. Ein Rahmenformat auf Vorrat zu bauen, das noch niemand benutzt,
+  wäre die Art Vorratshaltung, die dieses Projekt sonst vermeidet
+- **Der QR-Code braucht einen Erzeuger.** `qrcode` als Abhängigkeit der App —
+  rund 50 KB. Das Handy zeigt Adresse und Code auch als Text, weil am PC keine
+  Kamera sitzt
+
+**Zwei Befunde aus dem Bauen**
+
+- **Der QR-Code trug den gewünschten Port statt des tatsächlichen.** Fiel im
+  Test auf, weil der auf Port 0 läuft. Am Gerät wäre es genau dann aufgefallen,
+  wenn 8443 belegt war — also in dem Fall, in dem ohnehin niemand mehr weiß,
+  woran es liegt
+- **Rechte, die das Handy nicht kennt, werden weggelassen statt abgelehnt.**
+  Die App fragt überall dieselbe Liste an, auch `power` und `wake`. Ein Handy
+  kann davon nichts, und mit der strengen Prüfung des Agents ließe es sich
+  **nie** koppeln. Der Windows-Agent bleibt streng — dort ist ein unbekanntes
+  Recht ein Tippfehler, hier ist es der Normalfall
+
+**Abnahme (10.08.2026):**
+Kotlin-Tests **53 grün** (vorher 16) · App-Tests **358 grün** (vorher 354) ·
+`npm run apk` baut durch.
+
+Am echten Gerät noch nicht geprüft — das ist der nächste Schritt und braucht
+zwei Geräte: freigeben, Code anzeigen, vom PC-Fenster aus koppeln. Bild und
+Eingabe gibt es dabei noch nicht; die Kopplung muss stehen, bevor es etwas zu
+übertragen gibt.
 
 ## Phase 29 — Bild vom Handy
 

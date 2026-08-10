@@ -1,6 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
-import { noTrust } from './index.ts'
+import { noHost, noTrust } from './index.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
@@ -145,4 +145,5 @@ export const webPlatform: Platform = {
   // könnte — dafür braucht es die APK.
   surfaces: noSurfaces,
   trust: noTrust,
+  host: noHost,
 }

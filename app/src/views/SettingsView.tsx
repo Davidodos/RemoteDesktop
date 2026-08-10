@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { AppUpdateView } from './AppUpdateView.tsx'
-import { DevicesIcon } from './icons.tsx'
+import { DevicesIcon, ScreenIcon } from './icons.tsx'
 import { getPlatform } from '../platform/index.ts'
 
 interface Props {
   /** Zu den verbundenen Geräten — dort wird verwaltet und gekoppelt. */
   onDevices: () => void
+  /** Zur Freigabe dieses Geräts. Fehlt, wo die Umgebung das nicht kann. */
+  onShare?: () => void
 }
 
 /**
@@ -25,7 +27,7 @@ interface Props {
  * die Geräte sind ein Eintrag darin statt der Überschrift darüber.
  * </p>
  */
-export function SettingsView({ onDevices }: Props): React.JSX.Element {
+export function SettingsView({ onDevices, onShare }: Props): React.JSX.Element {
   const platform = getPlatform()
   const [version, setVersion] = useState<string | undefined>(undefined)
 
@@ -50,6 +52,20 @@ export function SettingsView({ onDevices }: Props): React.JSX.Element {
           <span>Verbundene Geräte</span>
         </button>
       </section>
+
+      {onShare !== undefined && platform.host.available && (
+        <section className="settings-group">
+          <h2>Dieses Gerät</h2>
+          <p className="settings-hint">
+            Den eigenen Bildschirm für ein anderes Gerät freigeben.
+          </p>
+
+          <button type="button" className="settings-entry" onClick={onShare}>
+            <ScreenIcon />
+            <span>Dieses Gerät freigeben</span>
+          </button>
+        </section>
+      )}
 
       <section className="settings-group">
         <h2>App</h2>

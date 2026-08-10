@@ -35,6 +35,11 @@ export type Page =
    */
   | 'devices'
   | 'settings'
+  /**
+   * Die andere Richtung: dieses Gerät steuerbar machen. Erreichbar über die
+   * Einstellungen, weil sie dieses Gerät betrifft und nicht das verbundene.
+   */
+  | 'share'
 
 /**
  * Die Ansichten und die Fähigkeit, die jede von ihnen voraussetzt.
@@ -151,7 +156,7 @@ export function Sidebar({
         <button
           type="button"
           className={
-            page === 'settings' || page === 'devices'
+            page === 'settings' || page === 'devices' || page === 'share'
               ? 'sidebar-entry active'
               : 'sidebar-entry'
           }
