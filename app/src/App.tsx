@@ -47,6 +47,9 @@ export function App(): React.JSX.Element {
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
 
+  /** Zuletzt gemeldeter Fehlschlag der Gegenkopplung — er wiederholt sich sonst im Takt. */
+  const reported = useRef<string | undefined>(undefined)
+
   /**
    * Die Liste hat sich geändert — umbenannt oder entfernt.
    *
@@ -85,8 +88,10 @@ export function App(): React.JSX.Element {
    * hier meist gerade in der Hand — die Wartezeit soll Sekunden betragen und
    * nicht bis zum nächsten Start dauern.
    *
-   * Ein Fehlschlag bleibt still. Das Angebot ist eine Zugabe; die Kopplung, um
-   * die es ging, steht längst.
+   * Ein Fehlschlag wird gemeldet, aber nur einmal je Fehlerbild. Er still
+   * abzufangen war die naheliegende Wahl — das Angebot ist ja eine Zugabe —
+   * und die falsche: eine Gegenkopplung, die stumm scheitert, sieht genauso
+   * aus wie eine, die nie angeboten wurde. Danach sucht niemand mehr.
    */
   useEffect(() => {
     let current = true
@@ -98,7 +103,17 @@ export function App(): React.JSX.Element {
             setDevices(all)
           }
         },
-        () => undefined,
+        (failure: unknown) => {
+          // Sichtbar, aber nur einmal je Fehlerbild: eine Gegenkopplung, die
+          // still scheitert, sieht genauso aus wie eine, die nie angeboten
+          // wurde — und danach sucht niemand mehr.
+          const message = failure instanceof Error ? failure.message : String(failure)
+
+          if (current && message !== reported.current) {
+            reported.current = message
+            setError(`Die Gegenkopplung ist nicht zustande gekommen: ${message}`)
+          }
+        },
       )
     }
 
@@ -321,7 +336,31 @@ export function App(): React.JSX.Element {
   // stand hier die Abfrage nach dem Hub-Token; mit der Registry auf der NAS ist
   // sie weggefallen — der Weg hinein ist jetzt für jeden Rechner derselbe.
   if (devices.length === 0) {
-    return <WelcomeView onPair={() => setPairing(true)} error={error} />
+    // Auch ohne ein einziges gekoppeltes Gerät führt der Weg in die
+    // Einstellungen — dort wird entschieden, ob dieses Gerät selbst steuerbar
+    // sein soll. Vorher war das erst zu erreichen, wenn schon etwas gekoppelt
+    // war: eine Einrichtung, die eine fertige Einrichtung voraussetzt.
+    if (page === 'share') {
+      return <ShareView onBack={() => setPage('settings')} />
+    }
+
+    if (page === 'settings') {
+      return (
+        <SettingsView
+          onDevices={() => setPage('screen')}
+          onShare={() => setPage('share')}
+          devicesLabel="Gerät koppeln"
+        />
+      )
+    }
+
+    return (
+      <WelcomeView
+        onPair={() => setPairing(true)}
+        onSettings={() => setPage('settings')}
+        error={error}
+      />
+    )
   }
 
   if (selected === undefined) {
@@ -489,23 +528,35 @@ function ErrorBanner({
  */
 function WelcomeView({
   onPair,
+  onSettings,
   error,
 }: {
   onPair: () => void
+  onSettings: () => void
   error: string | undefined
 }): React.JSX.Element {
   return (
     <div className="token-prompt">
       <h1>RemoteDesktop</h1>
       <p>
-        Noch kein Gerät gekoppelt. Am Rechner den Kopplungscode anzeigen lassen und hier
-        eintippen — oder den QR-Code scannen.
+        Noch kein Gerät gekoppelt. Am anderen Gerät den Kopplungscode anzeigen
+        lassen und hier eintippen — oder den QR-Code scannen.
+      </p>
+
+      <p className="settings-hint">
+        Soll dieses Gerät auch selbst steuerbar sein, wird das in den
+        Einstellungen eingerichtet. Beides ist unabhängig voneinander: man kann
+        steuern, ohne steuerbar zu sein, und umgekehrt.
       </p>
 
       {error !== undefined && <p className="error-text">{error}</p>}
 
       <button type="button" onClick={onPair}>
         Gerät koppeln
+      </button>
+
+      <button type="button" className="secondary" onClick={onSettings}>
+        Einstellungen
       </button>
     </div>
   )

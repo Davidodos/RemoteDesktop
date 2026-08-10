@@ -348,6 +348,38 @@ Paar in beide Richtungen gekoppelt.
 **364 grün** (vorher 353) · Kotlin-Tests **89 grün** (vorher 83) · desktop baut
 · `npm run apk` baut. Am echten Gerät noch nicht geprüft.
 
+## Phase 31c — die Gegenkopplung kam im Fenster nie an ✅
+
+**Am echten Gerät:** das Handy stand in der Geräteliste des PCs, aber die
+Fernsteuerung meldete „Noch kein Gerät gekoppelt". Die Kopplung hatte also in
+eine Richtung geklappt und in die andere nicht.
+
+**Die Ursache ist der Lebenszyklus, nicht das Protokoll.** Die WebView im
+Fenster entsteht erst beim ersten Öffnen der Fernsteuerung
+(`RemotePage.ShowRemoteAsync`). Solange sie nicht läuft, holt niemand das
+Angebot zur Gegenkopplung ab — und der Kopplungscode darin ist nach fünf
+Minuten wertlos. Wer am Handy koppelte und den Tab später öffnete, fand eine
+leere Liste, obwohl alles richtig gelaufen war.
+
+Die Oberfläche wird deshalb beim Öffnen des Fensters im Hintergrund
+hochgefahren. Nebenbei ist der erste Wechsel auf die Seite jetzt sofort da.
+
+**Und der Fehlschlag war stumm.** Er wurde abgefangen, weil das Angebot eine
+Zugabe ist — und genau das war falsch: eine Gegenkopplung, die still scheitert,
+sieht aus wie eine, die nie angeboten wurde. Sie meldet sich jetzt, aber nur
+einmal je Fehlerbild.
+
+## Phase 31d — Einrichtung ohne gekoppeltes Gerät ✅
+
+Solange nichts gekoppelt war, gab es genau eine Seite: „Gerät koppeln". Die
+Einstellungen — und damit die Freigabe dieses Geräts — waren erst erreichbar,
+wenn schon etwas gekoppelt war. Eine Einrichtung, die eine fertige Einrichtung
+voraussetzt.
+
+Jetzt führt von dort ein Weg in die Einstellungen und weiter auf „Dieses Gerät
+freigeben". Der Startbildschirm sagt außerdem, dass beides unabhängig
+voneinander ist: man kann steuern, ohne steuerbar zu sein, und umgekehrt.
+
 ## Phase 31 — Beide Richtungen im Fenster und in der App
 
 - Die Geräteliste zeigt Handys mit eigenem Symbol; alles Weitere folgt schon

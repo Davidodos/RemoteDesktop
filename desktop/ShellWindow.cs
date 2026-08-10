@@ -162,6 +162,22 @@ public sealed class ShellWindow : Form
     {
         base.OnHandleCreated(e);
         WindowChrome.Darken(Handle);
+
+        // Die Oberfläche im Hintergrund hochfahren, auch wenn gerade eine
+        // andere Seite zu sehen ist.
+        //
+        // **Der Befund dahinter:** die WebView entstand erst beim ersten Öffnen
+        // der Fernsteuerung. Solange sie nicht lief, holte niemand das Angebot
+        // zur Gegenkopplung ab — und der Kopplungscode darin ist nach fünf
+        // Minuten wertlos. Wer am Handy koppelte und den Tab später öffnete,
+        // fand dort „Noch kein Gerät gekoppelt", obwohl alles richtig gelaufen
+        // war. Nebenbei ist der erste Wechsel auf die Seite jetzt sofort da.
+        //
+        // Fehlschläge bleiben hier still: sie gehören auf die Seite, wenn
+        // jemand sie öffnet, und nicht in eine Statuszeile, in der niemand sie
+        // erwartet.
+        _ = _remote.ShowRemoteAsync().ContinueWith(
+            _ => { }, TaskContinuationOptions.OnlyOnFaulted);
     }
 
     /// <summary>

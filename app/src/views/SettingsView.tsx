@@ -8,6 +8,11 @@ interface Props {
   onDevices: () => void
   /** Zur Freigabe dieses Geräts. Fehlt, wo die Umgebung das nicht kann. */
   onShare?: () => void
+  /**
+   * Beschriftung des Wegs zu den Geräten. Solange noch nichts gekoppelt ist,
+   * gibt es dort nichts zu verwalten — dann heißt der Knopf, was er tut.
+   */
+  devicesLabel?: string
 }
 
 /**
@@ -27,7 +32,11 @@ interface Props {
  * die Geräte sind ein Eintrag darin statt der Überschrift darüber.
  * </p>
  */
-export function SettingsView({ onDevices, onShare }: Props): React.JSX.Element {
+export function SettingsView({
+  onDevices,
+  onShare,
+  devicesLabel = 'Verbundene Geräte',
+}: Props): React.JSX.Element {
   const platform = getPlatform()
   const [version, setVersion] = useState<string | undefined>(undefined)
 
@@ -42,14 +51,14 @@ export function SettingsView({ onDevices, onShare }: Props): React.JSX.Element {
       <h1>Einstellungen</h1>
 
       <section className="settings-group">
-        <h2>Verbundene Geräte</h2>
+        <h2>Geräte</h2>
         <p className="settings-hint">
           Rechner umbenennen, entfernen oder einen neuen koppeln.
         </p>
 
         <button type="button" className="settings-entry" onClick={onDevices}>
           <DevicesIcon />
-          <span>Verbundene Geräte</span>
+          <span>{devicesLabel}</span>
         </button>
       </section>
 
