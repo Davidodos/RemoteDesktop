@@ -105,6 +105,28 @@ export interface TrustService {
   readonly available: boolean
 
   /**
+   * Holt die Zertifizierungsstelle der Gegenstelle — **nativ**, nicht aus der
+   * Seite heraus.
+   *
+   * <p>
+   * **Der Befund dahinter:** die App lief unter `https` (Capacitor auf
+   * `https://localhost`, das Fenster auf einem virtuellen Host), und der Abruf
+   * ging an `http://<adresse>:8442/ca.crt`. Chromium verwirft das als aktiven
+   * Mixed Content, bevor irgendetwas über das Netz geht — die Ausnahme sieht
+   * genauso aus wie ein Rechner, der nicht antwortet. Am Gerät stand deshalb
+   * „<IP> antwortet nicht", während der Agent lief und antwortete.
+   * </p>
+   *
+   * <p>
+   * Nativ gibt es diese Sperre nicht: dort ist es eine gewöhnliche
+   * HTTP-Anfrage. `undefined` heißt, dass die Umgebung das nicht kann — dann
+   * bleibt der Abruf aus der Seite heraus, der im gewöhnlichen Browser auch
+   * funktioniert.
+   * </p>
+   */
+  readonly fetchAuthority?: (host: string, port: number) => Promise<TrustedAuthority>
+
+  /**
    * Übergibt das geprüfte Zertifikat dem System. Was danach passiert, gehört
    * dem System — es fragt selbst nach und kann abgelehnt werden.
    *
@@ -127,6 +149,14 @@ export interface TrustService {
  * beim zweiten Fall passiert sonst scheinbar nichts.
  */
 export type TrustOutcome = 'dialog' | 'settings'
+
+/** Ein geholtes Zertifikat samt seinem Fingerabdruck. */
+export interface TrustedAuthority {
+  /** Das Zertifikat als Base64 (DER). */
+  base64: string
+  /** `sha256` darüber, kleingeschrieben und ohne Trennzeichen. */
+  fingerprint: string
+}
 
 /** Für Umgebungen, die es nicht können — der Browser vor allem. */
 export const noTrust: TrustService = {

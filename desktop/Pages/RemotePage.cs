@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -39,6 +41,13 @@ public sealed class RemotePage : Control
     private readonly string? _appDirectory;
     private readonly WebView2 _view = new() { Dock = DockStyle.Fill, Visible = false };
     private readonly Stack _fallback;
+
+    /// <summary>
+    /// Welchen selbst ausgestellten Stellen dieses Fenster glaubt. Ohne sie
+    /// scheitert jede Verbindung zu einem Gerät ohne Tailscale, noch bevor ein
+    /// Ausweis geprüft wird.
+    /// </summary>
+    private readonly TrustedAuthorities _trusted = TrustedAuthorities.Default();
 
     private bool _loaded;
 
@@ -169,13 +178,19 @@ public sealed class RemotePage : Control
             });
             """);
 
-        core.WebMessageReceived += (_, message) =>
+        // Ein Zertifikat, das WebView2 nicht kennt, ist hier der Normalfall und
+        // kein Fehler: ein Handy im Heimnetz kann sich keins von einer
+        // öffentlichen Stelle holen. Durchgelassen wird trotzdem nur, was
+        // vorher jemand bestätigt hat — siehe TrustedAuthorities.
+        core.ServerCertificateErrorDetected += (_, error) =>
         {
-            if (message.TryGetWebMessageAsString() == FullscreenMessage)
+            if (_trusted.Accepts(null, Chain(error.ServerCertificate)))
             {
-                FullscreenToggled?.Invoke();
+                error.Action = CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
             }
         };
+
+        core.WebMessageReceived += (_, message) => OnMessage(core, message);
 
         // Das Kontextmenü der WebView gehört zum Browser, nicht zu dieser App —
         // „Seite neu laden" mitten in einer Sitzung stiftet nur Verwirrung.
@@ -183,6 +198,170 @@ public sealed class RemotePage : Control
 
         core.Navigate($"https://{VirtualHost}/index.html");
     }
+
+    /// <summary>
+    /// Die Kette eines Zertifikats, so weit WebView2 sie mitliefert.
+    ///
+    /// Gebraucht, weil die Stelle über dem Serverzertifikat den Ausschlag gibt:
+    /// das Serverzertifikat wechselt mit jeder neuen Adresse, die Stelle
+    /// darüber bleibt. Genau dafür gibt es sie.
+    /// </summary>
+    private static X509Certificate2Collection Chain(CoreWebView2Certificate? certificate)
+    {
+        var chain = new X509Certificate2Collection();
+
+        if (certificate is null)
+        {
+            return chain;
+        }
+
+        foreach (var encoded in new[] { certificate.ToPemEncoding() }
+                     .Concat(certificate.PemEncodedIssuerCertificateChain))
+        {
+            var link = Parse(encoded);
+
+            // Ein unlesbares Glied ist kein Grund, die ganze Kette zu
+            // verwerfen — es ist nur eines, dem nicht vertraut wird.
+            if (link is not null)
+            {
+                chain.Add(link);
+            }
+        }
+
+        return chain;
+    }
+
+    /// <summary>
+    /// WebView2 liefert je nach Fassung mit oder ohne PEM-Kopfzeilen. Beides
+    /// wird angenommen: an dieser Stelle über die Fassung zu streiten hieße,
+    /// dass die Verbindung stumm scheitert.
+    /// </summary>
+    private static X509Certificate2? Parse(string encoded)
+    {
+        try
+        {
+            return encoded.Contains("-----BEGIN")
+                ? X509Certificate2.CreateFromPem(encoded)
+                : new X509Certificate2(Convert.FromBase64String(
+                    new string(encoded.Where(character => !char.IsWhiteSpace(character)).ToArray())));
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Die Gegenrichtung der Brücke: was die Seite nicht selbst darf, erledigt
+    /// das Fenster und antwortet mit derselben Kennung.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** die Seite läuft unter <c>https</c>, das
+    /// Zertifikat der Gegenstelle liegt unter <c>http://…:8442/ca.crt</c>.
+    /// Chromium verwirft das als aktiven Mixed Content, bevor irgendetwas über
+    /// das Netz geht — und die Ausnahme sieht aus wie ein Rechner, der nicht
+    /// antwortet. Genau das stand am Gerät, während die Gegenstelle lief.
+    /// </para>
+    /// </summary>
+    private void OnMessage(CoreWebView2 core, CoreWebView2WebMessageReceivedEventArgs message)
+    {
+        var raw = message.TryGetWebMessageAsString();
+
+        if (raw == FullscreenMessage)
+        {
+            FullscreenToggled?.Invoke();
+            return;
+        }
+
+        if (raw is null || !raw.StartsWith('{'))
+        {
+            return;
+        }
+
+        BridgeRequest? request;
+
+        try
+        {
+            request = JsonSerializer.Deserialize<BridgeRequest>(raw, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (request?.Id is null)
+        {
+            return;
+        }
+
+        _ = HandleAsync(core, request);
+    }
+
+    private async Task HandleAsync(CoreWebView2 core, BridgeRequest request)
+    {
+        object payload;
+
+        try
+        {
+            payload = request.Kind switch
+            {
+                "trust-fetch" => await FetchAuthorityAsync(request.Host),
+
+                "trust-install" => TrustAuthority(request.Fingerprint),
+
+                _ => throw new InvalidOperationException(
+                    $"Das Fenster kennt '{request.Kind}' nicht.")
+            };
+        }
+        catch (Exception failure)
+        {
+            Reply(core, request.Id!, new { error = failure.Message });
+            return;
+        }
+
+        Reply(core, request.Id!, payload);
+    }
+
+    private static async Task<object> FetchAuthorityAsync(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            throw new InvalidOperationException("Ohne Adresse gibt es nichts zu holen.");
+        }
+
+        var fetched = await TrustImport.FetchAsync(host);
+
+        return new
+        {
+            base64 = Convert.ToBase64String(fetched.Certificate.RawData),
+            fingerprint = fetched.Fingerprint
+        };
+    }
+
+    private object TrustAuthority(string? fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+        {
+            throw new InvalidOperationException("Ohne Fingerabdruck wird nichts bestätigt.");
+        }
+
+        _trusted.Add(fingerprint);
+
+        // „dialog" heißt in der App: erledigt, es ist nichts mehr zu tun. Genau
+        // so ist es hier — anders als auf Android führt kein Weg mehr durch die
+        // Systemeinstellungen.
+        return new { outcome = "dialog" };
+    }
+
+    private static void Reply(CoreWebView2 core, string id, object payload) =>
+        core.PostWebMessageAsString(
+            JsonSerializer.Serialize(new { id, payload }, JsonOptions));
+
+    private static readonly JsonSerializerOptions JsonOptions =
+        new() { PropertyNameCaseInsensitive = true };
+
+    /// <summary>Was die Seite über die Brücke schickt.</summary>
+    private sealed record BridgeRequest(string? Id, string? Kind, string? Host, string? Fingerprint);
 
     /// <summary>
     /// Ein leerer schwarzer Bereich sähe aus wie ein Absturz. Steht die

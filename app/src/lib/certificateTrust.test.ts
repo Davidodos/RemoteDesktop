@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 import {
   certificateFingerprint,
   certificateUrl,
@@ -6,6 +6,7 @@ import {
   readable,
   TrustError,
   TRUST_PORT,
+  downloadAuthority,
 } from './certificateTrust.ts'
 
 /** Ein Byte-Muster als Antwort — der Inhalt ist egal, sein Fingerabdruck nicht. */
@@ -117,5 +118,37 @@ describe('certificateFingerprint', () => {
     expect(certificateFingerprint('z'.repeat(64))).toBeUndefined()
     expect(certificateFingerprint('a'.repeat(63))).toBeUndefined()
     expect(certificateFingerprint(42)).toBeUndefined()
+  })
+})
+
+describe('downloadAuthority', () => {
+  const der = new Uint8Array([1, 2, 3, 4])
+
+  const serving = (): typeof fetch =>
+    (async () =>
+      new Response(der as unknown as BodyInit, { status: 200 })) as unknown as typeof fetch
+
+  it('gibt den gefundenen Fingerabdruck heraus, statt zu vergleichen', async () => {
+    const found = await downloadAuthority('192.168.178.31', serving())
+
+    // Ohne QR-Code gibt es keinen Vergleichswert. Der Abruf liefert deshalb,
+    // was dasteht — verglichen wird danach mit dem Auge.
+    expect(found.fingerprint).toMatch(/^[0-9a-f]{64}$/)
+    expect(found.base64.length).toBeGreaterThan(0)
+  })
+
+  it('meldet eine leere Datei als Fehler', async () => {
+    const empty = (async () =>
+      new Response(new Uint8Array() as unknown as BodyInit, {
+        status: 200,
+      })) as unknown as typeof fetch
+
+    await expect(downloadAuthority('192.168.178.31', empty)).rejects.toThrow(/leere Datei/)
+  })
+
+  it('sagt beim toten Port, worauf zu sehen ist', async () => {
+    const dead = (() => Promise.reject(new Error('offline'))) as unknown as typeof fetch
+
+    await expect(downloadAuthority('192.168.178.31', dead)).rejects.toThrow(/Port 8442/)
   })
 })

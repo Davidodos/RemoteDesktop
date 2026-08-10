@@ -83,6 +83,37 @@ export async function fetchAgentCertificate(
     throw new TrustError('Ohne Fingerabdruck aus der Kopplung wird nichts bestätigt.')
   }
 
+  const found = await downloadAuthority(host, fetcher, port)
+
+  if (found.fingerprint !== wanted) {
+    // Der eine Fall, der wirklich zählt: hier säße ein Angreifer im Netz, der
+    // sein eigenes Zertifikat unterschiebt.
+    throw new TrustError(
+      'Das Zertifikat gehört nicht zu diesem Rechner. Nicht bestätigen — ' +
+        'im Netz sitzt jemand dazwischen, oder es ist der falsche Rechner.',
+    )
+  }
+
+  return found
+}
+
+/**
+ * Holt das Zertifikat **ohne** Vergleichswert und gibt seinen Fingerabdruck
+ * heraus.
+ *
+ * Für den Weg ohne QR-Code: am PC sitzt keine Kamera, also tippt jemand Adresse
+ * und Code ab, und der Fingerabdruck kann nicht mitkommen. Dann übernimmt das
+ * Auge die Rolle der Kamera — die Gegenstelle zeigt ihn auf ihrem Bildschirm
+ * an, und beide werden nebeneinandergelegt. Derselbe Anker, nur langsamer.
+ *
+ * Was hier herauskommt, darf deshalb **nie** ohne Rückfrage installiert
+ * werden.
+ */
+export async function downloadAuthority(
+  host: string,
+  fetcher: typeof fetch = fetch,
+  port = TRUST_PORT,
+): Promise<AgentCertificate> {
   let response: Response
 
   try {
@@ -104,18 +135,7 @@ export async function fetchAgentCertificate(
     throw new TrustError('Der Rechner hat eine leere Datei geliefert.')
   }
 
-  const found = await sha256(raw)
-
-  if (found !== wanted) {
-    // Der eine Fall, der wirklich zählt: hier säße ein Angreifer im Netz, der
-    // sein eigenes Zertifikat unterschiebt.
-    throw new TrustError(
-      'Das Zertifikat gehört nicht zu diesem Rechner. Nicht bestätigen — ' +
-        'im Netz sitzt jemand dazwischen, oder es ist der falsche Rechner.',
-    )
-  }
-
-  return { base64: toBase64(raw), fingerprint: found }
+  return { base64: toBase64(raw), fingerprint: await sha256(raw) }
 }
 
 async function sha256(data: Uint8Array): Promise<string> {

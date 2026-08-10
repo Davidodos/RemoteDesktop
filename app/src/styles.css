@@ -281,6 +281,13 @@ input[type='password'] {
 
 /* Der Kopplungscode wird abgetippt — von jemandem, der ihn quer über den Tisch
    liest. Groß und mit Ziffernabstand, nicht als Fließtext. */
+.fingerprint {
+  margin: 0.2rem 0;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-dim);
+}
+
 .pairing-code {
   margin: 0.4rem 0 0;
   font-size: 2.4rem;

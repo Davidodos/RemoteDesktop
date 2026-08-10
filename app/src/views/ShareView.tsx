@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
+import { readable } from '../lib/certificateTrust.ts'
 import { getPlatform } from '../platform/index.ts'
 import type { HostClient, HostPairingCode, HostStatus } from '../platform/index.ts'
 
@@ -166,6 +167,19 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
             dauerhaft erreichen will, trägt im Router eine feste Adresse ein —
             oder benutzt Tailscale, wo der Name bleibt.
           </p>
+
+          {status?.caFingerprint !== undefined && (
+            <>
+              <p className="settings-hint">
+                Fingerabdruck der eigenen Stelle. Wer von Hand koppelt — am PC
+                gibt es keine Kamera —, bekommt ihn dort gezeigt und vergleicht
+                ihn mit diesem:
+              </p>
+              <p className="fingerprint">
+                <small>{readable(status.caFingerprint)}</small>
+              </p>
+            </>
+          )}
         </section>
       )}
 

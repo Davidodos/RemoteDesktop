@@ -31,6 +31,7 @@ import type { SessionKeepAlive } from './session.ts'
 
 /** Übergibt ein geprüftes Zertifikat an den Systemdialog von Android. */
 interface TrustPlugin {
+  fetch(options: { host: string; port: number }): Promise<{ base64: string; fingerprint: string }>
   install(options: { certificate: string; fingerprint: string }): Promise<{ mode?: string }>
 }
 
@@ -436,6 +437,23 @@ function certificateTrust(plugins: CapacitorPlugins): TrustService {
 
   return {
     available: true,
+
+    /*
+     * Der Abruf läuft nativ und nicht aus der Seite heraus: die App liegt unter
+     * `https://localhost`, die Datei unter `http://…:8442/ca.crt`. Chromium
+     * verwirft das als aktiven Mixed Content, bevor irgendetwas über das Netz
+     * geht — und die Ausnahme sieht aus wie eine Gegenstelle, die nicht
+     * antwortet. Genau diese Meldung stand am echten Gerät.
+     *
+     * Eine APK ohne diese Plugin-Methode fällt auf den Abruf aus der Seite
+     * zurück; der scheitert dann wie bisher, aber mit demselben Text wie
+     * vorher und nicht mit einem neuen Fehler.
+     */
+    fetchAuthority:
+      typeof plugin.fetch === 'function'
+        ? (host, port) => plugin.fetch({ host, port })
+        : undefined,
+
     install: async (certificateBase64, fingerprint) => {
       const { mode } = await plugin.install({ certificate: certificateBase64, fingerprint })
 

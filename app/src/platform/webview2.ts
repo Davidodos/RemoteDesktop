@@ -1,6 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
-import { noHost, noTrust } from './index.ts'
+import { noHost } from './index.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
@@ -9,6 +9,7 @@ import type {
   Platform,
   QrScanner,
   SecretStore,
+  TrustService,
   UpdateInfo,
   UpdateService,
 } from './index.ts'
@@ -37,7 +38,122 @@ export interface WebView2Host {
 declare global {
   interface Window {
     remoteDesktopHost?: WebView2Host
+    chrome?: {
+      webview?: {
+        postMessage: (message: string) => void
+        addEventListener: (type: string, listener: (event: { data: unknown }) => void) => void
+      }
+    }
   }
+}
+
+/**
+ * Eine Frage an das Fenster und die Antwort darauf.
+ *
+ * WebView2 kennt nur Nachrichten in eine Richtung. Ein Gegenstück mit Kennung
+ * ist der kürzeste Weg zu einem Aufruf, auf den man warten kann — und länger
+ * als eine Kennung, ein Wartender und ein Zeitlimit wird er auch nicht.
+ */
+const pending = new Map<string, (result: { payload?: unknown; error?: string }) => void>()
+
+/** Länger als das wartet niemand auf ein Zertifikat aus dem Heimnetz. */
+const BRIDGE_TIMEOUT_MS = 10_000
+
+let listening = false
+
+function ask<T>(request: Record<string, unknown>): Promise<T> {
+  const bridge = window.chrome?.webview
+
+  if (bridge === undefined) {
+    return Promise.reject(new PlatformError('Das Fenster hört gerade nicht zu.'))
+  }
+
+  if (!listening) {
+    listening = true
+
+    bridge.addEventListener('message', (event: { data: unknown }) => {
+      const answer = parseAnswer(event.data)
+
+      if (answer === undefined) {
+        return
+      }
+
+      pending.get(answer.id)?.(answer.payload)
+      pending.delete(answer.id)
+    })
+  }
+
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      pending.delete(id)
+      reject(new PlatformError('Das Fenster hat nicht geantwortet.'))
+    }, BRIDGE_TIMEOUT_MS)
+
+    pending.set(id, (result) => {
+      window.clearTimeout(timer)
+
+      if (typeof result === 'object' && result !== null && 'error' in result) {
+        reject(new PlatformError(String((result as { error: unknown }).error)))
+        return
+      }
+
+      resolve(result as T)
+    })
+
+    bridge.postMessage(JSON.stringify({ id, ...request }))
+  })
+}
+
+function parseAnswer(data: unknown): { id: string; payload: never } | undefined {
+  const raw = typeof data === 'string' ? data : undefined
+
+  if (raw === undefined || !raw.startsWith('{')) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { id?: unknown; payload?: unknown }
+
+    return typeof parsed.id === 'string'
+      ? { id: parsed.id, payload: parsed.payload as never }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Einem selbst ausgestellten Zertifikat vertrauen — im Fenster erledigt das
+ * die Wirtsanwendung.
+ *
+ * <p>
+ * **Warum nicht die Seite selbst:** sie läuft unter `https`, die Datei liegt
+ * unter `http://…:8442/ca.crt`. Chromium verwirft das als aktiven Mixed
+ * Content, noch bevor eine Verbindung zustande kommt — und die Ausnahme sieht
+ * aus wie ein Gerät, das nicht antwortet. Genau diese Meldung stand am echten
+ * Gerät, während die Gegenstelle lief und antwortete.
+ * </p>
+ *
+ * <p>
+ * Bestätigtes landet **nicht** im Zertifikatspeicher von Windows: es gilt für
+ * dieses Fenster und für nichts sonst. Ein Handy, das im Heimnetz seinen
+ * Bildschirm freigibt, soll nicht nebenbei zur Stelle werden, der jeder
+ * Browser auf diesem Rechner glaubt.
+ * </p>
+ */
+const windowTrust: TrustService = {
+  available: true,
+
+  fetchAuthority: (host: string) =>
+    ask<{ base64: string; fingerprint: string }>({ kind: 'trust-fetch', host }),
+
+  install: async (_certificate: string, fingerprint: string) => {
+    await ask({ kind: 'trust-install', fingerprint })
+
+    return 'dialog'
+  },
 }
 
 /** Ob die App gerade im Windows-Fenster läuft. */
@@ -162,7 +278,7 @@ export function webview2Platform(host: WebView2Host): Platform {
     // Kacheln im Startmenü wären das Windows-Gegenstück; sie gehören nicht zu
     // dieser Phase, und niemand hat danach gefragt.
     surfaces: noSurfaces,
-    trust: noTrust,
+    trust: windowTrust,
     // Das Fenster ist die Fernbedienung; steuerbar macht diesen Rechner der
     // Agent daneben, nicht die Oberfläche.
     host: noHost,

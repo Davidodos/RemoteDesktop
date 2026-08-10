@@ -3,6 +3,8 @@ package app.remotedesktop.client.surfaces
 import android.content.Intent
 import android.provider.Settings
 import android.util.Base64
+import java.net.HttpURLConnection
+import java.net.URL
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -20,6 +22,67 @@ import com.getcapacitor.annotation.CapacitorPlugin
  */
 @CapacitorPlugin(name = "CertificateTrust")
 class CertificateTrustPlugin : Plugin() {
+
+    /**
+     * Holt die Zertifizierungsstelle der Gegenstelle.
+     *
+     * **Warum das nicht die Seite tut:** die App läuft unter `https://localhost`,
+     * die Datei liegt unter `http://<adresse>:8442/ca.crt`. Chromium verwirft
+     * das als aktiven Mixed Content, bevor eine Verbindung zustande kommt — und
+     * die Ausnahme sieht aus wie ein Rechner, der nicht antwortet. Genau diese
+     * Meldung stand am Gerät, während der Agent lief.
+     *
+     * Hier ist es eine gewöhnliche HTTP-Anfrage ohne diese Sperre. Geprüft wird
+     * nichts: das tut die Seite, die auch weiß, womit zu vergleichen ist.
+     */
+    @PluginMethod
+    fun fetch(call: PluginCall) {
+        val host = call.getString("host").orEmpty().trim()
+        val port = call.getInt("port") ?: 8442
+
+        if (host.isEmpty()) {
+            call.reject("Ohne Adresse gibt es nichts zu holen.")
+            return
+        }
+
+        // Nicht auf dem Haupt-Thread: eine Netzanfrage dort wirft
+        // NetworkOnMainThreadException, und zwar immer.
+        Thread {
+            try {
+                val connection = (URL("http://\$host:\$port/ca.crt").openConnection()
+                    as HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                }
+
+                val bytes = try {
+                    if (connection.responseCode !in 200..299) {
+                        throw java.io.IOException("HTTP \${connection.responseCode}")
+                    }
+
+                    connection.inputStream.use { it.readBytes() }
+                } finally {
+                    connection.disconnect()
+                }
+
+                if (bytes.isEmpty()) {
+                    call.reject("Die Gegenstelle hat eine leere Datei geliefert.")
+                    return@Thread
+                }
+
+                call.resolve(
+                    JSObject()
+                        .put("base64", Base64.encodeToString(bytes, Base64.NO_WRAP))
+                        .put("fingerprint", CertificateTrust.fingerprint(bytes)),
+                )
+            } catch (failure: Exception) {
+                call.reject(
+                    "Port \$port an \$host antwortet nicht. Läuft die Gegenstelle, " +
+                        "und hängen beide Geräte im selben Netz?",
+                )
+            }
+        }.start()
+    }
 
     @PluginMethod
     fun install(call: PluginCall) {

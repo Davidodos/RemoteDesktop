@@ -259,6 +259,74 @@ Geräte:
    Drücken hält, die Bildschirmtastatur schreibt in ein geöffnetes Textfeld.
    Power, Medien, Aktionen und Shortcuts sind **nicht** in der Leiste
 
+## Phase 31a — der Befund: die Kopplung kam nie bis zum Zertifikat ✅
+
+**Am echten Gerät ließ sich ein Handy von keinem PC aus koppeln.** Unter jeder
+angezeigten Adresse stand „<IP> antwortet nicht", während der Host lief und
+antwortete.
+
+**Die Ursache lag nicht bei V4, sondern seit V3 im Weg dorthin.** Die App holt
+die eigene Zertifizierungsstelle der Gegenstelle unter
+`http://<adresse>:8442/ca.crt` — unverschlüsselt, und das muss so sein: die
+verschlüsselte Verbindung ist ja gerade die, die ohne dieses Zertifikat nicht
+zustande kommt. Nur läuft die App selbst unter `https`: unter Android auf
+`https://localhost` (Capacitor), im Fenster auf einem virtuellen Host. Chromium
+verwirft eine `http`-Anfrage von einer `https`-Seite als **aktiven Mixed
+Content**, bevor irgendetwas über das Netz geht. Die Ausnahme, die dabei
+herauskommt, ist von „Rechner nicht erreichbar" nicht zu unterscheiden — und
+genau so wurde sie angezeigt.
+
+Das erklärt rückwirkend auch, warum „Zertifikat bestätigen" am Handy nie etwas
+tat: es gab nie eine Datei zu bestätigen.
+
+**Der Abruf gehört nach nativ.** Dort gibt es diese Sperre nicht.
+
+- Android: `CertificateTrustPlugin.fetch` holt sie mit `HttpURLConnection`
+- Windows: eine Brücke über `chrome.webview.postMessage` mit Kennung und
+  Antwort; geholt wird mit dem vorhandenen `TrustImport.FetchAsync`
+- Die Seite fällt auf ihren eigenen Abruf zurück, wo es keine Brücke gibt — im
+  gewöhnlichen Browser funktioniert er
+
+**Das Fenster konnte überhaupt nichts bestätigen.** `webview2.ts` meldete
+`trust: noTrust`; `TrustImport` gab es zwar, aber die App kam nicht daran.
+Jetzt gibt es `desktop/TrustedAuthorities.cs`: eine Liste bestätigter Stellen
+in `{app}\data\trusted.json`, durchgesetzt über
+`ServerCertificateErrorDetected`. **Nicht** der Windows-Zertifikatspeicher —
+was hier bestätigt wird, gilt für dieses Fenster und für nichts sonst. Ein
+Handy, das im Heimnetz seinen Bildschirm freigibt, soll nicht nebenbei zur
+Stelle werden, der jeder Browser auf diesem Rechner glaubt.
+
+**Ohne QR-Code fehlte der Vergleichswert.** Am PC sitzt keine Kamera, also
+werden Adresse und Code abgetippt — und der Fingerabdruck kam nicht mit. Die
+Kopplung holt die Stelle jetzt und **zeigt** sie: das Handy zeigt denselben
+Wert unter „Dieses Gerät freigeben", und beide werden nebeneinandergelegt.
+Derselbe Anker wie beim Scannen, nur mit dem Auge statt der Kamera.
+
+**Abnahme (10.08.2026):** App-Tests **361 grün** (vorher 358) ·
+`cd desktop && dotnet build` · `npm run apk` baut durch. Am echten Gerät noch
+nicht geprüft.
+
+## Phase 31b — Kopplung in beide Richtungen (offen)
+
+Wunsch vom 10.08.2026: wer am PC ein Handy koppelt, soll damit zugleich die
+Gegenrichtung eingerichtet haben.
+
+Das ist mehr als Bequemlichkeit — es löst den Vertrauensanker sauberer. Wird
+einmal **vom Handy aus** gekoppelt (Kamera, QR-Code, funktionierender Weg), kann
+der Fingerabdruck des Handys über die bereits beglaubigte Verbindung zum PC
+wandern, statt am PC von einem Menschen abgelesen zu werden.
+
+Skizze:
+
+- Die koppelnde Seite legt ihre eigenen Angaben bei: Adresse, Port,
+  Fingerabdruck und einen frischen Kopplungscode ihres eigenen Agents
+- Die Gegenseite merkt sich das als offene Gegenkopplung
+- Abgeschlossen wird sie von der **Client**-Seite der Gegenstelle, die den
+  privaten Schlüssel und die Geräteliste hält — am PC das Fenster, am Handy die
+  App. Beide fragen ihren eigenen Agent nach `/api/pair/pending`
+
+Noch nicht gebaut.
+
 ## Phase 31 — Beide Richtungen im Fenster und in der App
 
 - Die Geräteliste zeigt Handys mit eigenem Symbol; alles Weitere folgt schon

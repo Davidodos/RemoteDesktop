@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { CertificateTrustStep } from './CertificateTrustStep.tsx'
-import { certificateFingerprint, fetchAgentCertificate } from '../lib/certificateTrust.ts'
+import {
+  certificateFingerprint,
+  downloadAuthority,
+  fetchAgentCertificate,
+  readable,
+  TRUST_PORT,
+} from '../lib/certificateTrust.ts'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
 import { suggestAlias } from '../lib/deviceNames.ts'
 import { pairWithAgent } from '../lib/pairing.ts'
@@ -143,6 +149,17 @@ function NameStep({
   onBack: () => void
 }): React.JSX.Element {
   const [label, setLabel] = useState(defaultLabel())
+
+  /**
+   * Die Stelle, die geholt wurde und noch niemand bestätigt hat. Solange sie
+   * hier steht, wird nicht gekoppelt.
+   */
+  const [offered, setOffered] = useState<
+    { base64: string; fingerprint: string } | undefined
+  >(undefined)
+
+  /** Ob die gezeigte Stelle bestätigt wurde — dann wird nicht erneut gefragt. */
+  const [confirmed, setConfirmed] = useState(false)
   const [alias, setAlias] = useState(suggestAlias(target.host))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
@@ -167,7 +184,12 @@ function NameStep({
       return false
     }
 
-    const certificate = await fetchAgentCertificate(target.host, fingerprint)
+    // Nativ holen, wo die Umgebung das kann: die Seite läuft unter `https` und
+    // darf die Datei unter `http://…:8442` gar nicht erst anfragen.
+    const certificate =
+      platform.trust.fetchAuthority === undefined
+        ? await fetchAgentCertificate(target.host, fingerprint)
+        : verify(await platform.trust.fetchAuthority(target.host, TRUST_PORT), fingerprint)
 
     await platform.trust.install(certificate.base64, certificate.fingerprint)
 
@@ -179,6 +201,21 @@ function NameStep({
     setError(undefined)
 
     try {
+      // Ohne QR-Code kam kein Fingerabdruck mit. Dann wird die Stelle geholt
+      // und **gezeigt**: verglichen wird mit dem, was auf dem Bildschirm der
+      // Gegenstelle steht. Derselbe Anker wie beim Scannen, nur mit dem Auge
+      // statt der Kamera.
+      if (certificateFingerprint(target.caFingerprint) === undefined && !confirmed) {
+        const found = await discover(platform, target.host)
+
+        if (found !== undefined) {
+          setOffered(found)
+          setBusy(false)
+
+          return
+        }
+      }
+
       const trusted = await trust()
 
       const paired = await pairWithAgent({
@@ -202,6 +239,60 @@ function NameStep({
   }
 
   const ready = label.trim().length > 0
+
+  if (offered !== undefined) {
+    return (
+      <div className="token-prompt">
+        <h1>Ist das die richtige Stelle?</h1>
+        <p>
+          <code>{target.host}</code> weist sich mit einem{' '}
+          <strong>selbst ausgestellten</strong> Zertifikat aus. Ohne QR-Code kam
+          kein Vergleichswert mit — also vergleiche ihn selbst: auf dem anderen
+          Gerät steht derselbe Fingerabdruck unter „Dieses Gerät freigeben“.
+        </p>
+
+        <p className="fingerprint">
+          <small>{readable(offered.fingerprint)}</small>
+        </p>
+
+        <p>
+          Stimmen die beiden nicht überein, brich ab: dann sitzt jemand im Netz
+          dazwischen, oder es ist das falsche Gerät.
+        </p>
+
+        {error !== undefined && <p className="error-text">{error}</p>}
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true)
+            setError(undefined)
+
+            void platform.trust
+              .install(offered.base64, offered.fingerprint)
+              .then(
+                () => {
+                  setConfirmed(true)
+                  setOffered(undefined)
+                  setBusy(false)
+                },
+                (failure: unknown) => {
+                  setError(failure instanceof Error ? failure.message : String(failure))
+                  setBusy(false)
+                },
+              )
+          }}
+        >
+          Stimmt überein — weiter
+        </button>
+
+        <button type="button" className="secondary" onClick={onBack}>
+          Abbrechen
+        </button>
+      </div>
+    )
+  }
 
   return (
     <form
@@ -326,4 +417,50 @@ function ManualStep({
  */
 function defaultLabel(): string {
   return getPlatform().name === 'web' ? 'Browser' : 'Handy'
+}
+
+/**
+ * Die Stelle der Gegenseite holen, ohne Vergleichswert.
+ *
+ * `undefined` heißt: es gibt keine — die Gegenstelle hat ein Zertifikat, dem
+ * ohnehin jeder glaubt (Tailscale), oder der Port ist zu. Dann gibt es nichts
+ * zu bestätigen, und die Kopplung läuft ohne diesen Schritt weiter.
+ */
+async function discover(
+  platform: ReturnType<typeof getPlatform>,
+  host: string,
+): Promise<{ base64: string; fingerprint: string } | undefined> {
+  if (!platform.trust.available) {
+    return undefined
+  }
+
+  try {
+    return platform.trust.fetchAuthority === undefined
+      ? await downloadAuthority(host)
+      : await platform.trust.fetchAuthority(host, TRUST_PORT)
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Was nativ geholt wurde, gegen den Fingerabdruck aus der Kopplung halten.
+ *
+ * Die Prüfung steht hier ein zweites Mal, obwohl die Umgebung sie ebenfalls
+ * machen könnte: sie ist der einzige Grund, warum das Zertifikat unverschlüsselt
+ * kommen darf, und eine Prüfung, die nur an einer Stelle steht, ist eine, die
+ * beim nächsten Umbau verschwindet.
+ */
+function verify(
+  found: { base64: string; fingerprint: string },
+  expected: string,
+): { base64: string; fingerprint: string } {
+  if (found.fingerprint.trim().toLowerCase() !== expected.trim().toLowerCase()) {
+    throw new Error(
+      'Das Zertifikat gehört nicht zu diesem Gerät. Nicht bestätigen — ' +
+        'im Netz sitzt jemand dazwischen, oder es ist das falsche Gerät.',
+    )
+  }
+
+  return found
 }
