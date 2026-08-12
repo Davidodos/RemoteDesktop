@@ -380,6 +380,95 @@ Jetzt führt von dort ein Weg in die Einstellungen und weiter auf „Dieses Ger�
 freigeben". Der Startbildschirm sagt außerdem, dass beides unabhängig
 voneinander ist: man kann steuern, ohne steuerbar zu sein, und umgekehrt.
 
+## Phase 31e — die Kopplung geht immer in beide Richtungen (OFFEN, als Nächstes)
+
+**Befund vom 11.08.2026 am echten Gerät:** das Handy wird am PC weiterhin nicht
+als steuerbar geführt. Die Ursache ist nicht ein Fehler, sondern der Entwurf aus
+31b — er ist an drei Stellen falsch, und alle drei hängen zusammen.
+
+### Was falsch ist
+
+1. **Die Gegenkopplung hängt daran, dass der Host im Augenblick des Koppelns
+   läuft.** `HostRuntime.backOffer()` gibt `null` zurück, solange der Server aus
+   ist, und `LocalNode.OfferAsync` genauso ohne laufenden Agent. Wer beim
+   Koppeln die Freigabe nicht eingeschaltet hatte, bekommt die Gegenrichtung
+   nie — auch später nicht, ohne neu zu koppeln.
+2. **Die Gegenrichtung braucht einen Netzaufruf mit Kopplungscode.** Deshalb
+   die fünf Minuten, deshalb die Abhängigkeit vom offenen Fenster, deshalb der
+   ganze `pending`-Mechanismus.
+3. **Der Host ist auf Dauerbetrieb ausgelegt.** Er soll es nicht sein.
+
+### Was stattdessen gilt (Entscheidung vom 11.08.2026)
+
+- **Eine Kopplung ist immer beidseitig.** Ohne Bedingung, ohne Schalter, ohne
+  zweiten Netzaufruf.
+- **Ob ein Handy als Agent arbeitet, ist eine Einstellung** — nachträglich
+  umlegbar, ohne erneut zu koppeln.
+- **Kein Dauerbetrieb am Handy.** Es genügt: die App ist offen, und **jede**
+  eingehende Verbindung wird am Handy einzeln bestätigt. Wer sein Handy vom PC
+  steuern will, hat es ohnehin in der Hand.
+
+### Der Umbau
+
+**Kein Code für die Gegenrichtung.** Beide Seiten tauschen beim Koppeln alles
+aus, was sie voneinander brauchen — in einem Aufruf, ohne zweiten Weg:
+
+- Die Anfrage an `/api/pair` trägt zusätzlich den **Client-Schlüssel** und den
+  **Geräte-Steckbrief** des Anrufers (Adresse, Port, CA-Fingerabdruck, Name,
+  Agent-Fingerabdruck).
+- Die Antwort trägt dasselbe der Gegenseite.
+- Danach trägt **jede Seite ohne Netzverkehr** ein: den Client-Schlüssel der
+  anderen in die eigene `clients.json`, und den Steckbrief der anderen in die
+  eigene Geräteliste.
+
+Damit entfallen `PendingPairings`, `/api/pair/pending`, `LocalNode.OfferAsync`
+und der Fünf-Sekunden-Takt in `App.tsx` **ersatzlos**. Der Host muss beim
+Koppeln nicht laufen: ein Eintrag in einer Datei wirkt, sobald er startet.
+
+Zu klären beim Bauen: der Client-Schlüssel des PCs liegt im Fenster
+(localStorage), die `clients.json` beim Agent. Das Eintragen führt deshalb über
+die Brücke (`local-register`), nicht über HTTP.
+
+**Der Host läuft, solange die App offen ist.** Kein Schalter „steuerbar
+machen" mehr, sondern eine Einstellung „Dieses Gerät darf ferngesteuert
+werden" (Vorgabe: aus). Steht sie auf an, startet der Host mit der App und
+endet mit ihr. Der Vordergrunddienst bleibt, aber nur für die Dauer einer
+Sitzung — nicht mehr `START_STICKY`.
+
+**Jede Verbindung wird bestätigt.** Ein `/api/session`-Aufruf blockt, bis am
+Handy jemand zustimmt (Karte in der App, Zeitlimit ~30 s, Ablehnung ist die
+Vorgabe). Damit fällt auch der Systemdialog der Bildschirmaufnahme an die
+richtige Stelle: er kommt beim ersten Verbinden und nicht Tage vorher.
+
+**Nur eine Adresse.** Erledigt (siehe unten) — `HostAddresses` fragt das
+System nach dem aktiven Netz, statt alle Schnittstellen aufzuzählen.
+
+### Reihenfolge
+
+1. Steckbrief-Austausch im Protokoll (Agent, Host, App) — ersetzt 31b
+2. `PendingPairings` und `/api/pair/pending` entfernen
+3. Host an den Lebenszyklus der App binden, Einstellung statt Schalter
+4. Bestätigung je Verbindung
+5. Am echten Gerät prüfen: koppeln, Freigabe **danach** einschalten, verbinden
+
+## Phase 31f — nur noch die brauchbare Adresse ✅
+
+Vorher zählte `HttpServer.localAddresses()` alle Adressen aller Schnittstellen
+auf, die „oben" sind. Auf einem Handy sind das drei bis fünf — WLAN, Mobilfunk,
+dazu Tunnel und Attrappen, die Android für sich selbst führt. In den
+Einstellungen standen sie nebeneinander, und **keine** funktionierte zum
+Abtippen: die richtige ging in den anderen unter.
+
+`host/HostAddresses.kt` fragt jetzt das System, welches Netz das aktive ist
+(`ConnectivityManager.getLinkProperties`), und dessen Adresse zählt. Der Gang
+über die Schnittstellen bleibt als Rückfall, nun ohne `dummy*`, `rmnet_ims*`,
+`p2p*` und ohne die selbstvergebenen `169.254.*`. Die Freigabeseite zeigt eine
+Adresse groß und weitere nur, wenn es sie wirklich gibt.
+
+Ob das reicht, zeigt erst das Gerät: wenn auch die richtige Adresse nicht
+antwortet, liegt es nicht an der Auswahl, sondern daran, dass der Server nicht
+lauscht oder das WLAN Geräte voneinander trennt (AP-Isolation).
+
 ## Phase 31 — Beide Richtungen im Fenster und in der App
 
 - Die Geräteliste zeigt Handys mit eigenem Symbol; alles Weitere folgt schon

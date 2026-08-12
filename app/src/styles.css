@@ -299,6 +299,11 @@ input[type='password'] {
 
 /* Weißer Grund, auch im dunklen Thema: ein QR-Code mit invertierten Farben
    wird von den meisten Scannern nicht gelesen. */
+.pairing-code.address {
+  font-size: 1.3rem;
+  letter-spacing: 0.05rem;
+}
+
 .pairing-qr {
   display: block;
   width: 260px;

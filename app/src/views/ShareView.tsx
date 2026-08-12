@@ -156,12 +156,27 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
       {running && (
         <section className="settings-group">
           <h2>Erreichbar als</h2>
-          <p className="settings-hint">
-            {status?.deviceName ?? 'Dieses Gerät'}
+          <p className="settings-hint">{status?.deviceName ?? 'Dieses Gerät'}</p>
+
+          {/* Eine Adresse, nicht drei. Vorher standen hier alle Schnittstellen
+              nebeneinander — WLAN, Mobilfunk, Tunnel, Attrappen —, und wer
+              abtippen wollte, musste raten. Jetzt steht vorn, was das System
+              gerade benutzt. */}
+          <p className="pairing-code address">
             {status !== undefined && status.addresses.length > 0
-              ? ` · ${status.addresses.map((address) => `${address}:${status.port}`).join(' · ')}`
-              : ' · noch keine Adresse im Netz'}
+              ? `${status.addresses[0]}:${status.port}`
+              : 'noch keine Adresse im Netz'}
           </p>
+
+          {status !== undefined && status.addresses.length > 1 && (
+            <p className="settings-hint">
+              Über ein zweites Netz erreichbar als{' '}
+              {status.addresses
+                .slice(1)
+                .map((address) => `${address}:${status.port}`)
+                .join(' · ')}
+            </p>
+          )}
           <p className="settings-hint">
             Die Adresse kommt vom Router und kann sich ändern. Wer dieses Handy
             dauerhaft erreichen will, trägt im Router eine feste Adresse ein —

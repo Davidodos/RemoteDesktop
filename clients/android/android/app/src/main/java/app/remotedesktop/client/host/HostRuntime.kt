@@ -15,6 +15,7 @@ import java.io.File
  * Hier ist der einzige Ort, an dem beides aufeinandertrifft.
  */
 class HostRuntime private constructor(
+    private val context: Context,
     private val server: HostServer,
     private val codes: PairingCodes,
     private val pairing: PairingService,
@@ -48,7 +49,7 @@ class HostRuntime private constructor(
             val material = HostCertificate.loadOrCreate(
                 folder,
                 name,
-                (HttpServer.localAddresses() + "localhost").distinct(),
+                (HostAddresses.all(context) + "localhost").distinct(),
             )
 
             val clients = ClientStore(File(folder, "clients.json"))
@@ -65,14 +66,14 @@ class HostRuntime private constructor(
                 version = versionOf(context),
                 sessions = sessions,
                 screen = { ScreenCapture.scaled(screenOf(context)) },
-                address = { HttpServer.localAddresses().firstOrNull() },
+                address = { HostAddresses.best(context) },
                 screenSource = { ScreenCapture.open(context, screenOf(context)) },
                 input = { command ->
                     RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
                 },
             )
 
-            return HostRuntime(server, codes, pairing, material, name)
+            return HostRuntime(context, server, codes, pairing, material, name)
         }
 
         /**
@@ -129,7 +130,7 @@ class HostRuntime private constructor(
     fun isAcceptingInput(context: Context): Boolean = RemoteInputService.isEnabled(context)
 
     /** Unter welchen Adressen dieses Handy gerade erreichbar ist. */
-    fun addresses(): List<String> = HttpServer.localAddresses()
+    fun addresses(): List<String> = HostAddresses.all(context)
 
     fun start() {
         if (!server.isRunning) {
