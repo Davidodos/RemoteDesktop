@@ -209,17 +209,38 @@ class HostPlugin : Plugin() {
     }
 
     /**
-     * Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig: beim
-     * Lesen ist der Eingang leer, sonst käme ein Gerät, das jemand aus seiner
-     * Liste entfernt hat, von allein zurück.
+     * Die Steckbriefe, die beim Koppeln hier abgegeben wurden.
+     *
+     * Lesen leert den Eingang **nicht**: geht danach etwas schief, wäre der
+     * Steckbrief sonst endgültig weg. Vergessen wird auf Zuruf, siehe
+     * [forgetPeers].
      */
     @PluginMethod
     fun peers(call: PluginCall) {
         val array = JSArray()
 
-        HostRuntime.of(context).takePeers().forEach { array.put(it.toJson()) }
+        HostRuntime.of(context).listPeers().forEach {
+            array.put(it.toJson().put("id", PeerInbox.key(it)))
+        }
 
         call.resolve(JSObject().put("peers", array))
+    }
+
+    /** Was in der Liste steht, braucht hier nicht mehr zu liegen. */
+    @PluginMethod
+    fun forgetPeers(call: PluginCall) {
+        val ids = call.getArray("ids")
+        val wanted = ArrayList<String>()
+
+        if (ids != null) {
+            for (index in 0 until ids.length()) {
+                ids.optString(index)?.takeIf { it.isNotBlank() }?.let(wanted::add)
+            }
+        }
+
+        HostRuntime.of(context).forgetPeers(wanted)
+
+        call.resolve()
     }
 
     /**

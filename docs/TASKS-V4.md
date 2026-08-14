@@ -417,9 +417,31 @@ Steckbrief ist eine Beschreibung und kein Geheimnis. Er darf auf Platte liegen
 Damit entfallen `PendingPairings`, `/api/pair/pending`, `LocalNode.OfferAsync`
 und der Fünf-Sekunden-Takt in `App.tsx` **ersatzlos**.
 
-Abgeholt wird beim Start und beim Öffnen der Geräteliste — und dabei einmalig:
-sonst käme ein Gerät, das jemand aus seiner Liste entfernt hat, von allein
-zurück.
+### Zwei Fehler daran, gefunden am echten Gerät (15.08.2026)
+
+Am PC blieb das Handy im Fernsteuerungs-Tab aus. Die Kopplung selbst lief —
+im Geräte-Tab stand es, und der PC war vom Handy aus steuerbar. Nur der
+Steckbrief kam nie in der Liste an. Zwei Ursachen, beide in dieser Phase
+entstanden:
+
+1. **Es wurde nur beim Start nachgesehen.** Ich hatte den Fünf-Sekunden-Takt
+   ersatzlos gestrichen, weil ein Steckbrief nicht verfällt — und dabei
+   übersehen, *wann* jemand hinsieht. Der Normalfall ist, dass das Fenster
+   **offen ist, während drüben gekoppelt wird**: man scannt am Handy den
+   QR-Code, den dieses Fenster gerade anzeigt. Danach passierte hier nichts
+   mehr. Der zweite Abholpunkt half nicht: solange nichts gekoppelt ist, zeigt
+   die App die Startkarte und rendert die Geräteliste gar nicht.
+   → Ein **ruhiger Takt** (10 s) ist zurück. Nicht der alte: der jagte einem
+   Code hinterher, der nach fünf Minuten verfiel. Dieser sieht nur nach, weil
+   jemand hinsehen muss, damit etwas erscheint — und der Aufruf geht an den
+   eigenen Rechner.
+2. **Lesen leerte den Eingang.** Ging danach irgendetwas schief — kein
+   Vertrauen, kein Speicher, ein Fenster, das gerade schließt —, war der
+   Steckbrief **endgültig** weg, ohne zweiten Versuch. Genau der Fehler, den
+   ein Posteingang nicht machen darf.
+   → **Erst eintragen, dann vergessen:** `GET /api/pair/peers` liest ohne
+   Nebenwirkung, `POST /api/pair/peers/forget` räumt weg, was in der Liste
+   steht. Sonst käme ein entferntes Gerät von allein zurück.
 
 **Drei Dinge, die beim Bauen dazukamen**
 

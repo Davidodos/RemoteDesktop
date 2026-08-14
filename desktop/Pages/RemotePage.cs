@@ -316,6 +316,8 @@ public sealed class RemotePage : Control
 
                 "local-peers" => new { peers = await LocalNode.PeersAsync() },
 
+                "local-forget" => await Forgotten(request),
+
                 "local-grant" => await Granted(request),
 
                 "local-register" => await Registered(request),
@@ -331,6 +333,16 @@ public sealed class RemotePage : Control
         }
 
         Reply(core, request.Id!, payload);
+    }
+
+    /// <summary>
+    /// Was in der Geräteliste steht, braucht im Eingang nicht mehr zu liegen.
+    /// </summary>
+    private static async Task<object> Forgotten(BridgeRequest request)
+    {
+        await LocalNode.ForgetAsync(request.Ids ?? []);
+
+        return new { forgotten = request.Ids?.Length ?? 0 };
     }
 
     /// <summary>
@@ -407,7 +419,7 @@ public sealed class RemotePage : Control
     /// <summary>Was die Seite über die Brücke schickt.</summary>
     private sealed record BridgeRequest(
         string? Id, string? Kind, string? Host, string? Fingerprint, string? PublicKey,
-        string? Label);
+        string? Label, string[]? Ids);
 
     /// <summary>
     /// Ein leerer schwarzer Bereich sähe aus wie ein Absturz. Steht die

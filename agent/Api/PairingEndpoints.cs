@@ -98,12 +98,17 @@ public static class PairingEndpoints
                     new { error = "Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel." }));
 
         // Die Steckbriefe abholen, die beim Koppeln hier abgegeben wurden.
-        // Einmalig: sonst käme ein Gerät, das jemand aus seiner Liste entfernt
-        // hat, beim nächsten Start von allein zurück.
+        //
+        // Lesen leert den Eingang **nicht**. Es tat es einmal, und das war
+        // falsch: ging danach irgendetwas schief — kein Vertrauen, kein
+        // Speicher, ein Fenster, das gerade schließt —, war der Steckbrief
+        // endgültig weg, und am Bildschirm stand „noch kein Gerät gekoppelt"
+        // ohne zweiten Versuch. Vergessen wird auf Zuruf, siehe unten.
         app.MapGet("/api/pair/peers", (PeerInbox inbox) => Results.Ok(new
         {
-            peers = inbox.TakeAll().Select(peer => new
+            peers = inbox.List().Select(peer => new
             {
+                id = PeerInbox.Key(peer),
                 host = peer.Host,
                 port = peer.Port,
                 name = peer.Name,
@@ -111,6 +116,16 @@ public static class PairingEndpoints
                 agentFingerprint = peer.AgentFingerprint
             })
         }));
+
+        // Was in der Liste steht, braucht hier nicht mehr zu liegen. Erst
+        // jetzt — sonst käme ein Gerät, das jemand entfernt hat, von allein
+        // zurück.
+        app.MapPost("/api/pair/peers/forget", (ForgetRequest request, PeerInbox inbox) =>
+        {
+            inbox.Forget(request.Ids ?? []);
+
+            return Results.Ok(new { forgotten = request.Ids?.Length ?? 0 });
+        });
 
         // Die Gegenrichtung eintragen: die Oberfläche der Gegenseite darf
         // diesen Rechner steuern. Ohne Code — siehe PairingService.Grant.
@@ -308,6 +323,8 @@ internal sealed record ProfileRequest(
 internal sealed record LocalClientRequest(string? PublicKey);
 
 internal sealed record GrantRequest(string? PublicKey, string? Label);
+
+internal sealed record ForgetRequest(string[]? Ids);
 
 internal sealed record ChallengeRequest(string? ClientId);
 

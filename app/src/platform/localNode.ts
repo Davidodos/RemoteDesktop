@@ -36,12 +36,20 @@ export interface LocalNode {
    */
   profile(): Promise<DeviceProfile | undefined>
 
-  /**
-   * Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig: beim
-   * Lesen ist der Eingang leer. Sonst käme ein Gerät, das jemand aus seiner
-   * Liste entfernt hat, beim nächsten Nachsehen von allein zurück.
+   /**
+   * Die Steckbriefe, die beim Koppeln hier abgegeben wurden.
+   *
+   * Lesen leert den Eingang **nicht**. Es tat es einmal, und das war falsch:
+   * ging danach irgendetwas schief, war der Steckbrief endgültig weg, und am
+   * Bildschirm stand „noch kein Gerät gekoppelt" — ohne zweiten Versuch.
    */
   peers(): Promise<DeviceProfile[]>
+
+  /**
+   * Vergisst, was in der Liste steht. Erst jetzt: sonst käme ein Gerät, das
+   * jemand aus seiner Liste entfernt hat, von allein zurück.
+   */
+  forget(ids: string[]): Promise<void>
 
   /**
    * Die Gegenrichtung eintragen: die Oberfläche der Gegenseite darf dieses
@@ -64,6 +72,11 @@ export interface LocalNode {
  * und `host/DeviceProfile.kt`.
  */
 export interface DeviceProfile {
+  /**
+   * Woran der Eingang diesen Eintrag wiedererkennt. Nur bei abgeholten
+   * Steckbriefen gesetzt — der eigene braucht keine.
+   */
+  id?: string
   host: string
   port: number
   /** Wie das Gerät heißt. Für die Anzeige in der Geräteliste. */
@@ -90,6 +103,7 @@ export interface DeviceProfile {
 export const noLocalNode: LocalNode = {
   profile: (): Promise<DeviceProfile | undefined> => Promise.resolve(undefined),
   peers: (): Promise<DeviceProfile[]> => Promise.resolve([]),
+  forget: (): Promise<void> => Promise.resolve(),
   grant: (): Promise<void> => Promise.resolve(),
   register: (): Promise<void> => Promise.resolve(),
 }
@@ -107,7 +121,7 @@ export function usableProfile(value: unknown): DeviceProfile | undefined {
     return undefined
   }
 
-  const { host, port, name, caFingerprint, agentFingerprint, clientKey } = value as Record<
+  const { id, host, port, name, caFingerprint, agentFingerprint, clientKey } = value as Record<
     string,
     unknown
   >
@@ -123,6 +137,7 @@ export function usableProfile(value: unknown): DeviceProfile | undefined {
   const address = host.trim()
 
   return {
+    ...(typeof id === 'string' && id.length > 0 ? { id } : {}),
     host: address,
     port,
     // Ein leerer Eintrag in der Liste ließe sich später niemandem zuordnen.

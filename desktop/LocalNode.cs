@@ -54,6 +54,14 @@ public static class LocalNode
         ReadAsync("/api/pair/peers", "peers", cancellationToken);
 
     /// <summary>
+    /// Vergisst die Steckbriefe, die in der Liste stehen. Erst nach dem
+    /// Eintragen — vorher wäre ein Fehlschlag endgültig.
+    /// </summary>
+    public static Task ForgetAsync(
+        string[] ids, CancellationToken cancellationToken = default) =>
+        PostAsync("/api/pair/peers/forget", new { ids }, cancellationToken);
+
+    /// <summary>
     /// Trägt die Oberfläche der Gegenseite in die <c>clients.json</c> dieses
     /// Rechners ein — die Gegenrichtung, ohne einen zweiten Aufruf über das Netz.
     /// </summary>

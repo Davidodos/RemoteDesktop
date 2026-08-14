@@ -180,6 +180,10 @@ const windowNode: LocalNode = {
       : []
   },
 
+  forget: async (ids: string[]): Promise<void> => {
+    await ask({ kind: 'local-forget', ids })
+  },
+
   grant: async (publicKey: string, label: string): Promise<void> => {
     await ask({ kind: 'local-grant', publicKey, label })
   },

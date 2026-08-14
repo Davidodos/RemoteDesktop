@@ -78,10 +78,9 @@ export async function grantPeer(
  * in die Geräteliste auf.
  *
  * <p>
- * Einmalig und ohne Takt: der Eingang liegt auf Platte und hat keine Frist.
- * Vorher sah die App alle fünf Sekunden nach, weil der Code darin ablief — wer
- * das Fenster später öffnete, fand nichts mehr vor. Jetzt genügt es, beim Start
- * und beim Öffnen der Geräteliste nachzusehen.
+ * **Erst eintragen, dann vergessen.** Andersherum war es falsch: ging nach dem
+ * Abholen irgendetwas schief, war der Steckbrief endgültig weg, und am
+ * Bildschirm stand „noch kein Gerät gekoppelt" ohne zweiten Versuch.
  * </p>
  *
  * @returns Die neue Liste, oder `undefined`, wenn es nichts abzuholen gab.
@@ -99,11 +98,21 @@ export async function collectPeers(): Promise<Device[] | undefined> {
   const clientId = await clientFingerprint((await ensureClientKey()).publicKey)
 
   let devices: Device[] | undefined
+  const eingetragen: string[] = []
 
   for (const peer of found) {
     await trust(peer)
 
     devices = saveLocalDevice(toDevice(peer, clientId))
+
+    if (peer.id !== undefined) {
+      eingetragen.push(peer.id)
+    }
+  }
+
+  // Jetzt, und keinen Schritt früher.
+  if (eingetragen.length > 0) {
+    await getPlatform().node.forget(eingetragen)
   }
 
   return devices

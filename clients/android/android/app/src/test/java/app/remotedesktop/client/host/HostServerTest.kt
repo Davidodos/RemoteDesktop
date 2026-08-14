@@ -258,7 +258,7 @@ class HostServerTest {
 
         assertEquals(200, answer.optInt("port", 200))
 
-        val peer = peers.takeAll().single()
+        val peer = peers.list().single()
 
         assertEquals("192.168.178.33", peer.host)
         assertEquals("Arbeitsrechner", peer.name)
@@ -305,7 +305,7 @@ class HostServerTest {
 
         assertEquals(200, status)
         assertEquals(true, JSONObject(body).has("clientId"))
-        assertEquals(0, peers.takeAll().size)
+        assertEquals(0, peers.list().size)
     }
 
     @Test

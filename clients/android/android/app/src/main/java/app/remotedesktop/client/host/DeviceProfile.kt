@@ -100,8 +100,13 @@ data class DeviceProfile(
  *
  * **Und warum auf Platte:** ein Steckbrief ist kein Geheimnis und hat keine
  * Frist. Er darf einen Neustart überleben — genau das war der Fehler des
- * Vorgängers. Gelesen wird einmal: beim Abholen ist der Eingang leer, sonst käme
- * ein Gerät, das jemand aus seiner Liste entfernt hat, von allein zurück.
+ * Vorgängers.
+ *
+ * **Gelesen und geleert sind zwei Schritte.** Wer nur liest, verliert nichts,
+ * wenn danach etwas schiefgeht — und wenn etwas schiefgeht, ist es hier fatal:
+ * ein Steckbrief, der beim Abholen verschwindet und dessen Eintragen dann
+ * scheitert, ist endgültig weg, und am Bildschirm steht „noch kein Gerät
+ * gekoppelt" ohne zweiten Versuch.
  */
 class PeerInbox(private val file: File) {
 
@@ -113,24 +118,33 @@ class PeerInbox(private val file: File) {
         write()
     }
 
-    /** Holt alles ab und leert dabei den Eingang. */
-    fun takeAll(): List<DeviceProfile> = synchronized(gate) {
-        val taken = peers
+    /** Was hier liegt. Ohne Nebenwirkung — siehe oben. */
+    fun list(): List<DeviceProfile> = synchronized(gate) { peers.toList() }
 
-        if (taken.isNotEmpty()) {
-            peers = emptyList()
+    /**
+     * Vergisst, was eingetragen ist. Erst jetzt — sonst käme ein Gerät, das
+     * jemand aus seiner Liste entfernt hat, von allein zurück.
+     */
+    fun forget(ids: Collection<String>) = synchronized(gate) {
+        val remaining = peers.filterNot { ids.contains(key(it)) }
+
+        if (remaining.size != peers.size) {
+            peers = remaining
             write()
         }
 
-        taken
+        Unit
     }
 
-    /**
-     * Woran zwei Einträge dasselbe Gerät sind. Der Fingerabdruck des Agents,
-     * solange es einen gibt — er überlebt einen Namens- und Adresswechsel.
-     */
-    private fun key(peer: DeviceProfile): String =
-        peer.agentFingerprint ?: "${peer.host}:${peer.port}"
+    companion object {
+        /**
+         * Woran zwei Einträge dasselbe Gerät sind. Der Fingerabdruck des
+         * Agents, solange es einen gibt — er überlebt einen Namens- und
+         * Adresswechsel.
+         */
+        fun key(peer: DeviceProfile): String =
+            peer.agentFingerprint ?: "${peer.host}:${peer.port}"
+    }
 
     private fun write() {
         val array = JSONArray().apply { peers.forEach { put(it.toJson()) } }

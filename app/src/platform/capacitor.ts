@@ -113,6 +113,7 @@ interface HostPlugin {
   openInputSettings(): Promise<void>
   profile(): Promise<{ profile?: unknown }>
   peers(): Promise<{ peers?: unknown }>
+  forgetPeers(options: { ids: string[] }): Promise<void>
   grant(options: { publicKey: string; label: string }): Promise<void>
   registerLocalClient(options: { publicKey: string }): Promise<void>
   clients(): Promise<{ clients: HostClient[] }>
@@ -434,6 +435,7 @@ function localNode(plugins: CapacitorPlugins): LocalNode {
         : []
     },
 
+    forget: (ids) => plugin.forgetPeers({ ids }),
     grant: (publicKey, label) => plugin.grant({ publicKey, label }),
     register: (publicKey) => plugin.registerLocalClient({ publicKey }),
   }

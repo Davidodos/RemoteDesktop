@@ -45,6 +45,14 @@ export function App(): React.JSX.Element {
   )
 }
 
+/**
+ * Wie oft in den eigenen Eingang gesehen wird.
+ *
+ * Ruhig, denn hier verfällt nichts: der Blick gilt nur dem Fall, dass jemand am
+ * anderen Gerät koppelt, während dieses Fenster offen dasteht.
+ */
+const PEER_POLL_INTERVAL_MS = 10_000
+
 function Shell(): React.JSX.Element {
   const [devices, setDevices] = useState<Device[]>([])
   const [selected, setSelected] = useState<Device | undefined>(undefined)
@@ -61,6 +69,9 @@ function Shell(): React.JSX.Element {
   const [info, setInfo] = useState<AgentInfo | undefined>(undefined)
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
+
+  /** Zuletzt gemeldeter Fehlschlag beim Abholen — er wiederholt sich sonst im Takt. */
+  const reported = useRef<string | undefined>(undefined)
 
   /**
    * Die Liste hat sich geändert — umbenannt oder entfernt.
@@ -94,20 +105,24 @@ function Shell(): React.JSX.Element {
   }, [])
 
   /**
-   * Die andere Richtung, beim Start.
+   * Die andere Richtung: der eigene Ausweis hin, die Steckbriefe der anderen
+   * her.
    *
    * <p>
-   * Zweierlei: der eigene Ausweis geht an den Agent nebenan, damit er beim
-   * Koppeln mitgehen kann — und die Steckbriefe, die andere hier abgegeben
-   * haben, kommen in die Liste.
+   * **Und zwar im Takt.** Einmal beim Start genügte nicht, und das war ein
+   * Denkfehler: der Normalfall ist, dass das Fenster **offen ist, während
+   * drüben gekoppelt wird** — man scannt am Handy den QR-Code, den dieses
+   * Fenster gerade anzeigt. Danach passierte hier nichts mehr. Der zweite
+   * Abholpunkt, die Geräteliste, half nicht: solange nichts gekoppelt ist,
+   * zeigt die App die Startkarte und rendert die Liste gar nicht.
    * </p>
    *
    * <p>
-   * Ohne Takt. Vorher sah die App alle fünf Sekunden nach, weil in einem
-   * Angebot ein Kopplungscode stand, der nach fünf Minuten verfiel — wer das
-   * Fenster später öffnete, fand nichts mehr vor. Ein Steckbrief liegt auf
-   * Platte und hat keine Frist; einmal beim Start genügt, und die Geräteliste
-   * sieht beim Öffnen noch einmal nach.
+   * Es ist nicht der alte Takt zurück. Der jagte einem Kopplungscode
+   * hinterher, der nach fünf Minuten verfiel — deshalb alle fünf Sekunden.
+   * Hier verfällt nichts; nachgesehen wird nur, weil jemand hinsehen muss,
+   * damit etwas erscheint. Der Aufruf geht an den eigenen Rechner und kostet
+   * nichts, solange nichts da ist.
    * </p>
    */
   useEffect(() => {
@@ -115,27 +130,33 @@ function Shell(): React.JSX.Element {
 
     void announceSelf()
 
-    void collectPeers().then(
+    const look = (): void => void collectPeers().then(
       (all) => {
         if (all !== undefined && current) {
           setDevices(all)
         }
       },
       (failure: unknown) => {
-        // Sichtbar. Es still abzufangen war die naheliegende Wahl — es ist ja
-        // eine Zugabe — und die falsche: eine Gegenrichtung, die stumm
-        // scheitert, sieht genauso aus wie eine, die nie angeboten wurde.
-        if (current) {
-          setError(
-            'Gekoppelte Geräte ließen sich nicht übernehmen: ' +
-              (failure instanceof Error ? failure.message : String(failure)),
-          )
+        // Sichtbar, aber nur einmal je Fehlerbild: es still abzufangen war die
+        // naheliegende Wahl — es ist ja eine Zugabe — und die falsche. Eine
+        // Gegenrichtung, die stumm scheitert, sieht genauso aus wie eine, die
+        // nie angeboten wurde.
+        const message = failure instanceof Error ? failure.message : String(failure)
+
+        if (current && message !== reported.current) {
+          reported.current = message
+          setError(`Gekoppelte Geräte ließen sich nicht übernehmen: ${message}`)
         }
       },
     )
 
+    look()
+
+    const timer = window.setInterval(look, PEER_POLL_INTERVAL_MS)
+
     return () => {
       current = false
+      window.clearInterval(timer)
     }
   }, [])
 

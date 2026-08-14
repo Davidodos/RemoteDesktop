@@ -60,22 +60,35 @@ public sealed class PeerInbox
         }
     }
 
-    /// <summary>Holt alles ab und leert dabei den Eingang.</summary>
-    public IReadOnlyList<DeviceProfile> TakeAll()
+    /// <summary>Was hier liegt. Ohne Nebenwirkung — siehe oben.</summary>
+    public IReadOnlyList<DeviceProfile> List()
     {
         lock (_gate)
         {
-            var taken = _peers;
+            return [.. _peers];
+        }
+    }
 
-            if (taken.Count == 0)
+    /// <summary>
+    /// Vergisst, was eingetragen ist. Ohne diesen Schritt käme ein Gerät, das
+    /// jemand aus seiner Liste entfernt hat, beim nächsten Nachsehen von allein
+    /// zurück.
+    /// </summary>
+    public void Forget(IEnumerable<string> ids)
+    {
+        var wanted = ids.ToHashSet(StringComparer.Ordinal);
+
+        lock (_gate)
+        {
+            var remaining = _peers.Where(peer => !wanted.Contains(Key(peer))).ToList();
+
+            if (remaining.Count == _peers.Count)
             {
-                return [];
+                return;
             }
 
-            _peers = [];
+            _peers = remaining;
             Write();
-
-            return taken;
         }
     }
 
@@ -83,7 +96,7 @@ public sealed class PeerInbox
     /// Woran zwei Einträge dasselbe Gerät sind. Der Fingerabdruck des Agents,
     /// solange es einen gibt — er überlebt einen Namens- und Adresswechsel.
     /// </summary>
-    private static string Key(DeviceProfile peer) =>
+    public static string Key(DeviceProfile peer) =>
         peer.AgentFingerprint ?? $"{peer.Host}:{peer.Port}";
 
     private void Write()

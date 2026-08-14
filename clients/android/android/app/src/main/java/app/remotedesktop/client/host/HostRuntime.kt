@@ -194,8 +194,11 @@ class HostRuntime private constructor(
         )
     }
 
-    /** Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig. */
-    fun takePeers(): List<DeviceProfile> = peers.takeAll()
+    /** Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Ohne Nebenwirkung. */
+    fun listPeers(): List<DeviceProfile> = peers.list()
+
+    /** Vergisst, was die App eingetragen hat. */
+    fun forgetPeers(ids: Collection<String>) = peers.forget(ids)
 
     /** Die Gegenrichtung eintragen: diese Oberfläche darf dieses Handy steuern. */
     fun grant(publicKey: String, label: String): Boolean = pairing.grant(publicKey, label)
