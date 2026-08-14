@@ -7,12 +7,13 @@ Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.
 
 **V4 (läuft):** beide Richtungen — ein Handy lässt sich ebenso steuern wie ein
 PC — und ein Dateimanager. Arbeitsanweisung in **`docs/TASKS-V4.md`**.
-Stand 11.08.2026: **Phasen 27–30 erledigt** (Handy liefert Bild und nimmt
-Eingaben an), dazu 31a/c/d/f. **Als Nächstes: Phase 31e** — die Kopplung soll
-immer beidseitig sein, der Handy-Host nur laufen, solange die App offen ist,
-und jede Verbindung am Handy einzeln bestätigt werden. Der Entwurf aus 31b wird
-dabei ersetzt. Am echten Gerät funktioniert die Fernsteuerung eines Handys
-**noch nicht**.
+Stand 14.08.2026: **Phasen 27–30 erledigt** (Handy liefert Bild und nimmt
+Eingaben an), dazu 31a und 31c–31f. **31e ist gebaut**: eine Kopplung ist
+immer beidseitig (Steckbrief-Austausch in einem Aufruf statt weitergereichtem
+Code, der Entwurf aus 31b ist ersetzt), der Handy-Host läuft nur, solange die
+App offen ist, und jede Verbindung wird am Handy einzeln bestätigt. **Als
+Nächstes: die Prüfung am echten Gerät** — dort funktionierte die Fernsteuerung
+eines Handys zuletzt noch nicht.
 Leitsatz: das Handy wird ein Agent und spricht dasselbe Protokoll; was ein Gerät
 kann, sagt es selbst über `capabilities` in `/api/info`.
 

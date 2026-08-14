@@ -380,76 +380,110 @@ Jetzt führt von dort ein Weg in die Einstellungen und weiter auf „Dieses Ger�
 freigeben". Der Startbildschirm sagt außerdem, dass beides unabhängig
 voneinander ist: man kann steuern, ohne steuerbar zu sein, und umgekehrt.
 
-## Phase 31e — die Kopplung geht immer in beide Richtungen (OFFEN, als Nächstes)
+## Phase 31e — die Kopplung geht immer in beide Richtungen ✅
 
-**Befund vom 11.08.2026 am echten Gerät:** das Handy wird am PC weiterhin nicht
-als steuerbar geführt. Die Ursache ist nicht ein Fehler, sondern der Entwurf aus
-31b — er ist an drei Stellen falsch, und alle drei hängen zusammen.
+**Befund vom 11.08.2026 am echten Gerät:** das Handy wurde am PC weiterhin nicht
+als steuerbar geführt. Die Ursache war nicht ein Fehler, sondern der Entwurf aus
+31b — er war an drei Stellen falsch, und alle drei hingen zusammen.
 
-### Was falsch ist
+### Was falsch war
 
-1. **Die Gegenkopplung hängt daran, dass der Host im Augenblick des Koppelns
-   läuft.** `HostRuntime.backOffer()` gibt `null` zurück, solange der Server aus
-   ist, und `LocalNode.OfferAsync` genauso ohne laufenden Agent. Wer beim
-   Koppeln die Freigabe nicht eingeschaltet hatte, bekommt die Gegenrichtung
-   nie — auch später nicht, ohne neu zu koppeln.
-2. **Die Gegenrichtung braucht einen Netzaufruf mit Kopplungscode.** Deshalb
-   die fünf Minuten, deshalb die Abhängigkeit vom offenen Fenster, deshalb der
-   ganze `pending`-Mechanismus.
-3. **Der Host ist auf Dauerbetrieb ausgelegt.** Er soll es nicht sein.
+1. **Die Gegenkopplung hing daran, dass der Host im Augenblick des Koppelns
+   lief.** Wer beim Koppeln die Freigabe nicht eingeschaltet hatte, bekam die
+   Gegenrichtung nie — auch später nicht, ohne neu zu koppeln.
+2. **Die Gegenrichtung brauchte einen Netzaufruf mit Kopplungscode.** Daher die
+   fünf Minuten, daher die Abhängigkeit vom offenen Fenster, daher der ganze
+   `pending`-Mechanismus.
+3. **Der Host war auf Dauerbetrieb ausgelegt.** Er sollte es nicht sein.
 
-### Was stattdessen gilt (Entscheidung vom 11.08.2026)
+### Der Steckbrief ersetzt den weitergereichten Code
 
-- **Eine Kopplung ist immer beidseitig.** Ohne Bedingung, ohne Schalter, ohne
-  zweiten Netzaufruf.
-- **Ob ein Handy als Agent arbeitet, ist eine Einstellung** — nachträglich
-  umlegbar, ohne erneut zu koppeln.
-- **Kein Dauerbetrieb am Handy.** Es genügt: die App ist offen, und **jede**
-  eingehende Verbindung wird am Handy einzeln bestätigt. Wer sein Handy vom PC
-  steuern will, hat es ohnehin in der Hand.
+Beide Seiten tauschen beim Koppeln alles aus, was sie voneinander brauchen — in
+**einem** Aufruf:
 
-### Der Umbau
+- Die Anfrage an `/api/pair` trägt den **Steckbrief** des Anrufers:
+  `agent/Auth/DeviceProfile.cs` · `host/DeviceProfile.kt` ·
+  `platform/localNode.ts`, dreimal dieselben Regeln
+- Die Antwort trägt den **Ausweis der Gegenseite** — den öffentlichen
+  Client-Schlüssel ihrer Oberfläche. Das ist die ganze Gegenrichtung, in einem
+  Feld
+- Danach trägt **jede Seite ohne Netzverkehr** ein: der Schlüssel der anderen in
+  die eigene `clients.json` (`PairingService.Grant`, über die Brücke
+  `local-grant`), ihr Steckbrief in die eigene Geräteliste
 
-**Kein Code für die Gegenrichtung.** Beide Seiten tauschen beim Koppeln alles
-aus, was sie voneinander brauchen — in einem Aufruf, ohne zweiten Weg:
-
-- Die Anfrage an `/api/pair` trägt zusätzlich den **Client-Schlüssel** und den
-  **Geräte-Steckbrief** des Anrufers (Adresse, Port, CA-Fingerabdruck, Name,
-  Agent-Fingerabdruck).
-- Die Antwort trägt dasselbe der Gegenseite.
-- Danach trägt **jede Seite ohne Netzverkehr** ein: den Client-Schlüssel der
-  anderen in die eigene `clients.json`, und den Steckbrief der anderen in die
-  eigene Geräteliste.
-
+Der entscheidende Unterschied ist die **Frist**. Ein Kopplungscode verfällt; ein
+Steckbrief ist eine Beschreibung und kein Geheimnis. Er darf auf Platte liegen
+(`peers.json`), einen Neustart überleben und wirken, sobald der Server startet.
 Damit entfallen `PendingPairings`, `/api/pair/pending`, `LocalNode.OfferAsync`
-und der Fünf-Sekunden-Takt in `App.tsx` **ersatzlos**. Der Host muss beim
-Koppeln nicht laufen: ein Eintrag in einer Datei wirkt, sobald er startet.
+und der Fünf-Sekunden-Takt in `App.tsx` **ersatzlos**.
 
-Zu klären beim Bauen: der Client-Schlüssel des PCs liegt im Fenster
-(localStorage), die `clients.json` beim Agent. Das Eintragen führt deshalb über
-die Brücke (`local-register`), nicht über HTTP.
+Abgeholt wird beim Start und beim Öffnen der Geräteliste — und dabei einmalig:
+sonst käme ein Gerät, das jemand aus seiner Liste entfernt hat, von allein
+zurück.
 
-**Der Host läuft, solange die App offen ist.** Kein Schalter „steuerbar
-machen" mehr, sondern eine Einstellung „Dieses Gerät darf ferngesteuert
-werden" (Vorgabe: aus). Steht sie auf an, startet der Host mit der App und
-endet mit ihr. Der Vordergrunddienst bleibt, aber nur für die Dauer einer
-Sitzung — nicht mehr `START_STICKY`.
+**Drei Dinge, die beim Bauen dazukamen**
 
-**Jede Verbindung wird bestätigt.** Ein `/api/session`-Aufruf blockt, bis am
-Handy jemand zustimmt (Karte in der App, Zeitlimit ~30 s, Ablehnung ist die
-Vorgabe). Damit fällt auch der Systemdialog der Bildschirmaufnahme an die
-richtige Stelle: er kommt beim ersten Verbinden und nicht Tage vorher.
+- **Die eigene Kennung wird ausgerechnet, nicht erfragt.** Bei der Gegenrichtung
+  findet kein Kopplungsaufruf statt, aus dem `clientId` zurückkäme — also bildet
+  `lib/clientKey.ts` sie aus dem eigenen Schlüssel, genau wie es beide
+  Gegenstellen tun. Ohne sie wirft `parseDevices` den Eintrag beim nächsten
+  Lesen weg
+- **Das Fenster hinterlegt seinen Ausweis beim eigenen Agent** (`LocalClient`,
+  `POST /api/pair/local`, beim Start). Der Agent hat ihn nicht selbst — er
+  gehört der Oberfläche. Ohne ihn bliebe jede Kopplung einseitig
+- **Alles unter `/api/pair/…` steht einzeln in `LocalOnly`.** `/api/pair` ist
+  absichtlich ohne Ausweis erreichbar, und die Prüfung darunter vergleicht auf
+  Segmentgrenzen — ohne die Einträge käme jeder im Netz an die Steckbriefe oder
+  ließe sich selbst eintragen. Ein Test hält jeden einzelnen fest
 
-**Nur eine Adresse.** Erledigt (siehe unten) — `HostAddresses` fragt das
-System nach dem aktiven Netz, statt alle Schnittstellen aufzuzählen.
+### Der Host lebt mit der App
 
-### Reihenfolge
+Kein Schalter „steuerbar machen" mehr, sondern die Einstellung **„Dieses Gerät
+darf ferngesteuert werden"** (Vorgabe: aus). Sie liegt nativ
+(`host/HostPreference.kt`) und nicht im localStorage: sie entscheidet über den
+Lebenslauf des Servers, und der beginnt und endet mit der Activity — an einer
+Stelle also, an der noch keine Weboberfläche läuft.
 
-1. Steckbrief-Austausch im Protokoll (Agent, Host, App) — ersetzt 31b
-2. `PendingPairings` und `/api/pair/pending` entfernen
-3. Host an den Lebenszyklus der App binden, Einstellung statt Schalter
-4. Bestätigung je Verbindung
-5. Am echten Gerät prüfen: koppeln, Freigabe **danach** einschalten, verbinden
+`MainActivity` startet den Host beim Öffnen und beendet ihn in `onDestroy`. Der
+Vordergrunddienst bleibt — eine laufende Sitzung soll überstehen, dass der
+Bildschirm ausgeht —, aber **ohne `START_STICKY`**: ein Server, der sich hinter
+dem Rücken seines Besitzers wieder anschaltet, ist genau das, was ein Handy
+nicht tun soll.
+
+### Jede Verbindung wird bestätigt
+
+`/api/session` wartet auf ein Ja am Gerät (`host/ConnectionRequests.kt`, etwa
+30 Sekunden). **Eine Kopplung sagt, *wer* fragen darf — dass jetzt gerade jemand
+zusehen darf, sagt nur ein Mensch.**
+
+- **Ablehnung ist die Vorgabe** — bei „Nein", bei Zeitablauf und auch dann, wenn
+  gar keine Oberfläche da ist, die fragen könnte
+- **Gefragt wird erst nach der Prüfung.** Wer nicht gekoppelt ist, soll am Handy
+  keine Karte auslösen können
+- Der Token wird ausgestellt, bevor gefragt wird, und bei einem Nein sofort
+  geschlossen (`SessionStore.close`) — er darf keinen Augenblick länger gelten
+- Die Karte (`views/ConnectionRequestView.tsx`) liegt **über allem** und lässt
+  sich nicht wegtippen. Sie in eine Seite zu legen, die man erst aufsuchen muss,
+  hieße, sie in den meisten Fällen ablaufen zu lassen; ein Wegwischen sähe aus
+  wie eine Zustimmung, die niemand gegeben hat
+
+Nebenbei rückt damit der Systemdialog der Bildschirmaufnahme an die richtige
+Stelle: er kommt beim ersten Verbinden und nicht Tage vorher.
+
+**Abnahme (14.08.2026):**
+Agent-Tests **378 grün** (vorher 364) · App-Tests **369** (vorher 368) ·
+Kotlin-Tests **95** (vorher 89) · `cd desktop && dotnet build` ·
+`npm run apk` baut durch.
+
+**Am echten Gerät noch nicht geprüft.** Das ist jetzt dran:
+
+1. Am Handy koppeln — die Freigabe dabei **aus** lassen
+2. Danach in den Einstellungen „Dieses Gerät darf ferngesteuert werden"
+   einschalten
+3. Am PC muss das Handy jetzt in der Geräteliste stehen und sich verbinden
+   lassen; am Handy erscheint dabei die Karte „Verbindung zulassen?"
+4. App am Handy wegwischen → der PC verliert die Verbindung, die
+   Benachrichtigung verschwindet
 
 ## Phase 31f — nur noch die brauchbare Adresse ✅
 
