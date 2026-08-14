@@ -30,6 +30,28 @@ export async function createClientKey(): Promise<ClientKeyPair> {
 }
 
 /**
+ * Wie dieses Gerät auf der Gegenseite heißt: die Kennung, unter der es in ihrer
+ * `clients.json` steht.
+ *
+ * <p>
+ * Sie kommt aus dem Schlüssel selbst — SHA-256 über den öffentlichen Teil, davon
+ * die ersten 16 Stellen. Beide Gegenstellen rechnen genauso
+ * (`PairingService.FingerprintOf` und `shortFingerprint`), und deshalb kann
+ * dieses Gerät sie ausrechnen, statt sie sich sagen zu lassen. Gebraucht wird
+ * das für die Gegenrichtung: dort kommt kein `clientId` über die Leitung, weil
+ * gar kein Kopplungsaufruf stattfindet.
+ * </p>
+ */
+export async function clientFingerprint(publicKey: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', fromBase64(publicKey))
+
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16)
+}
+
+/**
  * Unterschreibt die Challenge des Agents.
  *
  * WebCrypto liefert die Unterschrift als r und s hintereinander, nicht als DER.

@@ -1,6 +1,6 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
-using System.Web;
 
 namespace RemoteDesktopClient;
 
@@ -20,6 +20,14 @@ namespace RemoteDesktopClient;
 /// dort lauscht, hat den Port 8443 dieses Rechners belegt — dann liefe der
 /// eigene Agent gar nicht, und die Fernsteuerung wäre das kleinste Problem.
 /// </para>
+///
+/// <para>
+/// **Vier Wege statt zweier.** Bis Phase 31e reichte das Fenster einen
+/// Kopplungscode weiter, den die Gegenseite binnen fünf Minuten einlösen
+/// musste. Jetzt geht der Steckbrief bei der Kopplung mit, und was danach zu
+/// tun ist, erledigt jede Seite bei sich zu Hause: den Schlüssel der anderen in
+/// die eigene <c>clients.json</c>, ihren Steckbrief in die eigene Geräteliste.
+/// </para>
 /// </summary>
 public static class LocalNode
 {
@@ -29,83 +37,83 @@ public static class LocalNode
     private static readonly HttpClient Client = Build();
 
     /// <summary>
-    /// Was die Gegenseite braucht, um sich hier zu melden: Adresse, Port, ein
-    /// frischer Code und der eigene Fingerabdruck.
+    /// Der eigene Steckbrief: Adresse, Port, Name und die beiden Fingerabdrücke.
     ///
-    /// Alles davon steht bereits in der Adresse, die der Agent für den QR-Code
-    /// baut — sie wird hier nur wieder auseinandergenommen. Ein zweiter Weg zu
-    /// denselben Angaben wäre ein zweiter, der veralten kann.
+    /// Er hängt ausdrücklich **nicht** daran, ob dieser Rechner gerade steuerbar
+    /// sein will — er beschreibt, wie er erreichbar wäre.
     /// </summary>
     /// <returns><c>null</c>, wenn kein Agent läuft. Dann bleibt es bei einer Richtung.</returns>
-    public static async Task<object?> OfferAsync(CancellationToken cancellationToken = default)
+    public static Task<JsonElement?> SelfAsync(CancellationToken cancellationToken = default) =>
+        ReadAsync("/api/pair/self", "profile", cancellationToken);
+
+    /// <summary>
+    /// Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig: beim
+    /// Abholen ist der Eingang leer.
+    /// </summary>
+    public static Task<JsonElement?> PeersAsync(CancellationToken cancellationToken = default) =>
+        ReadAsync("/api/pair/peers", "peers", cancellationToken);
+
+    /// <summary>
+    /// Trägt die Oberfläche der Gegenseite in die <c>clients.json</c> dieses
+    /// Rechners ein — die Gegenrichtung, ohne einen zweiten Aufruf über das Netz.
+    /// </summary>
+    public static Task GrantAsync(
+        string publicKey, string? label, CancellationToken cancellationToken = default) =>
+        PostAsync(
+            "/api/pair/grant",
+            new { publicKey, label = label ?? string.Empty },
+            cancellationToken);
+
+    /// <summary>
+    /// Hinterlegt den Ausweis dieses Fensters beim eigenen Agent, damit er beim
+    /// Koppeln mitgehen kann. Ohne ihn bliebe jede Kopplung einseitig.
+    /// </summary>
+    public static Task RegisterAsync(
+        string publicKey, CancellationToken cancellationToken = default) =>
+        PostAsync("/api/pair/local", new { publicKey }, cancellationToken);
+
+    private static async Task<JsonElement?> ReadAsync(
+        string path, string field, CancellationToken cancellationToken)
     {
         try
         {
-            using var response = await Client.PostAsync(
-                $"https://127.0.0.1:{AgentPort}/api/pair/code", null, cancellationToken);
+            using var response = await Client.GetAsync(
+                $"https://127.0.0.1:{AgentPort}{path}", cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
                 return null;
             }
 
-            var body = await response.Content.ReadFromJsonAsync<CodeResponse>(cancellationToken);
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
 
-            if (body?.PairingUri is null || body.Code is null)
-            {
-                return null;
-            }
-
-            var uri = new Uri(body.PairingUri);
-            var query = HttpUtility.ParseQueryString(uri.Query);
-
-            var host = query["host"];
-
-            if (string.IsNullOrWhiteSpace(host))
-            {
-                return null;
-            }
-
-            return new
-            {
-                host,
-                port = int.TryParse(query["port"], out var parsed) ? parsed : AgentPort,
-                code = body.Code,
-                caFingerprint = query["ca"],
-                name = Environment.MachineName
-            };
+            return body.TryGetProperty(field, out var value) ? value : null;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
-                                       or UriFormatException or JsonException)
+                                       or JsonException)
         {
-            // Kein Agent, kein Angebot. Das ist der Normalfall auf einem
+            // Kein Agent, keine Gegenrichtung. Das ist der Normalfall auf einem
             // Rechner, der nur steuern und nicht gesteuert werden soll.
             return null;
         }
     }
 
-    /// <summary>Das Angebot, das die Gegenseite hinterlassen hat. Einmalig.</summary>
-    public static async Task<object?> PendingAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Hier wird ein Fehlschlag **nicht** verschluckt: die beiden schreibenden
+    /// Wege sind die Gegenrichtung selbst. Bleibt einer still liegen, sieht das
+    /// später aus wie eine Kopplung, die nie angeboten wurde — und danach sucht
+    /// niemand mehr.
+    /// </summary>
+    private static async Task PostAsync(
+        string path, object payload, CancellationToken cancellationToken)
     {
-        try
-        {
-            using var response = await Client.GetAsync(
-                $"https://127.0.0.1:{AgentPort}/api/pair/pending", cancellationToken);
+        using var content = new StringContent(
+            JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-            if (!response.IsSuccessStatusCode)
-            {
-                return null;
-            }
+        using var response = await Client.PostAsync(
+            $"https://127.0.0.1:{AgentPort}{path}", content, cancellationToken);
 
-            var body = await response.Content.ReadFromJsonAsync<PendingResponse>(cancellationToken);
-
-            return body?.Pending;
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
-                                       or JsonException)
-        {
-            return null;
-        }
+        response.EnsureSuccessStatusCode();
     }
 
     private static HttpClient Build()
@@ -117,8 +125,4 @@ public static class LocalNode
 
         return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(4) };
     }
-
-    private sealed record CodeResponse(string? Code, string? PairingUri);
-
-    private sealed record PendingResponse(JsonElement? Pending);
 }

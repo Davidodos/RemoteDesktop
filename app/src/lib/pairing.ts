@@ -2,7 +2,7 @@ import { postJson } from '../transport/direct.ts'
 import { TransportError } from '../transport/index.ts'
 import { certificateFingerprint } from './certificateTrust.ts'
 import { createClientKey, type ClientKeyPair } from './clientKey.ts'
-import type { BackPairing } from '../platform/index.ts'
+import type { DeviceProfile } from '../platform/index.ts'
 import { storage } from './storage.ts'
 import type { Device } from './types.ts'
 
@@ -40,6 +40,14 @@ interface PairResponse {
   role?: string
   siteId?: string
   canWake?: boolean
+  /**
+   * Der Ausweis der **Oberfläche** der Gegenseite — ihr öffentlicher
+   * Client-Schlüssel und ihr Name. Damit trägt dieses Gerät die andere Richtung
+   * bei sich ein, ohne noch einmal ins Netz zu gehen. Ein Waker und ein Agent
+   * älter als Phase 31e melden das Feld nicht; dann bleibt es bei einer
+   * Richtung.
+   */
+  peer?: { name?: string; clientKey?: string }
 }
 
 export interface PairTarget {
@@ -50,11 +58,21 @@ export interface PairTarget {
   /** Wie dieses Gerät in der Liste am Rechner heißen soll. */
   label: string
   /**
-   * Das eigene Angebot für die Gegenrichtung. Geht mit, wenn dieses Gerät
-   * selbst steuerbar ist — siehe `platform/localNode.ts`. Die Gegenseite hebt
-   * es auf, bis ihre Oberfläche danach fragt.
+   * Der eigene Steckbrief. Geht mit, wenn dieses Gerät selbst ein mögliches
+   * Ziel ist — siehe `platform/localNode.ts`. Die Gegenseite trägt ihn in ihre
+   * eigene Geräteliste ein; ein zweiter Aufruf dafür entfällt.
    */
-  back?: BackPairing
+  self?: DeviceProfile
+}
+
+/** Was die Gegenseite braucht, um dieses Gerät später zu erreichen. */
+export interface PairedBothWays {
+  device: Device
+  /**
+   * Der Ausweis der Gegenseite — `undefined`, wenn sie keinen mitgeschickt hat.
+   * Dann ist die Kopplung einseitig, und der Aufrufer sagt das.
+   */
+  peer?: { name: string; clientKey: string }
 }
 
 /**
@@ -83,6 +101,15 @@ export async function ensureClientKey(): Promise<ClientKeyPair> {
  * weiß, was schon in der Liste steht.
  */
 export async function pairWithAgent(target: PairTarget): Promise<Device> {
+  return (await pairBothWays(target)).device
+}
+
+/**
+ * Dasselbe, aber mit dem, was die Gegenseite für die Gegenrichtung mitgeschickt
+ * hat. Getrennt, weil die meisten Aufrufer nur das Gerät wollen — und weil ein
+ * Rückgabewert, den drei von vier Stellen wegwerfen, an keiner davon auffällt.
+ */
+export async function pairBothWays(target: PairTarget): Promise<PairedBothWays> {
   const key = await ensureClientKey()
   const base = `https://${target.host}:${target.port}`
 
@@ -93,6 +120,7 @@ export async function pairWithAgent(target: PairTarget): Promise<Device> {
       code: target.code.trim(),
       label: target.label.trim(),
       publicKey: key.publicKey,
+      ...(target.self === undefined ? {} : { self: target.self }),
     })
   } catch (cause) {
     throw new PairingError(describeFailure(cause, target.host), { cause })
@@ -104,7 +132,7 @@ export async function pairWithAgent(target: PairTarget): Promise<Device> {
   // `certificateFingerprint`. Ein `null` ist kein Fingerabdruck.
   const caFingerprint = certificateFingerprint(response.caFingerprint)
 
-  return {
+  const device: Device = {
     // Der Fingerabdruck des Agent-Schlüssels als Kennung: er bleibt gleich,
     // auch wenn der Rechner umbenannt wird oder eine andere Adresse bekommt.
     // Ein Waker hat keinen — dort tut es der Name, unter dem er erreichbar ist.
@@ -124,6 +152,15 @@ export async function pairWithAgent(target: PairTarget): Promise<Device> {
     // Jeder Agent kann seit Phase 14 Nachbarn wecken, ein Waker kann sonst
     // nichts. Ältere Agents melden das Feld nicht — dann eben nicht.
     canWake: response.canWake ?? false,
+  }
+
+  const clientKey = response.peer?.clientKey
+
+  return {
+    device,
+    ...(typeof clientKey === 'string' && clientKey.length > 0
+      ? { peer: { name: response.peer?.name ?? device.name, clientKey } }
+      : {}),
   }
 }
 

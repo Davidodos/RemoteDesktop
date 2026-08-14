@@ -72,21 +72,27 @@ public class AgentScopesTests
 }
 
 /// <summary>
-/// Das Angebot zur Gegenkopplung enthält einen gültigen Kopplungscode der
-/// anderen Seite. Es liegt unterhalb von <c>/api/pair</c> — und das ist
-/// absichtlich ohne Ausweis erreichbar, weil der Kopplungsaufruf die
-/// Berechtigung erst erzeugt. Ohne einen eigenen Eintrag käme es damit jedem im
-/// Netz zu.
+/// Die Wege der eigenen Oberfläche liegen unterhalb von <c>/api/pair</c> — und
+/// das ist absichtlich ohne Ausweis erreichbar, weil der Kopplungsaufruf die
+/// Berechtigung erst erzeugt. Ohne einen eigenen Eintrag käme jeder im Netz an
+/// einen Kopplungscode, könnte sich selbst eintragen lassen oder die Steckbriefe
+/// der gekoppelten Geräte abholen.
 /// </summary>
-public class PendingPairingReachabilityTests
+public class LocalOnlyReachabilityTests
 {
-    [Fact]
-    public void Das_Angebot_ist_nur_am_Rechner_selbst_zu_holen()
+    [Theory]
+    [InlineData("/api/pair/code")]
+    [InlineData("/api/pair/self")]
+    [InlineData("/api/pair/local")]
+    [InlineData("/api/pair/peers")]
+    [InlineData("/api/pair/grant")]
+    [InlineData("/api/clients")]
+    public void Nur_am_Rechner_selbst(string path)
     {
         var localOnly = typeof(ClientAuthMiddleware)
             .GetField("LocalOnly", BindingFlags.NonPublic | BindingFlags.Static)!
             .GetValue(null) as string[];
 
-        Assert.Contains("/api/pair/pending", localOnly!);
+        Assert.Contains(path, localOnly!);
     }
 }

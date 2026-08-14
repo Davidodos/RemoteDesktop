@@ -141,34 +141,69 @@ class HostPlugin : Plugin() {
     }
 
     /**
-     * Das eigene Angebot zur Gegenkopplung — geht mit, wenn dieses Handy sich
-     * bei einem anderen Gerät koppelt.
+     * Der eigene Steckbrief — er geht mit, wenn diese App ein anderes Gerät
+     * koppelt. Er hängt nicht daran, ob der Host gerade läuft: was er
+     * beschreibt, gilt, sobald er startet.
      */
     @PluginMethod
-    fun backOffer(call: PluginCall) {
-        val offer = HostRuntime.of(context).backOffer()
+    fun profile(call: PluginCall) {
+        val profile = HostRuntime.of(context).profile()
 
         call.resolve(
-            if (offer == null) {
-                JSObject().put("offer", JSONObject.NULL)
+            if (profile == null) {
+                JSObject().put("profile", JSONObject.NULL)
             } else {
-                JSObject().put("offer", JSObject.fromJSONObject(offer.toJson()))
+                JSObject().put("profile", JSObject.fromJSONObject(profile.toJson()))
             },
         )
     }
 
-    /** Was die Gegenseite hinterlassen hat. Einmalig: beim Lesen verbraucht. */
+    /**
+     * Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig: beim
+     * Lesen ist der Eingang leer, sonst käme ein Gerät, das jemand aus seiner
+     * Liste entfernt hat, von allein zurück.
+     */
     @PluginMethod
-    fun takePending(call: PluginCall) {
-        val offer = HostRuntime.of(context).takePending()
+    fun peers(call: PluginCall) {
+        val array = JSArray()
 
-        call.resolve(
-            if (offer == null) {
-                JSObject().put("pending", JSONObject.NULL)
-            } else {
-                JSObject().put("pending", JSObject.fromJSONObject(offer.toJson()))
-            },
-        )
+        HostRuntime.of(context).takePeers().forEach { array.put(it.toJson()) }
+
+        call.resolve(JSObject().put("peers", array))
+    }
+
+    /**
+     * Die Gegenrichtung eintragen: die Oberfläche der Gegenseite darf dieses
+     * Handy steuern. Ohne Code — der Schlüssel kam über eine Verbindung, an
+     * deren Anfang genau ein Code stand.
+     */
+    @PluginMethod
+    fun grant(call: PluginCall) {
+        val key = call.getString("publicKey")
+
+        if (key.isNullOrBlank() ||
+            !HostRuntime.of(context).grant(key, call.getString("label").orEmpty())
+        ) {
+            call.reject("Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel.")
+            return
+        }
+
+        call.resolve()
+    }
+
+    /**
+     * Den Ausweis dieser App hinterlegen. Ohne ihn bliebe jede Kopplung
+     * einseitig: die Gegenseite bekäme in der Antwort nichts, was sie in ihre
+     * eigene Liste eintragen könnte.
+     */
+    @PluginMethod
+    fun registerLocalClient(call: PluginCall) {
+        if (!HostRuntime.of(context).rememberLocalClient(call.getString("publicKey"))) {
+            call.reject("Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel.")
+            return
+        }
+
+        call.resolve()
     }
 
     @PluginMethod

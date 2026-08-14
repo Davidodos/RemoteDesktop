@@ -40,6 +40,8 @@ class HostServerTest {
     private lateinit var folder: File
     private lateinit var material: HostCertificate.Material
     private lateinit var server: HostServer
+    private lateinit var peers: PeerInbox
+    private lateinit var local: LocalClient
     private lateinit var trust: SSLContext
 
     private val client = KeyPairGenerator.getInstance("EC").apply {
@@ -56,6 +58,9 @@ class HostServerTest {
         val codes = PairingCodes()
         val sessions = SessionStore()
 
+        peers = PeerInbox(File(folder, "peers.json"))
+        local = LocalClient(File(folder, "localclient.json"))
+
         server = HostServer(
             identity = HostIdentity.loadOrCreate(File(folder, "hostkey.txt")),
             pairing = PairingService(clients, codes, ChallengeStore(), sessions),
@@ -66,6 +71,8 @@ class HostServerTest {
             port = 0,
             trustPort = 0,
             sessions = sessions,
+            peers = peers,
+            local = local,
             screen = { HostServer.Screen(1080, 2400) },
             address = { "127.0.0.1" },
         )
@@ -216,6 +223,83 @@ class HostServerTest {
     // ---- Hilfen -----------------------------------------------------------
 
     private fun publicKey(): String = Base64.getEncoder().encodeToString(client.public.encoded)
+
+    // ---- Die Kopplung geht immer in beide Richtungen ----------------------
+
+    @Test
+    fun `der Steckbrief des Anrufers landet im Eingang`() {
+        val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
+
+        val answer = JSONObject(
+            post(
+                "/api/pair",
+                JSONObject()
+                    .put("code", code)
+                    .put("label", "Laptop")
+                    .put("publicKey", publicKey())
+                    .put(
+                        "self",
+                        JSONObject()
+                            .put("host", "192.168.178.33")
+                            .put("port", 8443)
+                            .put("name", "Arbeitsrechner")
+                            .put("agentFingerprint", "b".repeat(16)),
+                    )
+                    .toString(),
+            ).second,
+        )
+
+        assertEquals(200, answer.optInt("port", 200))
+
+        val peer = peers.takeAll().single()
+
+        assertEquals("192.168.178.33", peer.host)
+        assertEquals("Arbeitsrechner", peer.name)
+    }
+
+    @Test
+    fun `die Antwort traegt den Ausweis dieser App zurueck`() {
+        local.remember(publicKey())
+
+        val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
+
+        val answer = JSONObject(
+            post(
+                "/api/pair",
+                JSONObject()
+                    .put("code", code)
+                    .put("label", "Laptop")
+                    .put("publicKey", publicKey())
+                    .toString(),
+            ).second,
+        )
+
+        // Ohne dieses Feld bliebe die Kopplung einseitig: die Gegenseite hätte
+        // nichts, was sie in ihre eigene clients.json eintragen könnte.
+        assertEquals(publicKey(), answer.getJSONObject("peer").getString("clientKey"))
+        assertEquals("Pixel", answer.getJSONObject("peer").getString("name"))
+    }
+
+    @Test
+    fun `ein unbrauchbarer Steckbrief kostet die Kopplung nicht`() {
+        val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
+
+        val (status, body) = post(
+            "/api/pair",
+            JSONObject()
+                .put("code", code)
+                .put("label", "Laptop")
+                .put("publicKey", publicKey())
+                // Ohne Port beschreibt der Steckbrief nichts. Die Kopplung
+                // selbst gelingt trotzdem — nur eben in eine Richtung.
+                .put("self", JSONObject().put("host", "192.168.178.33"))
+                .toString(),
+        )
+
+        assertEquals(200, status)
+        assertEquals(true, JSONObject(body).has("clientId"))
+        assertEquals(0, peers.takeAll().size)
+    }
 
     private fun pairAndOpenSession(): String {
         val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")

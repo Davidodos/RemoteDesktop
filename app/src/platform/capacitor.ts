@@ -2,7 +2,7 @@ import type { SurfaceBoard } from '../lib/surfaceBoard.ts'
 import { findLatestApk, isDifferentVersion } from './appUpdate.ts'
 import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
-import { noHost, noLocalNode, noTrust, usableOffer } from './index.ts'
+import { noHost, noLocalNode, noTrust, usableProfile } from './index.ts'
 import type {
   HostClient,
   HostPairingCode,
@@ -110,8 +110,10 @@ interface HostPlugin {
   enableScreen(): Promise<HostStatus>
   disableScreen(): Promise<HostStatus>
   openInputSettings(): Promise<void>
-  backOffer(): Promise<{ offer?: unknown }>
-  takePending(): Promise<{ pending?: unknown }>
+  profile(): Promise<{ profile?: unknown }>
+  peers(): Promise<{ peers?: unknown }>
+  grant(options: { publicKey: string; label: string }): Promise<void>
+  registerLocalClient(options: { publicKey: string }): Promise<void>
   clients(): Promise<{ clients: HostClient[] }>
   revoke(options: { id: string }): Promise<void>
 }
@@ -396,19 +398,38 @@ export function capacitorPlatform(
 }
 
 /**
- * Dieses Handy als Gegenstelle. Läuft der Host nicht, gibt es nichts
- * anzubieten — dann bleibt es bei der einen Richtung, und das ist kein Fehler.
+ * Dieses Handy als Gegenstelle.
+ *
+ * Ob der Host gerade läuft, spielt hier keine Rolle: der Steckbrief beschreibt,
+ * wie dieses Handy erreichbar wäre, und ein Eintrag in einer Datei wirkt,
+ * sobald der Server startet. Genau daran scheiterte der Vorgänger.
  */
 function localNode(plugins: CapacitorPlugins): LocalNode {
   const plugin = plugins.host
 
-  if (plugin === undefined || typeof plugin.backOffer !== 'function') {
+  // Eine ältere APK kennt die vier Methoden nicht. Dann bleibt es bei der einen
+  // Richtung, statt an einem Aufruf ins Leere zu scheitern.
+  if (plugin === undefined || typeof plugin.profile !== 'function') {
     return noLocalNode
   }
 
   return {
-    offer: async () => usableOffer((await plugin.backOffer()).offer),
-    take: async () => usableOffer((await plugin.takePending()).pending),
+    profile: async () => usableProfile((await plugin.profile()).profile),
+
+    peers: async () => {
+      const { peers } = await plugin.peers()
+
+      return Array.isArray(peers)
+        ? peers.flatMap((entry) => {
+            const profile = usableProfile(entry)
+
+            return profile === undefined ? [] : [profile]
+          })
+        : []
+    },
+
+    grant: (publicKey, label) => plugin.grant({ publicKey, label }),
+    register: (publicKey) => plugin.registerLocalClient({ publicKey }),
   }
 }
 

@@ -36,6 +36,39 @@ public class PairingServiceTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    // ---- Die Gegenrichtung ------------------------------------------------
+
+    [Fact]
+    public void Die_Gegenrichtung_kommt_ohne_Code_herein()
+    {
+        // Kein Widerspruch zum Code auf dem Bildschirm: dieser Weg ist nur vom
+        // Rechner selbst erreichbar, und der Schlüssel kam über eine Verbindung,
+        // an deren Anfang genau dieser Code stand.
+        Assert.True(_pairing.Grant(_client.PublicKey, "Handy"));
+
+        var granted = Assert.Single(_pairing.ListClients());
+
+        Assert.Equal("Handy", granted.Label);
+        Assert.Equal(AgentScopes.All, granted.Scopes);
+    }
+
+    [Fact]
+    public void Ohne_brauchbaren_Schluessel_wird_niemand_eingetragen()
+    {
+        Assert.False(_pairing.Grant("kein Schlüssel", "Handy"));
+        Assert.Empty(_pairing.ListClients());
+    }
+
+    [Fact]
+    public void Ohne_Namen_steht_wenigstens_etwas_da()
+    {
+        // Ein leerer Eintrag in „wer darf" ließe sich später niemandem
+        // zuordnen — und Widerrufen heißt, den richtigen zu finden.
+        Assert.True(_pairing.Grant(_client.PublicKey, "   "));
+
+        Assert.Equal("Gekoppeltes Gerät", Assert.Single(_pairing.ListClients()).Label);
+    }
+
     // ---- Kopplung ---------------------------------------------------------
 
     [Fact]

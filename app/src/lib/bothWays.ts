@@ -1,0 +1,166 @@
+import { clientFingerprint } from './clientKey.ts'
+import { ensureClientKey } from './pairing.ts'
+import { TRUST_PORT } from './certificateTrust.ts'
+import { saveLocalDevice } from './deviceSources.ts'
+import { getPlatform } from '../platform/index.ts'
+import type { DeviceProfile } from '../platform/index.ts'
+import type { Device } from './types.ts'
+
+/**
+ * Die Kopplung geht immer in beide Richtungen — und beide Hälften stehen hier.
+ *
+ * <p>
+ * **Kein Netzverkehr mehr.** Beim Koppeln haben beide Seiten ausgetauscht, was
+ * sie voneinander brauchen: die Anfrage trug den Steckbrief des Anrufers, die
+ * Antwort den Ausweis der Gegenseite. Was danach zu tun ist, erledigt jede Seite
+ * bei sich zu Hause — der Schlüssel der anderen in die eigene `clients.json`,
+ * ihr Steckbrief in die eigene Geräteliste.
+ * </p>
+ *
+ * <p>
+ * **Der Vorgänger reichte stattdessen einen Kopplungscode weiter**, den die
+ * Gegenseite binnen fünf Minuten einlösen musste. Damit hing die Gegenrichtung
+ * an einem laufenden Server, einem offenen Fenster und einer Uhr — und wer beim
+ * Koppeln die Freigabe nicht eingeschaltet hatte, bekam sie nie, auch später
+ * nicht. Ein Steckbrief hat keine Frist: er wirkt, sobald der Server startet.
+ * </p>
+ */
+
+/**
+ * Hinterlegt den eigenen Ausweis beim eigenen Agent.
+ *
+ * Beim Start, und deshalb still: ohne einen Agent nebenan gibt es hier nichts zu
+ * tun, und das ist der Normalfall im Browser. Ohne ihn bliebe allerdings jede
+ * Kopplung einseitig — die Gegenseite bekäme in der Antwort nichts, was sie in
+ * ihre eigene Liste eintragen könnte.
+ */
+export async function announceSelf(): Promise<void> {
+  const key = await ensureClientKey()
+
+  await getPlatform().node.register(key.publicKey).catch(() => undefined)
+}
+
+/**
+ * Trägt die Gegenseite bei sich ein: ihre Oberfläche darf dieses Gerät steuern.
+ *
+ * Ohne Rückfrage. Der Schlüssel kam über eine Verbindung, an deren Anfang jemand
+ * einen Code eingetippt oder einen QR-Code gescannt hat — dieselbe Entscheidung
+ * ein zweites Mal zu verlangen wäre keine Sicherheit, sondern eine Zumutung.
+ *
+ * @returns Ein Satz, wenn es nicht geklappt hat. Ein Fehlschlag, der still
+ *   bleibt, sieht genauso aus wie eine Gegenrichtung, die nie angeboten wurde —
+ *   und danach sucht niemand mehr.
+ */
+export async function grantPeer(
+  peer: { name: string; clientKey: string } | undefined,
+): Promise<string | undefined> {
+  const node = getPlatform().node
+
+  // Kein Ziel, keine Gegenrichtung — im Browser ist das der Normalfall und
+  // kein Fehler.
+  if (peer === undefined || (await node.profile()) === undefined) {
+    return undefined
+  }
+
+  try {
+    await node.grant(peer.clientKey, peer.name)
+
+    return undefined
+  } catch (failure) {
+    return `${peer.name} kann dieses Gerät noch nicht steuern: ${
+      failure instanceof Error ? failure.message : String(failure)
+    }`
+  }
+}
+
+/**
+ * Holt die Steckbriefe ab, die beim Koppeln hier abgegeben wurden, und nimmt sie
+ * in die Geräteliste auf.
+ *
+ * <p>
+ * Einmalig und ohne Takt: der Eingang liegt auf Platte und hat keine Frist.
+ * Vorher sah die App alle fünf Sekunden nach, weil der Code darin ablief — wer
+ * das Fenster später öffnete, fand nichts mehr vor. Jetzt genügt es, beim Start
+ * und beim Öffnen der Geräteliste nachzusehen.
+ * </p>
+ *
+ * @returns Die neue Liste, oder `undefined`, wenn es nichts abzuholen gab.
+ */
+export async function collectPeers(): Promise<Device[] | undefined> {
+  const found = await getPlatform().node.peers()
+
+  if (found.length === 0) {
+    return undefined
+  }
+
+  // Die eigene Kennung wird ausgerechnet, nicht erfragt: bei der Gegenrichtung
+  // findet kein Kopplungsaufruf statt, aus dem sie zurückkäme. Beide
+  // Gegenstellen bilden sie aus demselben Schlüssel auf dieselbe Weise.
+  const clientId = await clientFingerprint((await ensureClientKey()).publicKey)
+
+  let devices: Device[] | undefined
+
+  for (const peer of found) {
+    await trust(peer)
+
+    devices = saveLocalDevice(toDevice(peer, clientId))
+  }
+
+  return devices
+}
+
+/**
+ * Der Stelle der Gegenseite vertrauen.
+ *
+ * Ohne das steht sie zwar in der Liste, ließe sich aber nicht verbinden — und
+ * die Meldung darüber sieht aus wie ein Gerät, das nicht antwortet. Der
+ * Fingerabdruck kam über die Kopplung mit; verglichen wird gegen ihn, damit
+ * hier nicht irgendein Zertifikat vom offenen Port eingesammelt wird.
+ *
+ * Fehlschläge bleiben folgenlos: das Gerät kommt trotzdem in die Liste. Ist es
+ * gerade nicht erreichbar, ist das kein Grund, es zu vergessen.
+ */
+async function trust(peer: DeviceProfile): Promise<void> {
+  const platform = getPlatform()
+
+  if (peer.caFingerprint === undefined || !platform.trust.available) {
+    return
+  }
+
+  try {
+    const certificate = await platform.trust.fetchAuthority?.(peer.host, TRUST_PORT)
+
+    if (certificate !== undefined && certificate.fingerprint === peer.caFingerprint) {
+      await platform.trust.install(certificate.base64, certificate.fingerprint)
+    }
+  } catch {
+    // Siehe oben.
+  }
+}
+
+/**
+ * Aus einem Steckbrief wird ein Gerät.
+ *
+ * Die Kennung ist der Fingerabdruck des Agents — er bleibt gleich, auch wenn
+ * Name oder Adresse wechseln. Fehlt er, tut es die Adresse; dasselbe tut die
+ * Kopplung auf dem gewöhnlichen Weg.
+ *
+ * `clientId` ist der eigene Ausweis: unter dieser Kennung steht dieses Gerät in
+ * der `clients.json` der Gegenseite. Ohne sie käme die App bis zur ersten
+ * Anfrage und stünde dann vor einem 401, das wie ein Fehler der Gegenstelle
+ * aussieht — und `parseDevices` wirft einen Eintrag ohne Ausweis ohnehin weg.
+ */
+function toDevice(peer: DeviceProfile, clientId: string): Device {
+  return {
+    id: peer.agentFingerprint ?? peer.host,
+    clientId,
+    name: peer.name,
+    host: peer.host,
+    port: peer.port,
+    ...(peer.agentFingerprint === undefined ? {} : { fingerprint: peer.agentFingerprint }),
+    ...(peer.caFingerprint === undefined ? {} : { caFingerprint: peer.caFingerprint }),
+    // Ein Handy weckt niemanden, und ein Rechner, den man selbst gekoppelt hat,
+    // wird über seinen eigenen Eintrag geweckt — nicht über diesen.
+    canWake: false,
+  }
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AgentClient } from '../lib/agentClient.ts'
 import { deviceLabel } from '../lib/deviceNames.ts'
+import { collectPeers } from '../lib/bothWays.ts'
 import { forgetLocalDevice, renameLocalDevice } from '../lib/deviceSources.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
@@ -53,9 +54,45 @@ export function DeviceListView({
   onSettings,
 }: Props): React.JSX.Element {
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
+
   const [waking, setWaking] = useState<string | undefined>(undefined)
   const [hinweis, setHinweis] = useState<string | undefined>(undefined)
   const [managed, setManaged] = useState<string | undefined>(undefined)
+
+  /**
+   * Beim Öffnen nachsehen, ob sich jemand hier gekoppelt hat.
+   *
+   * Eine Kopplung geht immer in beide Richtungen; wer sich an diesem Gerät
+   * koppelt, hinterlässt dabei seinen Steckbrief. Der liegt auf Platte und hat
+   * keine Frist — der Weg hierher ist deshalb kein Takt, sondern genau die
+   * Stelle, an der jemand nachschaut, ob das Gerät schon da ist.
+   */
+  useEffect(() => {
+    let alive = true
+
+    void collectPeers().then(
+      (all) => {
+        if (all !== undefined && alive) {
+          onDevices(all)
+        }
+      },
+      (failure: unknown) => {
+        if (alive) {
+          onError(
+            'Gekoppelte Geräte ließen sich nicht übernehmen: ' +
+              (failure instanceof Error ? failure.message : String(failure)),
+          )
+        }
+      },
+    )
+
+    return () => {
+      alive = false
+    }
+    // Genau einmal beim Öffnen. `onDevices` wechselt bei jedem Rendern des
+    // Aufrufers die Kennung und ist als Abhängigkeit eine Endlosschleife.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /**
    * Wer antwortet, fragt die App selbst — es gibt keinen Hub mehr, der das

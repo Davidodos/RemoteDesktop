@@ -112,9 +112,11 @@ builder.Services.AddSingleton(new ClientStore(settings.ClientsPath));
 builder.Services.AddSingleton<PairingCodes>();
 builder.Services.AddSingleton<ChallengeStore>();
 
-// Angebote zur Gegenkopplung. Sie liegen hier, bis die Oberfläche dieses
-// Rechners sie abholt — einlösen kann sie nur, wer den Geräteschlüssel hält.
-builder.Services.AddSingleton<PendingPairings>();
+// Die Gegenrichtung einer Kopplung. Der Steckbrief der Gegenseite liegt im
+// Eingang, bis das Fenster ihn abholt; der Ausweis des Fensters liegt hier,
+// damit er beim Koppeln mitgehen kann. Beides ohne Frist und ohne Netzaufruf.
+builder.Services.AddSingleton(new PeerInbox(settings.PeersPath));
+builder.Services.AddSingleton(new LocalClient(settings.LocalClientPath));
 builder.Services.AddSingleton<SessionStore>();
 
 // Wer gerade Bild oder Eingabe offen hält. Ohne diese Liste überlebte eine
@@ -556,6 +558,8 @@ internal sealed record AgentSettings(
     string FfmpegPath,
     string ClientsPath,
     string IdentityPath,
+    string PeersPath,
+    string LocalClientPath,
     string ActionsPath,
     string BroadcastAddress,
     string UpdateRepository)
@@ -604,6 +608,12 @@ internal sealed record AgentSettings(
         // und bleiben neben der actions.example.json liegen.
         var clientsPath = Resolve(configuration["Agent:ClientsPath"], dataDirectory, "clients.json");
         var identityPath = Resolve(configuration["Agent:IdentityPath"], dataDirectory, "agentkey.txt");
+
+        // Die beiden Hälften der Gegenrichtung. Nicht konfigurierbar: sie sind
+        // Zustand und kein Einstellungspunkt, und wo Zustand liegt, steht in
+        // AgentPaths.
+        var peersPath = Path.Combine(dataDirectory, "peers.json");
+        var localClientPath = Path.Combine(dataDirectory, "localclient.json");
         var actionsPath = Resolve(
             configuration["Agent:ActionsPath"], AppContext.BaseDirectory, "actions.json");
 
@@ -612,8 +622,8 @@ internal sealed record AgentSettings(
 
         return new AgentSettings(
             token, port, trustPort, certificatePath, keyPath, dataDirectory, networkConfigPath,
-            ffmpegPath, clientsPath, identityPath, actionsPath, broadcastAddress,
-            updateRepository);
+            ffmpegPath, clientsPath, identityPath, peersPath, localClientPath, actionsPath,
+            broadcastAddress, updateRepository);
     }
 
     /// <summary>

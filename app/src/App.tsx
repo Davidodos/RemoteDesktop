@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
-import { completeBackPairing } from './lib/backPairing.ts'
+import { announceSelf, collectPeers } from './lib/bothWays.ts'
 import { capabilitiesOf } from './lib/capabilities.ts'
 import { deviceLabel } from './lib/deviceNames.ts'
 import { collectDevices, localDeviceSource, saveLocalDevice } from './lib/deviceSources.ts'
@@ -27,9 +27,6 @@ import { Sidebar, pageAvailable, type Page } from './views/Sidebar.tsx'
 import { TouchpadView } from './views/TouchpadView.tsx'
 import { MenuIcon } from './views/icons.tsx'
 
-/** Wie oft nach einer angebotenen Gegenkopplung gesehen wird. */
-const BACK_PAIRING_INTERVAL_MS = 5000
-
 export function App(): React.JSX.Element {
   const [devices, setDevices] = useState<Device[]>([])
   const [selected, setSelected] = useState<Device | undefined>(undefined)
@@ -46,9 +43,6 @@ export function App(): React.JSX.Element {
   const [info, setInfo] = useState<AgentInfo | undefined>(undefined)
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
-
-  /** Zuletzt gemeldeter Fehlschlag der Gegenkopplung — er wiederholt sich sonst im Takt. */
-  const reported = useRef<string | undefined>(undefined)
 
   /**
    * Die Liste hat sich geändert — umbenannt oder entfernt.
@@ -82,48 +76,48 @@ export function App(): React.JSX.Element {
   }, [])
 
   /**
-   * Nachsehen, ob die Gegenseite eine Gegenkopplung hinterlassen hat.
+   * Die andere Richtung, beim Start.
    *
-   * Beim Start und danach im Takt: wer am anderen Gerät koppelt, hat dieses
-   * hier meist gerade in der Hand — die Wartezeit soll Sekunden betragen und
-   * nicht bis zum nächsten Start dauern.
+   * <p>
+   * Zweierlei: der eigene Ausweis geht an den Agent nebenan, damit er beim
+   * Koppeln mitgehen kann — und die Steckbriefe, die andere hier abgegeben
+   * haben, kommen in die Liste.
+   * </p>
    *
-   * Ein Fehlschlag wird gemeldet, aber nur einmal je Fehlerbild. Er still
-   * abzufangen war die naheliegende Wahl — das Angebot ist ja eine Zugabe —
-   * und die falsche: eine Gegenkopplung, die stumm scheitert, sieht genauso
-   * aus wie eine, die nie angeboten wurde. Danach sucht niemand mehr.
+   * <p>
+   * Ohne Takt. Vorher sah die App alle fünf Sekunden nach, weil in einem
+   * Angebot ein Kopplungscode stand, der nach fünf Minuten verfiel — wer das
+   * Fenster später öffnete, fand nichts mehr vor. Ein Steckbrief liegt auf
+   * Platte und hat keine Frist; einmal beim Start genügt, und die Geräteliste
+   * sieht beim Öffnen noch einmal nach.
+   * </p>
    */
   useEffect(() => {
     let current = true
 
-    const look = (): void => {
-      void completeBackPairing().then(
-        (all) => {
-          if (all !== undefined && current) {
-            setDevices(all)
-          }
-        },
-        (failure: unknown) => {
-          // Sichtbar, aber nur einmal je Fehlerbild: eine Gegenkopplung, die
-          // still scheitert, sieht genauso aus wie eine, die nie angeboten
-          // wurde — und danach sucht niemand mehr.
-          const message = failure instanceof Error ? failure.message : String(failure)
+    void announceSelf()
 
-          if (current && message !== reported.current) {
-            reported.current = message
-            setError(`Die Gegenkopplung ist nicht zustande gekommen: ${message}`)
-          }
-        },
-      )
-    }
-
-    look()
-
-    const timer = window.setInterval(look, BACK_PAIRING_INTERVAL_MS)
+    void collectPeers().then(
+      (all) => {
+        if (all !== undefined && current) {
+          setDevices(all)
+        }
+      },
+      (failure: unknown) => {
+        // Sichtbar. Es still abzufangen war die naheliegende Wahl — es ist ja
+        // eine Zugabe — und die falsche: eine Gegenrichtung, die stumm
+        // scheitert, sieht genauso aus wie eine, die nie angeboten wurde.
+        if (current) {
+          setError(
+            'Gekoppelte Geräte ließen sich nicht übernehmen: ' +
+              (failure instanceof Error ? failure.message : String(failure)),
+          )
+        }
+      },
+    )
 
     return () => {
       current = false
-      window.clearInterval(timer)
     }
   }, [])
 
@@ -314,9 +308,10 @@ export function App(): React.JSX.Element {
     return (
       <PairingView
         onCancel={() => setPairing(false)}
-        onPaired={(all, paired) => {
+        onPaired={(all, paired, warnung) => {
           setDevices(all)
           setPairing(false)
+          setError(warnung)
 
           // Der Name kommt aus `/api/info` des frisch gekoppelten Agents —
           // eine zweite Anfrage braucht es hier nicht.

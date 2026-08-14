@@ -29,7 +29,12 @@ class HostServer(
     private val port: Int = DEFAULT_PORT,
     private val trustPort: Int = DEFAULT_TRUST_PORT,
     private val sessions: SessionStore,
-    private val pending: PendingPairings = PendingPairings(),
+    /**
+     * Der Posteingang für Steckbriefe und der Ausweis der eigenen App — die
+     * beiden Hälften der Gegenrichtung. Siehe [DeviceProfile].
+     */
+    private val peers: PeerInbox,
+    private val local: LocalClient,
     private val screen: () -> Screen,
     private val address: () -> String?,
     /**
@@ -85,9 +90,6 @@ class HostServer(
         secure.start()
         plain.start()
     }
-
-    /** Das Angebot der Gegenseite, einmalig. Siehe [PendingPairings]. */
-    fun takePending(): BackPairing? = pending.take()
 
     fun stop() {
         secure.stop()
@@ -364,11 +366,14 @@ class HostServer(
             return HttpServer.Response.error(400, describe(result.outcome))
         }
 
-        // Die Gegenkopplung: die andere Seite legt ihre eigene Adresse und einen
-        // frischen Code ihres Agents bei. Aufgehoben wird das erst **nach**
-        // bestandener Kopplung — vorher wäre es ein Weg, jedem Gerät ein
-        // Angebot unterzuschieben, indem man Codes rät.
-        PendingPairings.sanitize(body.optJSONObject("back"))?.let(pending::offer)
+        // Der Steckbrief des Anrufers. Angenommen wird er erst **nach**
+        // bestandener Kopplung — vorher wäre es ein Weg, jedem Gerät ein Gerät
+        // in die Liste zu schreiben, indem man Codes rät.
+        //
+        // Nur der Steckbrief wandert in den Eingang. Den Schlüssel der
+        // Gegenseite hat dieser Host schon: es ist derselbe, mit dem sie sich
+        // gerade gekoppelt hat.
+        DeviceProfile.sanitize(body.optJSONObject("self"))?.let(peers::add)
 
         val json = JSONObject()
             .put("clientId", client.id)
@@ -377,6 +382,15 @@ class HostServer(
             .put("agentPublicKey", identity.publicKey)
             .put("agentFingerprint", identity.fingerprint)
             .put("caFingerprint", material.fingerprint)
+            // Dasselbe zurück: der Ausweis der App dieses Handys. Damit trägt
+            // die Gegenseite die andere Richtung bei sich ein, ohne noch einmal
+            // ins Netz zu gehen.
+            .put(
+                "peer",
+                JSONObject()
+                    .put("name", deviceName)
+                    .put("clientKey", local.publicKey),
+            )
 
         return HttpServer.Response.json(200, json.toString())
     }

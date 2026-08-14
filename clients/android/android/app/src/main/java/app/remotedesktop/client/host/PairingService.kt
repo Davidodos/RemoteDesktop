@@ -37,9 +37,6 @@ class PairingService(
     private val now: Clock = System::currentTimeMillis,
 ) {
 
-    private companion object {
-        const val MAX_LABEL_LENGTH = 64
-    }
 
     /**
      * Nimmt einen Client auf, der den angezeigten Code richtig eingetippt hat.
@@ -133,15 +130,63 @@ class PairingService(
         return clients.revoke(clientId)
     }
 
-    fun listClients(): List<PairedClient> = clients.list()
+    /**
+     * Nimmt die Oberfläche der Gegenseite auf — ohne Code.
+     *
+     * Das ist die Gegenrichtung einer Kopplung, die gerade in die eine Richtung
+     * bestanden wurde. Ein zweiter Code wäre kein Gewinn an Sicherheit: der
+     * Schlüssel kam über dieselbe beglaubigte Verbindung, an deren Anfang jemand
+     * einen Code eingetippt oder einen QR-Code gescannt hat. Deshalb ist dieser
+     * Weg auch nur der App selbst zugänglich und steht nirgends im Netz.
+     *
+     * @return `false`, wenn der Schlüssel keiner ist.
+     */
+    fun grant(publicKey: String, label: String): Boolean {
+        if (!isUsablePublicKey(publicKey)) {
+            return false
+        }
 
-    private fun isUsablePublicKey(publicKey: String): Boolean = runCatching {
-        val key = KeyFactory.getInstance("EC").generatePublic(
-            X509EncodedKeySpec(Base64.getDecoder().decode(publicKey)),
+        val trimmed = label.trim()
+        val at = now()
+
+        clients.add(
+            PairedClient(
+                id = shortFingerprint(Base64.getDecoder().decode(publicKey)),
+                label = if (trimmed.isNotEmpty() && trimmed.length <= MAX_LABEL_LENGTH) {
+                    trimmed
+                } else {
+                    "Gekoppeltes Gerät"
+                },
+                publicKey = publicKey,
+                scopes = HostScopes.ALL,
+                createdAt = at,
+                lastSeenAt = at,
+            ),
         )
 
-        // Nur P-256 wird angenommen. Eine andere Kurve wäre kein Angriff, aber
-        // ein Fall, den nie jemand getestet hat.
-        (key as? ECPublicKey)?.params?.curve?.field?.fieldSize == 256
-    }.getOrDefault(false)
+        return true
+    }
+
+    fun listClients(): List<PairedClient> = clients.list()
+
+    companion object {
+
+        private const val MAX_LABEL_LENGTH = 64
+
+        /**
+         * Ob das ein Schlüssel ist, mit dem dieser Host etwas anfangen kann.
+         * Öffentlich, weil derselbe Test auch für den Steckbrief der Gegenseite
+         * gilt — zwei Fassungen davon wären zwei Gelegenheiten, verschieden
+         * streng zu sein.
+         */
+        fun isUsablePublicKey(publicKey: String): Boolean = runCatching {
+            val key = KeyFactory.getInstance("EC").generatePublic(
+                X509EncodedKeySpec(Base64.getDecoder().decode(publicKey)),
+            )
+
+            // Nur P-256 wird angenommen. Eine andere Kurve wäre kein Angriff,
+            // aber ein Fall, den nie jemand getestet hat.
+            (key as? ECPublicKey)?.params?.curve?.field?.fieldSize == 256
+        }.getOrDefault(false)
+    }
 }

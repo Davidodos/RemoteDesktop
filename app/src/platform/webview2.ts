@@ -1,6 +1,6 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
-import { noHost, usableOffer } from './index.ts'
+import { noHost, usableProfile } from './index.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
@@ -9,7 +9,7 @@ import type {
   Platform,
   QrScanner,
   SecretStore,
-  BackPairing,
+  DeviceProfile,
   LocalNode,
   TrustService,
   UpdateInfo,
@@ -165,11 +165,28 @@ const windowTrust: TrustService = {
  * fragen zu können.
  */
 const windowNode: LocalNode = {
-  offer: async (): Promise<BackPairing | undefined> =>
-    usableOffer((await ask<{ offer?: unknown }>({ kind: 'local-offer' })).offer),
+  profile: async (): Promise<DeviceProfile | undefined> =>
+    usableProfile((await ask<{ profile?: unknown }>({ kind: 'local-self' })).profile),
 
-  take: async (): Promise<BackPairing | undefined> =>
-    usableOffer((await ask<{ pending?: unknown }>({ kind: 'local-pending' })).pending),
+  peers: async (): Promise<DeviceProfile[]> => {
+    const { peers } = await ask<{ peers?: unknown }>({ kind: 'local-peers' })
+
+    return Array.isArray(peers)
+      ? peers.flatMap((entry) => {
+          const profile = usableProfile(entry)
+
+          return profile === undefined ? [] : [profile]
+        })
+      : []
+  },
+
+  grant: async (publicKey: string, label: string): Promise<void> => {
+    await ask({ kind: 'local-grant', publicKey, label })
+  },
+
+  register: async (publicKey: string): Promise<void> => {
+    await ask({ kind: 'local-register', publicKey })
+  },
 }
 
 /** Ob die App gerade im Windows-Fenster läuft. */

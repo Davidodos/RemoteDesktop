@@ -105,6 +105,40 @@ public sealed class PairingService
         return new PairResult(PairOutcome.Ok, client);
     }
 
+    /// <summary>
+    /// Nimmt die Oberfläche der Gegenseite auf — ohne Code.
+    ///
+    /// <para>
+    /// Das ist die Gegenrichtung einer Kopplung, die gerade in die eine
+    /// Richtung bestanden wurde. Ein zweiter Code wäre kein Gewinn an
+    /// Sicherheit: der Schlüssel kam über dieselbe beglaubigte Verbindung, an
+    /// deren Anfang jemand einen Code eingetippt oder einen QR-Code gescannt
+    /// hat. Deshalb ist dieser Weg auch **nur vom Rechner selbst** erreichbar —
+    /// er wird von der eigenen Oberfläche gegangen, nie über das Netz.
+    /// </para>
+    /// </summary>
+    /// <returns><c>false</c>, wenn der Schlüssel keiner ist.</returns>
+    public bool Grant(string publicKey, string label)
+    {
+        if (!IsUsablePublicKey(publicKey))
+        {
+            return false;
+        }
+
+        var trimmed = label.Trim();
+        var now = _time.GetUtcNow();
+
+        _clients.Add(new PairedClient(
+            FingerprintOf(publicKey),
+            trimmed.Length is > 0 and <= MaxLabelLength ? trimmed : "Gekoppeltes Gerät",
+            publicKey,
+            [.. AgentScopes.All],
+            now,
+            now));
+
+        return true;
+    }
+
     /// <returns>Die Challenge, oder <c>null</c> bei unbekanntem Client.</returns>
     public string? Challenge(string clientId) =>
         _clients.Find(clientId) is null ? null : _challenges.Issue(clientId);
@@ -151,7 +185,13 @@ public sealed class PairingService
 
     public IReadOnlyList<PairedClient> ListClients() => _clients.List();
 
-    private static bool IsUsablePublicKey(string publicKey)
+    /// <summary>
+    /// Ob das ein Schlüssel ist, mit dem dieser Agent etwas anfangen kann.
+    /// Öffentlich, weil derselbe Test auch für den Steckbrief der Gegenseite
+    /// gilt — zwei Fassungen davon wären zwei Gelegenheiten, verschieden streng
+    /// zu sein.
+    /// </summary>
+    public static bool IsUsablePublicKey(string publicKey)
     {
         try
         {

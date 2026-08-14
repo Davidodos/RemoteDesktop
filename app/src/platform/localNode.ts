@@ -1,68 +1,116 @@
 /**
  * Das eigene Gerät als Gegenstelle.
  *
- * Wer koppelt, richtet damit nur eine Richtung ein: sein Schlüssel liegt danach
- * beim anderen. Für die Gegenrichtung braucht der andere einen Kopplungscode
- * von **hier** — und den kann nur diese Seite ausstellen.
+ * <p>
+ * **Eine Kopplung geht immer in beide Richtungen.** Wer koppelt, richtet damit
+ * nicht nur eine Richtung ein: beide Seiten tauschen beim Koppeln aus, was sie
+ * voneinander brauchen — in einem Aufruf, ohne zweiten Weg. Was danach zu tun
+ * ist, erledigt jede Seite bei sich zu Hause, und dafür steht diese
+ * Schnittstelle.
+ * </p>
  *
- * Beide Wege laufen nativ und nicht über HTTP: der eigene Agent weist sich mit
- * einem selbst ausgestellten Zertifikat aus, und die Seite müsste ihm erst
- * vertrauen, um ihn nach dem Vertrauen fragen zu können. Am Handy führt der Weg
- * über das Plugin, im Fenster über die Brücke zur Wirtsanwendung.
+ * <p>
+ * **Der Vorgänger machte es andersherum**, und das war der Fehler: er reichte
+ * einen Kopplungscode weiter, den die Gegenseite binnen fünf Minuten einlösen
+ * musste. Damit hing die Gegenrichtung an einem laufenden Server, einem offenen
+ * Fenster und einer Uhr — wer beim Koppeln die Freigabe nicht eingeschaltet
+ * hatte, bekam sie nie.
+ * </p>
+ *
+ * <p>
+ * Alle vier Wege laufen nativ und nicht über HTTP: der eigene Agent weist sich
+ * mit einem selbst ausgestellten Zertifikat aus, und die Seite müsste ihm erst
+ * vertrauen, um ihn überhaupt fragen zu können. Am Handy führt der Weg über das
+ * Plugin, im Fenster über die Brücke zur Wirtsanwendung.
+ * </p>
  */
 export interface LocalNode {
   /**
-   * Was die Gegenseite braucht, um sich hier zu melden — Adresse, Port, ein
-   * frischer Code und der eigene Fingerabdruck.
+   * Der eigene Steckbrief — er geht mit, wenn dieses Gerät ein anderes koppelt.
    *
-   * `undefined` heißt: dieses Gerät ist nicht steuerbar (kein Agent, kein
-   * eingeschalteter Host). Dann bleibt es bei der einen Richtung, und das ist
-   * kein Fehler.
+   * `undefined` heißt: dieses Gerät ist kein mögliches Ziel (kein Agent, keine
+   * Adresse). Dann bleibt es bei der einen Richtung, und das ist kein Fehler.
+   * Ob der Host gerade *läuft*, spielt ausdrücklich keine Rolle: der Steckbrief
+   * beschreibt, wie dieses Gerät erreichbar wäre, und ein Eintrag in einer Datei
+   * wirkt, sobald der Server startet.
    */
-  offer(): Promise<BackPairing | undefined>
+  profile(): Promise<DeviceProfile | undefined>
 
   /**
-   * Das Angebot, das die Gegenseite beim Koppeln hinterlassen hat. Einmalig:
-   * beim Lesen verbraucht.
+   * Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig: beim
+   * Lesen ist der Eingang leer. Sonst käme ein Gerät, das jemand aus seiner
+   * Liste entfernt hat, beim nächsten Nachsehen von allein zurück.
    */
-  take(): Promise<BackPairing | undefined>
+  peers(): Promise<DeviceProfile[]>
+
+  /**
+   * Die Gegenrichtung eintragen: die Oberfläche der Gegenseite darf dieses
+   * Gerät steuern. Ohne Code — der Schlüssel kam über eine Verbindung, an deren
+   * Anfang genau ein Code stand.
+   */
+  grant(publicKey: string, label: string): Promise<void>
+
+  /**
+   * Den eigenen Ausweis hinterlegen, damit er beim Koppeln mitgehen kann. Ohne
+   * ihn bliebe jede Kopplung einseitig: die Gegenseite bekäme in der Antwort
+   * nichts, was sie in ihre eigene Liste eintragen könnte.
+   */
+  register(publicKey: string): Promise<void>
 }
 
-export interface BackPairing {
+/**
+ * Der Steckbrief eines Geräts: alles, was die Gegenseite braucht, um es später
+ * von sich aus zu erreichen. Schwesterfassungen: `agent/Auth/DeviceProfile.cs`
+ * und `host/DeviceProfile.kt`.
+ */
+export interface DeviceProfile {
   host: string
   port: number
-  /** Sechs Ziffern, fünf Minuten gültig, einmal verwendbar. */
-  code: string
+  /** Wie das Gerät heißt. Für die Anzeige in der Geräteliste. */
+  name: string
   /**
-   * Der Fingerabdruck der eigenen Stelle. Er kommt über eine Verbindung, die
-   * bereits beglaubigt ist — deshalb muss ihn hier niemand mehr ablesen und
-   * vergleichen. Das ist der eigentliche Gewinn der Gegenkopplung.
+   * Womit es sich ausweist — `undefined` bei einem Zertifikat von Tailscale,
+   * dem ohnehin jeder glaubt. Dann gibt es nichts zu bestätigen.
    */
   caFingerprint?: string
-  /** Wie das Gerät heißt. Nur für die Anzeige. */
-  name?: string
+  /**
+   * Der Fingerabdruck seines Agent-Schlüssels. Er ist die Kennung des Geräts in
+   * der Liste: er bleibt gleich, auch wenn Name oder Adresse wechseln.
+   */
+  agentFingerprint?: string
+  /**
+   * Der öffentliche Schlüssel, mit dem sich die **Oberfläche** dieses Geräts
+   * anmeldet. Er gehört in die `clients.json` der Gegenseite — das ist die
+   * ganze Gegenrichtung, in einem Feld.
+   */
+  clientKey?: string
 }
 
 /** Für Umgebungen, die selbst keine Gegenstelle sind — der Browser vor allem. */
 export const noLocalNode: LocalNode = {
-  offer: (): Promise<BackPairing | undefined> => Promise.resolve(undefined),
-  take: (): Promise<BackPairing | undefined> => Promise.resolve(undefined),
+  profile: (): Promise<DeviceProfile | undefined> => Promise.resolve(undefined),
+  peers: (): Promise<DeviceProfile[]> => Promise.resolve([]),
+  grant: (): Promise<void> => Promise.resolve(),
+  register: (): Promise<void> => Promise.resolve(),
 }
 
 /**
- * Was von einem Angebot übrig bleibt, wenn man es ernst nimmt.
+ * Was von einem Steckbrief übrig bleibt, wenn man ihn ernst nimmt.
  *
  * Dieselben Regeln wie auf beiden Agent-Seiten: eine Adresse, ein brauchbarer
- * Port, sechs Ziffern. Unvollständiges wird verworfen statt halb benutzt — ein
- * Angebot, an dem etwas fehlt, scheitert sonst später an einer Stelle, an der
- * niemand mehr weiß, woher es kam.
+ * Port. Unvollständiges wird verworfen statt halb benutzt — ein Steckbrief, an
+ * dem etwas fehlt, führte später zu einem Fehlschlag an einer Stelle, an der
+ * niemand mehr weiß, woher er kam.
  */
-export function usableOffer(value: unknown): BackPairing | undefined {
+export function usableProfile(value: unknown): DeviceProfile | undefined {
   if (typeof value !== 'object' || value === null) {
     return undefined
   }
 
-  const { host, port, code, caFingerprint, name } = value as Record<string, unknown>
+  const { host, port, name, caFingerprint, agentFingerprint, clientKey } = value as Record<
+    string,
+    unknown
+  >
 
   if (typeof host !== 'string' || host.trim().length === 0 || host.length > 255) {
     return undefined
@@ -72,20 +120,27 @@ export function usableOffer(value: unknown): BackPairing | undefined {
     return undefined
   }
 
-  if (typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) {
-    return undefined
-  }
-
-  const fingerprint =
-    typeof caFingerprint === 'string' && /^[0-9a-f]{64}$/i.test(caFingerprint.trim())
-      ? caFingerprint.trim().toLowerCase()
-      : undefined
+  const address = host.trim()
 
   return {
-    host: host.trim(),
+    host: address,
     port,
-    code: code.trim(),
-    ...(fingerprint === undefined ? {} : { caFingerprint: fingerprint }),
-    ...(typeof name === 'string' && name.trim().length > 0 ? { name: name.trim() } : {}),
+    // Ein leerer Eintrag in der Liste ließe sich später niemandem zuordnen.
+    name: typeof name === 'string' && name.trim().length > 0 ? name.trim() : address,
+    ...hex('caFingerprint', caFingerprint, 64),
+    ...hex('agentFingerprint', agentFingerprint, 16),
+    ...(typeof clientKey === 'string' && clientKey.trim().length > 0
+      ? { clientKey: clientKey.trim() }
+      : {}),
   }
+}
+
+function hex(field: string, value: unknown, length: number): Record<string, string> {
+  if (typeof value !== 'string') {
+    return {}
+  }
+
+  const trimmed = value.trim().toLowerCase()
+
+  return trimmed.length === length && /^[0-9a-f]+$/.test(trimmed) ? { [field]: trimmed } : {}
 }

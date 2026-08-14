@@ -216,8 +216,8 @@ export { noSessionKeepAlive, type SessionKeepAlive } from './session.ts'
 export { noSurfaces, type SurfaceBoardPublisher } from './surfaces.ts'
 export {
   noLocalNode,
-  usableOffer,
-  type BackPairing,
+  usableProfile,
+  type DeviceProfile,
   type LocalNode,
 } from './localNode.ts'
 export {

@@ -62,33 +62,78 @@ public static class PairingEndpoints
             });
         });
 
-        // Ebenfalls nur vom Rechner selbst: das Angebot der Gegenseite abholen.
-        // Einlösen kann es nur, wer den privaten Geräteschlüssel hält — auf
-        // Windows das Fenster, am Handy die App. Der Agent hebt es bloß auf.
-        app.MapGet("/api/pair/pending", (PendingPairings pending) =>
-        {
-            var offer = pending.Take();
+        // ---- Die drei Wege der eigenen Oberfläche --------------------------
+        //
+        // Alle drei nur vom Rechner selbst (siehe ClientAuthMiddleware). Sie
+        // sind der Ersatz für das, was bis Phase 31e über das Netz lief: der
+        // Steckbrief geht bei der Kopplung mit, und was danach zu tun ist,
+        // erledigt jede Seite bei sich zu Hause.
 
-            return offer is null
-                ? Results.Ok(new { pending = (object?)null })
-                : Results.Ok(new
-                {
-                    pending = new
+        // Der eigene Steckbrief — er geht mit, wenn dieses Fenster ein anderes
+        // Gerät koppelt. `null`, solange keine Adresse feststeht: ein Steckbrief
+        // ohne Adresse beschreibt nichts.
+        app.MapGet("/api/pair/self", (AgentIdentity identity, LocalClient local) =>
+            Results.Ok(new
+            {
+                profile = hostName is null
+                    ? null
+                    : new
                     {
-                        host = offer.Host,
-                        port = offer.Port,
-                        code = offer.Code,
-                        caFingerprint = offer.CaFingerprint,
-                        name = offer.Name
+                        host = hostName,
+                        port,
+                        name = Environment.MachineName,
+                        caFingerprint,
+                        agentFingerprint = identity.Fingerprint,
+                        clientKey = local.PublicKey
                     }
-                });
+            }));
+
+        // Das Fenster hinterlegt seinen Ausweis. Ohne ihn bliebe jede Kopplung
+        // einseitig — die Gegenseite bekäme in der Antwort nichts, was sie in
+        // ihre eigene Liste eintragen könnte.
+        app.MapPost("/api/pair/local", (LocalClientRequest request, LocalClient local) =>
+            local.Remember(request.PublicKey)
+                ? Results.Ok(new { stored = true })
+                : Results.BadRequest(
+                    new { error = "Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel." }));
+
+        // Die Steckbriefe abholen, die beim Koppeln hier abgegeben wurden.
+        // Einmalig: sonst käme ein Gerät, das jemand aus seiner Liste entfernt
+        // hat, beim nächsten Start von allein zurück.
+        app.MapGet("/api/pair/peers", (PeerInbox inbox) => Results.Ok(new
+        {
+            peers = inbox.TakeAll().Select(peer => new
+            {
+                host = peer.Host,
+                port = peer.Port,
+                name = peer.Name,
+                caFingerprint = peer.CaFingerprint,
+                agentFingerprint = peer.AgentFingerprint
+            })
+        }));
+
+        // Die Gegenrichtung eintragen: die Oberfläche der Gegenseite darf
+        // diesen Rechner steuern. Ohne Code — siehe PairingService.Grant.
+        app.MapPost("/api/pair/grant", (
+            GrantRequest request, PairingService pairing, ILogger<Program> logger) =>
+        {
+            if (!pairing.Grant(request.PublicKey ?? string.Empty, request.Label ?? string.Empty))
+            {
+                return Results.BadRequest(
+                    new { error = "Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel." });
+            }
+
+            logger.LogInformation("Gegenrichtung eingetragen für {Label}.", request.Label);
+
+            return Results.Ok(new { granted = true });
         });
 
         app.MapPost("/api/pair", (
             PairRequest request,
             PairingService pairing,
             AgentIdentity identity,
-            PendingPairings pending,
+            PeerInbox inbox,
+            LocalClient local,
             ILogger<Program> logger) =>
         {
             var result = pairing.Pair(
@@ -102,25 +147,32 @@ public static class PairingEndpoints
                 return Results.BadRequest(new { error = Describe(result.Outcome) });
             }
 
-            // Die Gegenkopplung: die andere Seite legt ihre eigene Adresse und
-            // einen frischen Code ihres Agents bei. Aufgehoben wird das erst
+            // Der Steckbrief des Anrufers: Adresse, Port, Name, Fingerabdrücke
+            // und der Schlüssel seiner Oberfläche. Angenommen wird er erst
             // **nach** bestandener Kopplung — vorher wäre es ein Weg, jedem
-            // Rechner ein Angebot unterzuschieben, indem man Codes rät.
-            var back = request.Back is null
+            // Rechner ein Gerät in die Liste zu schreiben, indem man Codes rät.
+            var peer = request.Self is null
                 ? null
-                : PendingPairings.Sanitize(
-                    request.Back.Host,
-                    request.Back.Port,
-                    request.Back.Code,
-                    request.Back.CaFingerprint,
-                    request.Back.Name);
+                : DeviceProfile.Sanitize(
+                    request.Self.Host,
+                    request.Self.Port,
+                    request.Self.Name,
+                    request.Self.CaFingerprint,
+                    request.Self.AgentFingerprint,
+                    request.Self.ClientKey);
 
-            if (back is not null)
+            if (peer is not null)
             {
-                pending.Offer(back);
+                // Nur der Steckbrief wandert in den Eingang. Den Schlüssel der
+                // Gegenseite hat dieser Agent schon: es ist derselbe, mit dem
+                // sie sich gerade gekoppelt hat. Ihn ein zweites Mal aus dem
+                // Steckbrief zu nehmen hieße, zwei Quellen für dieselbe Angabe
+                // zu führen — und eine davon kommt ungeprüft aus dem Rumpf.
+                inbox.Add(peer);
 
                 logger.LogInformation(
-                    "Gegenkopplung angeboten von {Host}:{Port}.", back.Host, back.Port);
+                    "Kopplung in beide Richtungen mit {Name} ({Host}:{Port}).",
+                    peer.Name, peer.Host, peer.Port);
             }
 
             return Results.Ok(new
@@ -134,7 +186,16 @@ public static class PairingEndpoints
                 // Womit sich der Rechner beim Verbinden ausweist. Ohne diesen
                 // Wert kann ein Client ein selbst ausgestelltes Zertifikat nicht
                 // von einem untergeschobenen unterscheiden.
-                caFingerprint
+                caFingerprint,
+
+                // Dasselbe zurück: der Schlüssel der Oberfläche dieses Rechners.
+                // Damit trägt die Gegenseite die andere Richtung bei sich ein,
+                // ohne noch einmal ins Netz zu gehen.
+                peer = new
+                {
+                    name = Environment.MachineName,
+                    clientKey = local.PublicKey
+                }
             });
         });
 
@@ -230,11 +291,23 @@ public static class PairingEndpoints
 }
 
 internal sealed record PairRequest(
-    string? Code, string? Label, string? PublicKey, string[]? Scopes, BackRequest? Back);
+    string? Code, string? Label, string? PublicKey, string[]? Scopes, ProfileRequest? Self);
 
-/// <summary>Was die Gegenseite braucht, damit man sich bei ihr melden kann.</summary>
-internal sealed record BackRequest(
-    string? Host, int? Port, string? Code, string? CaFingerprint, string? Name);
+/// <summary>
+/// Der Steckbrief des Anrufers — alles, was dieser Rechner braucht, um ihn
+/// später von sich aus zu erreichen. Siehe <see cref="DeviceProfile"/>.
+/// </summary>
+internal sealed record ProfileRequest(
+    string? Host,
+    int? Port,
+    string? Name,
+    string? CaFingerprint,
+    string? AgentFingerprint,
+    string? ClientKey);
+
+internal sealed record LocalClientRequest(string? PublicKey);
+
+internal sealed record GrantRequest(string? PublicKey, string? Label);
 
 internal sealed record ChallengeRequest(string? ClientId);
 

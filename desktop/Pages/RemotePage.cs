@@ -309,11 +309,16 @@ public sealed class RemotePage : Control
 
                 "trust-install" => TrustAuthority(request.Fingerprint),
 
-                // Die Gegenkopplung. Beide Wege führen zum eigenen Agent — die
-                // Seite käme nicht an ihn heran, ohne ihm vorher zu vertrauen.
-                "local-offer" => new { offer = await LocalNode.OfferAsync() },
+                // Die Gegenrichtung. Alle vier Wege führen zum eigenen Agent —
+                // die Seite käme nicht an ihn heran, ohne ihm vorher zu
+                // vertrauen.
+                "local-self" => new { profile = await LocalNode.SelfAsync() },
 
-                "local-pending" => new { pending = await LocalNode.PendingAsync() },
+                "local-peers" => new { peers = await LocalNode.PeersAsync() },
+
+                "local-grant" => await Granted(request),
+
+                "local-register" => await Registered(request),
 
                 _ => throw new InvalidOperationException(
                     $"Das Fenster kennt '{request.Kind}' nicht.")
@@ -326,6 +331,39 @@ public sealed class RemotePage : Control
         }
 
         Reply(core, request.Id!, payload);
+    }
+
+    /// <summary>
+    /// Die Oberfläche der Gegenseite darf diesen Rechner steuern. Der Schlüssel
+    /// kam über eine Verbindung, an deren Anfang jemand einen Code eingetippt
+    /// hat — deshalb ohne erneute Rückfrage.
+    /// </summary>
+    private static async Task<object> Granted(BridgeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PublicKey))
+        {
+            throw new InvalidOperationException("Ohne Schlüssel wird niemand eingetragen.");
+        }
+
+        await LocalNode.GrantAsync(request.PublicKey, request.Label);
+
+        return new { granted = true };
+    }
+
+    /// <summary>
+    /// Der Ausweis dieses Fensters geht an den Agent nebenan, damit er beim
+    /// Koppeln mitgehen kann.
+    /// </summary>
+    private static async Task<object> Registered(BridgeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.PublicKey))
+        {
+            throw new InvalidOperationException("Ohne Schlüssel gibt es nichts zu hinterlegen.");
+        }
+
+        await LocalNode.RegisterAsync(request.PublicKey);
+
+        return new { stored = true };
     }
 
     private static async Task<object> FetchAuthorityAsync(string? host)
@@ -367,7 +405,9 @@ public sealed class RemotePage : Control
         new() { PropertyNameCaseInsensitive = true };
 
     /// <summary>Was die Seite über die Brücke schickt.</summary>
-    private sealed record BridgeRequest(string? Id, string? Kind, string? Host, string? Fingerprint);
+    private sealed record BridgeRequest(
+        string? Id, string? Kind, string? Host, string? Fingerprint, string? PublicKey,
+        string? Label);
 
     /// <summary>
     /// Ein leerer schwarzer Bereich sähe aus wie ein Absturz. Steht die

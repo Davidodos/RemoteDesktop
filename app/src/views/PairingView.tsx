@@ -9,13 +9,19 @@ import {
 } from '../lib/certificateTrust.ts'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
 import { suggestAlias } from '../lib/deviceNames.ts'
-import { pairWithAgent } from '../lib/pairing.ts'
+import { grantPeer } from '../lib/bothWays.ts'
+import { pairBothWays } from '../lib/pairing.ts'
 import { DEFAULT_AGENT_PORT, parsePairingUri, type PairingTarget } from '../lib/pairingUri.ts'
 import { getPlatform } from '../platform/index.ts'
 import type { Device } from '../lib/types.ts'
 
 interface Props {
-  onPaired: (devices: Device[], paired: Device) => void
+  /**
+   * @param warnung Ein Satz, wenn die Gegenrichtung nicht zustande kam. Die
+   *   Kopplung selbst hat dann trotzdem geklappt — beides in einem Fehler zu
+   *   melden hieße, eine gelungene Kopplung als Fehlschlag darzustellen.
+   */
+  onPaired: (devices: Device[], paired: Device, warnung?: string) => void
   onCancel: () => void
 }
 
@@ -48,7 +54,7 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
    * ließe sich nicht verbinden — ohne dass irgendwo steht, warum.
    */
   const [awaitingTrust, setAwaitingTrust] = useState<
-    { device: Device; devices: Device[] } | undefined
+    { device: Device; devices: Device[]; warnung?: string } | undefined
   >(undefined)
 
   const platform = getPlatform()
@@ -67,7 +73,9 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
     return (
       <CertificateTrustStep
         device={awaitingTrust.device}
-        onDone={() => onPaired(awaitingTrust.devices, awaitingTrust.device)}
+        onDone={() =>
+          onPaired(awaitingTrust.devices, awaitingTrust.device, awaitingTrust.warnung)
+        }
       />
     )
   }
@@ -77,7 +85,7 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
       <NameStep
         target={target}
         onBack={() => setTarget(undefined)}
-        onPaired={(devices, device, trusted) => {
+        onPaired={(devices, device, trusted, warnung) => {
           // Nichts zu bestätigen — oder eben schon bestätigt, bevor gekoppelt
           // wurde. Ein zweites Mal danach zu fragen wäre nur Weg.
           //
@@ -85,12 +93,12 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
           // ist: ein `null` vom Agent bedeutet „nichts zu bestätigen", sah aber
           // aus wie ein Wert. Siehe `certificateFingerprint`.
           if (certificateFingerprint(device.caFingerprint) === undefined || trusted) {
-            onPaired(devices, device)
+            onPaired(devices, device, warnung)
 
             return
           }
 
-          setAwaitingTrust({ device, devices })
+          setAwaitingTrust({ device, devices, ...(warnung === undefined ? {} : { warnung }) })
         }}
       />
     )
@@ -145,7 +153,12 @@ function NameStep({
   onBack,
 }: {
   target: PairingTarget
-  onPaired: (devices: Device[], paired: Device, trusted: boolean) => void
+  onPaired: (
+    devices: Device[],
+    paired: Device,
+    trusted: boolean,
+    warnung?: string,
+  ) => void
   onBack: () => void
 }): React.JSX.Element {
   const [label, setLabel] = useState(defaultLabel())
@@ -218,25 +231,30 @@ function NameStep({
 
       const trusted = await trust()
 
-      // Das eigene Angebot für die Gegenrichtung. Ist dieses Gerät nicht
-      // steuerbar, gibt es keins — dann bleibt es bei der einen Richtung, und
-      // das ist kein Fehler.
-      const back = await platform.node.offer().catch(() => undefined)
+      // Der eigene Steckbrief geht mit. Ist dieses Gerät kein mögliches Ziel,
+      // gibt es keinen — dann bleibt es bei der einen Richtung, und das ist
+      // kein Fehler. Ob der eigene Host gerade läuft, spielt keine Rolle: der
+      // Steckbrief beschreibt, wie dieses Gerät erreichbar wäre.
+      const self = await platform.node.profile().catch(() => undefined)
 
-      const paired = await pairWithAgent({
+      const { device: paired, peer } = await pairBothWays({
         host: target.host,
         port: target.port,
         code: target.code,
         label: label.trim(),
-        ...(back === undefined ? {} : { back }),
+        ...(self === undefined ? {} : { self }),
       })
+
+      // Und die andere Hälfte, ohne einen zweiten Aufruf über das Netz: die
+      // Gegenseite darf dieses Gerät steuern.
+      const warnung = await grantPeer(peer)
 
       // Der eigene Name geht nirgendwo hin — er steht neben den Zugangsdaten
       // dieses Geräts und sonst nirgends.
       const device =
         alias.trim().length > 0 ? { ...paired, alias: alias.trim() } : paired
 
-      onPaired(saveLocalDevice(device), device, trusted)
+      onPaired(saveLocalDevice(device), device, trusted, warnung)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))
     } finally {

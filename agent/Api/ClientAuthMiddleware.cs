@@ -28,14 +28,22 @@ public static class ClientAuthMiddleware
     /// verhindern soll.
     /// </summary>
     /// <remarks>
-    /// <c>/api/pair/pending</c> steht hier und nicht bloß unter den freien
-    /// Pfaden: es liegt unterhalb von <c>/api/pair</c>, und das ist absichtlich
-    /// ohne Ausweis erreichbar — der Kopplungsaufruf erzeugt die Berechtigung ja
-    /// erst. Ohne diesen Eintrag käme jeder im Netz an ein Angebot heran, in dem
-    /// ein gültiger Kopplungscode der Gegenseite steht.
+    /// Alles unter <c>/api/pair/…</c> steht hier einzeln und nicht bloß unter den
+    /// freien Pfaden: <c>/api/pair</c> ist absichtlich ohne Ausweis erreichbar —
+    /// der Kopplungsaufruf erzeugt die Berechtigung ja erst —, und die Prüfung
+    /// darunter vergleicht auf Segmentgrenzen. Ohne diese Einträge könnte jeder
+    /// im Netz einen Kopplungscode abrufen, sich selbst eintragen lassen oder
+    /// die Steckbriefe der gekoppelten Geräte abholen.
     /// </remarks>
     private static readonly string[] LocalOnly =
-        ["/api/pair/code", "/api/pair/pending", "/api/clients"];
+    [
+        "/api/pair/code",
+        "/api/pair/self",
+        "/api/pair/local",
+        "/api/pair/peers",
+        "/api/pair/grant",
+        "/api/clients"
+    ];
 
     /// <summary>
     /// Endpunkte, die ohne Berechtigung auskommen, weil sie selbst die

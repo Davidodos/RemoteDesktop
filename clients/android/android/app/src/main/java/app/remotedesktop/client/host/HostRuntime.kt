@@ -19,6 +19,9 @@ class HostRuntime private constructor(
     private val server: HostServer,
     private val codes: PairingCodes,
     private val pairing: PairingService,
+    private val peers: PeerInbox,
+    private val local: LocalClient,
+    private val agentFingerprint: String,
     val material: HostCertificate.Material,
     val deviceName: String,
 ) {
@@ -56,15 +59,23 @@ class HostRuntime private constructor(
             val codes = PairingCodes()
             val sessions = SessionStore()
             val pairing = PairingService(clients, codes, ChallengeStore(), sessions)
+            val identity = HostIdentity.loadOrCreate(File(folder, "hostkey.txt"))
+
+            // Die beiden Hälften der Gegenrichtung: der Eingang für fremde
+            // Steckbriefe, der Ausweis für den eigenen.
+            val peers = PeerInbox(File(folder, "peers.json"))
+            val local = LocalClient(File(folder, "localclient.json"))
 
             val server = HostServer(
-                identity = HostIdentity.loadOrCreate(File(folder, "hostkey.txt")),
+                identity = identity,
                 pairing = pairing,
                 codes = codes,
                 material = material,
                 deviceName = name,
                 version = versionOf(context),
                 sessions = sessions,
+                peers = peers,
+                local = local,
                 screen = { ScreenCapture.scaled(screenOf(context)) },
                 address = { HostAddresses.best(context) },
                 screenSource = { ScreenCapture.open(context, screenOf(context)) },
@@ -73,7 +84,10 @@ class HostRuntime private constructor(
                 },
             )
 
-            return HostRuntime(context, server, codes, pairing, material, name)
+            return HostRuntime(
+                context, server, codes, pairing, peers, local, identity.fingerprint,
+                material, name,
+            )
         }
 
         /**
@@ -149,26 +163,39 @@ class HostRuntime private constructor(
 
     fun issueCode(): PairingCodes = codes
 
-    /** Was die Gegenseite an Gegenkopplung hinterlassen hat — einmalig. */
-    fun takePending(): BackPairing? = server.takePending()
-
     /**
-     * Das eigene Angebot: Adresse, Port, ein frischer Code und der eigene
-     * Fingerabdruck. Der geht damit über eine Verbindung, die bereits
-     * beglaubigt ist — niemand muss ihn mehr ablesen und vergleichen.
+     * Der eigene Steckbrief — er geht mit, wenn diese App ein anderes Gerät
+     * koppelt.
      *
-     * `null`, solange der Host nicht läuft: ein Angebot ohne Server wäre eine
-     * Einladung in ein leeres Zimmer.
+     * **Er hängt ausdrücklich nicht daran, ob der Host gerade läuft.** Genau das
+     * war der Fehler des Vorgängers: wer beim Koppeln die Freigabe noch nicht
+     * eingeschaltet hatte, bekam die Gegenrichtung nie — auch später nicht, ohne
+     * neu zu koppeln. Ein Steckbrief beschreibt, wie dieses Gerät erreichbar
+     * *wäre*; ein Eintrag in einer Datei wirkt, sobald der Server startet.
+     *
+     * `null` nur ohne Adresse im Netz: dann beschreibt er nichts.
      */
-    fun backOffer(): BackPairing? {
-        if (!isRunning) {
-            return null
-        }
+    fun profile(): DeviceProfile? {
+        val address = HostAddresses.best(context) ?: addresses().firstOrNull() ?: return null
 
-        val address = addresses().firstOrNull() ?: return null
-
-        return BackPairing(address, port, codes.issue(), material.fingerprint, deviceName)
+        return DeviceProfile(
+            host = address,
+            port = port,
+            name = deviceName,
+            caFingerprint = material.fingerprint,
+            agentFingerprint = agentFingerprint,
+            clientKey = local.publicKey,
+        )
     }
+
+    /** Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig. */
+    fun takePeers(): List<DeviceProfile> = peers.takeAll()
+
+    /** Die Gegenrichtung eintragen: diese Oberfläche darf dieses Handy steuern. */
+    fun grant(publicKey: String, label: String): Boolean = pairing.grant(publicKey, label)
+
+    /** Den Ausweis der eigenen App hinterlegen, damit er beim Koppeln mitgeht. */
+    fun rememberLocalClient(publicKey: String?): Boolean = local.remember(publicKey)
 
     fun clients(): List<PairedClient> = pairing.listClients()
 
