@@ -4,6 +4,7 @@ import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
 import { noHost, noLocalNode, noTrust, usableProfile } from './index.ts'
 import type {
+  ConnectionRequest,
   HostClient,
   HostPairingCode,
   HostService,
@@ -116,6 +117,11 @@ interface HostPlugin {
   registerLocalClient(options: { publicKey: string }): Promise<void>
   clients(): Promise<{ clients: HostClient[] }>
   revoke(options: { id: string }): Promise<void>
+  answerConnection(options: { id: string; allow: boolean }): Promise<void>
+  addListener(
+    event: string,
+    listener: (data: { id?: string; label?: string }) => void,
+  ): Promise<{ remove: () => Promise<void> }>
 }
 
 /**
@@ -456,8 +462,70 @@ function hostService(plugins: CapacitorPlugins): HostService {
     enableScreen: () => plugin.enableScreen(),
     disableScreen: () => plugin.disableScreen(),
     openInputSettings: () => plugin.openInputSettings(),
+    onRequests: (listener) => watchConnections(plugin, listener),
+    answer: (id, allow) => plugin.answerConnection({ id, allow }),
     clients: async () => (await plugin.clients()).clients,
     revoke: (id) => plugin.revoke({ id }),
+  }
+}
+
+/**
+ * Die offenen Rückfragen zusammenhalten.
+ *
+ * <p>
+ * Die native Seite meldet zwei Ereignisse — eine Frage kommt, eine Frage ist
+ * erledigt —, und die Liste dazwischen liegt hier. Sie in der Ansicht zu führen
+ * hieße, sie bei jedem Seitenwechsel zu verlieren: die Karte muss überall
+ * erscheinen, denn die Gegenseite wartet.
+ * </p>
+ *
+ * <p>
+ * Eine ältere APK kennt die Ereignisse nicht. Dann bleibt die Liste leer, und
+ * die Anmeldung läuft wie bisher durch — bestätigt wird erst, wo auch jemand
+ * fragen kann.
+ * </p>
+ */
+function watchConnections(
+  plugin: HostPlugin,
+  listener: (requests: ConnectionRequest[]) => void,
+): () => void {
+  if (typeof plugin.addListener !== 'function') {
+    return () => undefined
+  }
+
+  let open: ConnectionRequest[] = []
+  let alive = true
+
+  const handles: Promise<{ remove: () => Promise<void> }>[] = [
+    plugin.addListener('connectionRequest', (data) => {
+      if (!alive || typeof data.id !== 'string' || data.id.length === 0) {
+        return
+      }
+
+      open = [
+        ...open.filter((request) => request.id !== data.id),
+        { id: data.id, label: data.label ?? 'Ein gekoppeltes Gerät' },
+      ]
+
+      listener(open)
+    }),
+
+    plugin.addListener('connectionSettled', (data) => {
+      if (!alive) {
+        return
+      }
+
+      open = open.filter((request) => request.id !== data.id)
+      listener(open)
+    }),
+  ]
+
+  return () => {
+    alive = false
+
+    for (const handle of handles) {
+      void handle.then((entry) => entry.remove()).catch(() => undefined)
+    }
   }
 }
 

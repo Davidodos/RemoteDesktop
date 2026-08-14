@@ -227,6 +227,16 @@ class SessionStore(private val now: Clock = System::currentTimeMillis) {
     }
 
     /**
+     * Schließt genau eine Sitzung. Gebraucht, wenn die Anmeldung zwar gültig
+     * war, aber am Gerät niemand zugestimmt hat: der Token wurde dann schon
+     * ausgestellt und darf keinen Augenblick länger gelten.
+     */
+    fun close(token: String) = synchronized(gate) {
+        sessions.removeAll { constantTimeEquals(token, it.token) }
+        Unit
+    }
+
+    /**
      * Schließt alle Sitzungen eines Clients. Ohne das liefe ein widerrufenes
      * Gerät bis zum Ablauf seines Tokens weiter — der Widerruf muss sofort
      * wirken, sonst ist er keiner.

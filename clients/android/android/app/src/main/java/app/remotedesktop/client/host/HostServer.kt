@@ -50,6 +50,13 @@ class HostServer(
      */
     private val input: (InputCommand) -> String? = { NO_INPUT },
     private val live: LiveConnections = LiveConnections(),
+    /**
+     * Wer die Verbindung bestätigt. Gibt `false` zurück, wenn niemand
+     * zugestimmt hat — Ablehnung ist die Vorgabe. Ein Lambda, damit der Server
+     * ohne Android unter Test steht; im Test steht hier `true`, weil sonst jeder
+     * Anmeldeweg an einer Frage hängen bliebe, die niemand beantwortet.
+     */
+    private val confirm: (String) -> Boolean = { true },
 ) {
 
     companion object {
@@ -427,6 +434,19 @@ class HostServer(
         // ob die Kennung stimmte und nur die Unterschrift nicht passte.
         if (result.outcome != SessionOutcome.OK || result.token == null) {
             return HttpServer.Response.error(401, "Anmeldung fehlgeschlagen.")
+        }
+
+        // Erst prüfen, dann fragen: wer nicht gekoppelt ist, soll am Handy
+        // keine Karte auslösen können. Eine Kopplung sagt, *wer* fragen darf —
+        // dass jetzt gerade jemand zusehen darf, sagt nur ein Mensch.
+        if (!confirm(result.client?.label ?: "Ein gekoppeltes Gerät")) {
+            sessions.close(result.token)
+
+            return HttpServer.Response.error(
+                403,
+                "Am anderen Gerät hat niemand zugestimmt. Jede Verbindung wird " +
+                    "dort einzeln bestätigt — die App muss offen sein.",
+            )
         }
 
         val json = JSONObject()

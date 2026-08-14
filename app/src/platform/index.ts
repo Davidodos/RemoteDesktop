@@ -222,6 +222,7 @@ export {
 } from './localNode.ts'
 export {
   noHost,
+  type ConnectionRequest,
   type HostClient,
   type HostPairingCode,
   type HostService,

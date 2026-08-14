@@ -48,6 +48,30 @@ export interface HostService {
    */
   openInputSettings(): Promise<void>
 
+  /**
+   * Die offenen Rückfragen „darf dieses Gerät jetzt verbinden?".
+   *
+   * <p>
+   * **Warum jede Verbindung einzeln bestätigt wird.** Eine Kopplung ist eine
+   * Erlaubnis auf Dauer; sie sagt, *wer* fragen darf. Sie sagt nicht, dass
+   * jetzt gerade jemand zusehen darf. Ein Handy ist kein Rechner auf dem
+   * Schreibtisch — wer es fernsteuern will, hat es ohnehin in der Hand.
+   * </p>
+   *
+   * <p>
+   * Ein Zuhörer und keine Abfrage: die Frage entsteht im Augenblick einer
+   * eingehenden Anmeldung, und die Gegenseite wartet darauf. Der Rückgabewert
+   * meldet den Zuhörer wieder ab.
+   * </p>
+   */
+  onRequests(listener: (requests: ConnectionRequest[]) => void): () => void
+
+  /**
+   * Die Antwort. Kommt keine, läuft die Frage nach etwa dreißig Sekunden in
+   * ihr Zeitlimit — und ein Zeitablauf ist ein Nein.
+   */
+  answer(id: string, allow: boolean): Promise<void>
+
   /** Wer dieses Gerät steuern darf. */
   clients(): Promise<HostClient[]>
 
@@ -90,6 +114,13 @@ export interface HostPairingCode {
   pairingUri?: string
 }
 
+/** Eine Verbindung, die gerade um Zustimmung bittet. */
+export interface ConnectionRequest {
+  id: string
+  /** Wie das anfragende Gerät in „wer darf" heißt. */
+  label: string
+}
+
 export interface HostClient {
   id: string
   label: string
@@ -109,6 +140,8 @@ export const noHost: HostService = {
   enableScreen: () => unavailable(),
   disableScreen: () => unavailable(),
   openInputSettings: () => unavailable(),
+  onRequests: (): (() => void) => () => undefined,
+  answer: () => unavailable(),
   clients: (): Promise<HostClient[]> => Promise.resolve([]),
   revoke: () => unavailable(),
 }

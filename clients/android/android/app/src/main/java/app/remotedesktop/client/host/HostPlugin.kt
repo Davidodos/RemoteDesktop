@@ -30,13 +30,62 @@ import org.json.JSONObject
 @CapacitorPlugin(name = "Host")
 class HostPlugin : Plugin() {
 
+    /**
+     * Die Rückfrage „darf dieses Gerät jetzt verbinden?" an die Oberfläche
+     * hängen.
+     *
+     * Ein Ereignis und kein Rückgabewert: die Frage entsteht im Thread einer
+     * eingehenden Verbindung, und die Antwort kommt Sekunden später von einem
+     * Menschen. Meldet sich hier niemand an, gilt jede Anfrage als abgelehnt —
+     * siehe [ConnectionRequests].
+     */
+    override fun load() {
+        val requests = HostRuntime.of(context).connections
+
+        requests.listener = { id, label ->
+            notifyListeners(
+                "connectionRequest",
+                JSObject().put("id", id).put("label", label),
+                true,
+            )
+        }
+
+        requests.onSettled = { id ->
+            notifyListeners("connectionSettled", JSObject().put("id", id), true)
+        }
+    }
+
+    /** Die Antwort vom Bildschirm. Ohne sie läuft die Frage in ihr Zeitlimit. */
+    @PluginMethod
+    fun answerConnection(call: PluginCall) {
+        val id = call.getString("id")
+
+        if (id.isNullOrBlank()) {
+            call.reject("Ohne Kennung gehört diese Antwort zu keiner Frage.")
+            return
+        }
+
+        HostRuntime.of(context).connections.answer(id, call.getBoolean("allow", false) == true)
+
+        call.resolve()
+    }
+
     @PluginMethod
     fun status(call: PluginCall) {
         call.resolve(describe())
     }
 
+    /**
+     * Die Einstellung „dieses Gerät darf ferngesteuert werden" einschalten.
+     *
+     * Sie wird gemerkt und gilt ab jetzt für jeden Start der App: der Host läuft,
+     * solange die App offen ist, und endet mit ihr. Vorher war er auf
+     * Dauerbetrieb ausgelegt — einmal eingeschaltet, lief er weiter, auch wenn
+     * die App längst weggewischt war.
+     */
     @PluginMethod
     fun start(call: PluginCall) {
+        HostPreference.set(context, true)
         HostService.start(context)
 
         // Der Dienst startet den Server; hier wird nur angestoßen. Die Antwort
@@ -47,6 +96,7 @@ class HostPlugin : Plugin() {
 
     @PluginMethod
     fun stop(call: PluginCall) {
+        HostPreference.set(context, false)
         HostService.stop(context)
 
         call.resolve(describe(running = false))

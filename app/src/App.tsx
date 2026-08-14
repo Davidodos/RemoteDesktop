@@ -16,6 +16,7 @@ import type { AgentInfo, ConnectionState, Device } from './lib/types.ts'
 import { DeviceListView } from './views/DeviceListView.tsx'
 import { KeyboardView } from './views/KeyboardView.tsx'
 import { MediaView } from './views/MediaView.tsx'
+import { ConnectionRequestView } from './views/ConnectionRequestView.tsx'
 import { PairingView } from './views/PairingView.tsx'
 import { PowerView } from './views/PowerView.tsx'
 import { ScreenView } from './views/ScreenView.tsx'
@@ -27,7 +28,24 @@ import { Sidebar, pageAvailable, type Page } from './views/Sidebar.tsx'
 import { TouchpadView } from './views/TouchpadView.tsx'
 import { MenuIcon } from './views/icons.tsx'
 
+/**
+ * Die Rückfrage „darf dieses Gerät jetzt verbinden?" liegt über allem.
+ *
+ * Sie hier und nicht in einer Seite zu zeigen ist keine Kosmetik: am anderen
+ * Ende wartet jemand, und die Frage läuft nach einer halben Minute ab. Eine
+ * Karte, die man erst aufsuchen muss, wäre in den meisten Fällen abgelaufen,
+ * bevor sie jemand sieht.
+ */
 export function App(): React.JSX.Element {
+  return (
+    <>
+      <Shell />
+      <ConnectionRequestView />
+    </>
+  )
+}
+
+function Shell(): React.JSX.Element {
   const [devices, setDevices] = useState<Device[]>([])
   const [selected, setSelected] = useState<Device | undefined>(undefined)
   const [pairing, setPairing] = useState(false)

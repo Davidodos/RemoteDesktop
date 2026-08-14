@@ -41,6 +41,12 @@ class HostServerTest {
     private lateinit var material: HostCertificate.Material
     private lateinit var server: HostServer
     private lateinit var peers: PeerInbox
+
+    /**
+     * Ob am Gerät jemand zustimmt. Vorgabe `true`, sonst hinge jeder
+     * Anmeldeweg in diesem Test an einer Frage, die niemand beantwortet.
+     */
+    private var zugestimmt = true
     private lateinit var local: LocalClient
     private lateinit var trust: SSLContext
 
@@ -75,6 +81,7 @@ class HostServerTest {
             local = local,
             screen = { HostServer.Screen(1080, 2400) },
             address = { "127.0.0.1" },
+            confirm = { zugestimmt },
         )
 
         server.start()
@@ -301,10 +308,44 @@ class HostServerTest {
         assertEquals(0, peers.takeAll().size)
     }
 
-    private fun pairAndOpenSession(): String {
+    @Test
+    fun `ohne Zustimmung am Geraet gibt es keine Sitzung`() {
+        val clientId = pairOnly()
+
+        zugestimmt = false
+
+        val (status, body) = openSession(clientId)
+
+        // 403 und nicht 401: die Anmeldung war in Ordnung, es hat nur niemand
+        // zugestimmt. Der Satz dazu sagt, wo man nachsehen muss.
+        assertEquals(403, status)
+        assertEquals(false, JSONObject(body).getString("error").isEmpty())
+    }
+
+    @Test
+    fun `bestaetigt wird jede Verbindung, nicht die Kopplung`() {
+        val clientId = pairOnly()
+
+        zugestimmt = false
+        assertEquals(403, openSession(clientId).first)
+
+        // Dieselbe Kopplung, ein zweiter Versuch — diesmal mit Zustimmung. Die
+        // Kopplung bleibt bestehen; entschieden wird je Verbindung.
+        zugestimmt = true
+
+        val token = JSONObject(openSession(clientId).second).getString("token")
+
+        assertEquals(200, get("/api/info", token).first)
+    }
+
+    private fun pairAndOpenSession(): String =
+        JSONObject(openSession(pairOnly()).second).getString("token")
+
+    /** Nur koppeln; die Anmeldung folgt getrennt, weil sie scheitern darf. */
+    private fun pairOnly(): String {
         val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
 
-        val paired = JSONObject(
+        return JSONObject(
             post(
                 "/api/pair",
                 JSONObject()
@@ -313,24 +354,22 @@ class HostServerTest {
                     .put("publicKey", publicKey())
                     .toString(),
             ).second,
-        )
+        ).getString("clientId")
+    }
 
-        val clientId = paired.getString("clientId")
-
+    private fun openSession(clientId: String): Pair<Int, String> {
         val nonce = JSONObject(
             post("/api/session/challenge", JSONObject().put("clientId", clientId).toString()).second,
         ).getString("nonce")
 
-        return JSONObject(
-            post(
-                "/api/session",
-                JSONObject()
-                    .put("clientId", clientId)
-                    .put("nonce", nonce)
-                    .put("signature", sign(nonce))
-                    .toString(),
-            ).second,
-        ).getString("token")
+        return post(
+            "/api/session",
+            JSONObject()
+                .put("clientId", clientId)
+                .put("nonce", nonce)
+                .put("signature", sign(nonce))
+                .toString(),
+        )
     }
 
     private fun get(path: String, token: String? = null): Pair<Int, String> =

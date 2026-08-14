@@ -22,6 +22,8 @@ class HostRuntime private constructor(
     private val peers: PeerInbox,
     private val local: LocalClient,
     private val agentFingerprint: String,
+    /** Die offenen Rückfragen „darf dieses Gerät jetzt verbinden?". */
+    val connections: ConnectionRequests,
     val material: HostCertificate.Material,
     val deviceName: String,
 ) {
@@ -66,6 +68,9 @@ class HostRuntime private constructor(
             val peers = PeerInbox(File(folder, "peers.json"))
             val local = LocalClient(File(folder, "localclient.json"))
 
+            // Jede Verbindung wird am Gerät einzeln bestätigt.
+            val connections = ConnectionRequests()
+
             val server = HostServer(
                 identity = identity,
                 pairing = pairing,
@@ -82,11 +87,12 @@ class HostRuntime private constructor(
                 input = { command ->
                     RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
                 },
+                confirm = connections::ask,
             )
 
             return HostRuntime(
                 context, server, codes, pairing, peers, local, identity.fingerprint,
-                material, name,
+                connections, material, name,
             )
         }
 

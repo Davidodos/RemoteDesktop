@@ -140,16 +140,25 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
       {error !== undefined && <p className="error-text">{error}</p>}
 
       <section className="settings-group">
-        <h2>{running ? 'Freigegeben' : 'Nicht freigegeben'}</h2>
+        <h2>Dieses Gerät darf ferngesteuert werden</h2>
         <p className="settings-hint">
-          Solange dies eingeschaltet ist, kann ein gekoppeltes Gerät den
-          Bildschirm dieses Handys sehen, tippen und Dateien lesen. Es läuft
-          weiter, wenn die App im Hintergrund ist — daran erinnert die
-          Benachrichtigung.
+          {running
+            ? 'Eingeschaltet. Der Server läuft, solange diese App offen ist — ' +
+              'und endet mit ihr. Er überlebt, dass die App im Hintergrund ist ' +
+              'oder der Bildschirm ausgeht; daran erinnert die Benachrichtigung.'
+            : 'Ausgeschaltet. Solange das so bleibt, ist dieses Handy von außen ' +
+              'nicht erreichbar — auch nicht von einem Gerät, das schon ' +
+              'gekoppelt ist.'}
+        </p>
+        <p className="settings-hint">
+          Jede Verbindung wird hier außerdem einzeln bestätigt: es erscheint eine
+          Karte, und ohne Antwort gilt die Anfrage nach einer halben Minute als
+          abgelehnt. Eine Kopplung sagt, <em>wer</em> fragen darf — dass jetzt
+          gerade jemand zusehen darf, sagt nur ein Mensch.
         </p>
 
         <button type="button" className="settings-entry" onClick={toggle} disabled={busy}>
-          <span>{running ? 'Freigabe beenden' : 'Dieses Gerät steuerbar machen'}</span>
+          <span>{running ? 'Ausschalten' : 'Einschalten'}</span>
         </button>
       </section>
 

@@ -17,13 +17,17 @@ import app.remotedesktop.client.MainActivity
 import app.remotedesktop.client.R
 
 /**
- * Hält den Host am Leben, solange dieses Gerät steuerbar sein soll.
+ * Hält den Host am Leben, solange die App offen ist.
  *
- * Ein Server, der mit der Activity stirbt, wäre keiner: das Handy soll auch
- * dann antworten, wenn es in der Tasche liegt und der Bildschirm aus ist. Der
- * Preis ist die sichtbare Benachrichtigung — und die ist hier kein Ärgernis,
- * sondern das Einzige, woran man sieht, dass das eigene Handy gerade von außen
- * erreichbar ist. Sie soll auffallen.
+ * Der Vordergrunddienst ist nötig, damit der Server nicht stirbt, sobald jemand
+ * den Bildschirm ausschaltet oder einen Anruf entgegennimmt — eine laufende
+ * Sitzung soll das überstehen. Er ist aber ausdrücklich **kein** Dauerbetrieb:
+ * er endet mit der Activity (siehe MainActivity.onDestroy) und startet sich
+ * nicht von allein neu.
+ *
+ * Die sichtbare Benachrichtigung ist dabei kein Ärgernis, sondern das Einzige,
+ * woran man sieht, dass das eigene Handy gerade von außen erreichbar ist. Sie
+ * soll auffallen.
  */
 class HostService : Service() {
 
@@ -83,9 +87,12 @@ class HostService : Service() {
             return START_NOT_STICKY
         }
 
-        // Neu starten, wenn das System den Dienst einsammelt: wer sein Handy
-        // freigegeben hat, will es freigegeben wissen.
-        return START_STICKY
+        // Ausdrücklich **nicht** START_STICKY. Der Dienst gehört zur laufenden
+        // App und nicht zum Gerät: hat das System ihn eingesammelt, ist die App
+        // meist ohnehin weg, und ein Server, der sich hinter dem Rücken seines
+        // Besitzers wieder anschaltet, ist genau das, was ein Handy nicht tun
+        // soll. Eingeschaltet wird beim nächsten Öffnen der App.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {

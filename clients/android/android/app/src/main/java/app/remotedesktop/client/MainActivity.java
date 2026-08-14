@@ -5,6 +5,8 @@ import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 
 import app.remotedesktop.client.host.HostPlugin;
+import app.remotedesktop.client.host.HostPreference;
+import app.remotedesktop.client.host.HostService;
 import app.remotedesktop.client.surfaces.CertificateTrustPlugin;
 import app.remotedesktop.client.surfaces.SurfacesPlugin;
 
@@ -22,5 +24,30 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HostPlugin.class);
 
         super.onCreate(savedInstanceState);
+
+        // Der Host läuft, solange die App offen ist — nicht länger.
+        //
+        // Vorher war er auf Dauerbetrieb ausgelegt: einmal eingeschaltet, lief
+        // er weiter, auch wenn die App längst weggewischt war. Das ist zu viel
+        // für ein Gerät, das man in der Hosentasche trägt. Wer sein Handy vom
+        // PC aus steuern will, hat es ohnehin in der Hand.
+        if (HostPreference.INSTANCE.isEnabled(this)) {
+            HostService.Companion.start(this);
+        }
+    }
+
+    /**
+     * Und aus, wenn die App zu ist. Nicht in onStop(): der Bildschirm geht aus,
+     * jemand nimmt einen Anruf entgegen, die App wandert in den Hintergrund —
+     * währenddessen soll die laufende Sitzung nicht abreißen. Erst wenn die
+     * Activity endgültig verschwindet, verschwindet auch der Server.
+     */
+    @Override
+    public void onDestroy() {
+        if (!isChangingConfigurations()) {
+            HostService.Companion.stop(this);
+        }
+
+        super.onDestroy();
     }
 }

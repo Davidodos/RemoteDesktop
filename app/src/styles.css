@@ -1125,3 +1125,24 @@ button.danger:active:not(:disabled) {
   display: grid;
   gap: 0.6rem;
 }
+
+/*
+ * Die Rückfrage „darf dieses Gerät jetzt verbinden?".
+ *
+ * Sie verdeckt alles andere, und zwar mit Absicht: am anderen Ende wartet
+ * jemand vor einem schwarzen Bild, und die Frage hat eine halbe Minute. Sie
+ * lässt sich nicht wegtippen — „Ablehnen" steht daneben, und ein
+ * versehentliches Wegwischen sähe aus wie eine Zustimmung, die niemand gegeben
+ * hat.
+ */
+.request-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 70%);
+  overflow-y: auto;
+}
