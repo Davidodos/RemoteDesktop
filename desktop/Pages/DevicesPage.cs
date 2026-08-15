@@ -48,7 +48,10 @@ public sealed class DevicesPage : PageView
     };
 
     private readonly TextBlock _hint = new(
-        "Auf „Code anzeigen“ klicken, dann am Handy scannen oder eintippen.");
+        "Auf „Code anzeigen“ klicken, dann am Handy scannen oder eintippen. "
+        + "Das gilt für Geräte, die diesen Rechner steuern sollen — dafür muss "
+        + "sein Agent laufen. Umgekehrt geht es ohne: um ein anderes Gerät zu "
+        + "steuern, unter „Fernsteuerung“ koppeln.");
 
     /// <summary>
     /// Die Liste wird bei jedem Anzeigen neu gefüllt, die Karte darum aber
@@ -263,10 +266,23 @@ public sealed class DevicesPage : PageView
 
     /// <summary>
     /// Der häufigste Fall ist nicht ein Fehler im Code, sondern ein Agent, der
-    /// gar nicht läuft. Das soll die Meldung sagen.
+    /// gar nicht läuft.
+    ///
+    /// <para>
+    /// **Und das ist nicht zwangsläufig ein Problem.** Was auf dieser Seite
+    /// steht, betrifft ausschließlich die eine Richtung: welche Geräte *diesen*
+    /// Rechner steuern dürfen. Dafür braucht es den Agent, denn er ist das Ziel.
+    /// Wer umgekehrt nur andere Geräte steuern will, braucht ihn nicht — und
+    /// koppelt sich unter „Fernsteuerung" mit Adresse und Code der Gegenseite.
+    /// Die Meldung sagte das nicht und las sich wie ein Defekt, der die ganze
+    /// Kopplung blockiert.
+    /// </para>
     /// </summary>
     private static string Unreachable(Exception failure) =>
-        $"Der Agent auf diesem Rechner antwortet nicht — läuft der Dienst? ({failure.Message})";
+        "Der Agent auf diesem Rechner antwortet nicht — läuft der Dienst? Ohne ihn "
+        + "lässt sich dieser Rechner nicht steuern. Andere Geräte zu steuern geht "
+        + "trotzdem: unter „Fernsteuerung“ koppeln, dort mit Adresse und Code des "
+        + $"anderen Geräts. ({failure.Message})";
 
     protected override void Dispose(bool disposing)
     {
