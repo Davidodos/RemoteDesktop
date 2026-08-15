@@ -26,7 +26,7 @@
  */
 export interface LocalNode {
   /**
-   * Ob dieses Gerät überhaupt eine Gegenstelle hat, die man eintragen kann.
+   * Ob es hier jemanden gibt, der die Liste der zugelassenen Geräte führt.
    *
    * <p>
    * **Nicht dasselbe wie ein vorhandener Steckbrief**, und die Verwechslung war
@@ -34,16 +34,19 @@ export interface LocalNode {
    * Adresse. Ein Handy, das gerade in keinem Netz hängt, hat keine — und trug
    * den Schlüssel der Gegenseite deshalb **nicht** ein. Danach stand das Gerät
    * in der Liste und antwortete auf jede Anfrage mit „kenne ich nicht", ohne
-   * dass irgendwo stand, warum.
+   * dass irgendwo stand, warum. Eine Adresse ist eine Auskunft über das Netz von
+   * jetzt; ein Eintrag in einer Datei gilt, sobald der Server startet.
    * </p>
    *
    * <p>
-   * Eine Adresse ist eine Auskunft über das Netz von jetzt; ein Eintrag in einer
-   * Datei gilt, sobald der Server startet. Gefragt wird deshalb nur noch, ob es
-   * hier jemanden gibt, der die Datei führt.
+   * **Und warum es eine Frage bleibt und keine Eigenschaft:** am Handy führt die
+   * Liste der Prozess selbst, hier ist die Antwort immer ja. Im Fenster führt sie
+   * der Agent nebenan, und ob der läuft, ist eine Entscheidung des Nutzers — wer
+   * nur andere Geräte steuern will, braucht ihn nicht. Ein „nein" ist dort keine
+   * Störung, sondern der Normalfall, und darf deshalb keine Meldung auslösen.
    * </p>
    */
-  readonly available: boolean
+  ready(): Promise<boolean>
 
   /**
    * Der eigene Steckbrief — er geht mit, wenn dieses Gerät ein anderes koppelt.
@@ -121,7 +124,7 @@ export interface DeviceProfile {
 
 /** Für Umgebungen, die selbst keine Gegenstelle sind — der Browser vor allem. */
 export const noLocalNode: LocalNode = {
-  available: false,
+  ready: (): Promise<boolean> => Promise.resolve(false),
   profile: (): Promise<DeviceProfile | undefined> => Promise.resolve(undefined),
   peers: (): Promise<DeviceProfile[]> => Promise.resolve([]),
   forget: (): Promise<void> => Promise.resolve(),

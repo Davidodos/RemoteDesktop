@@ -165,7 +165,13 @@ const windowTrust: TrustService = {
  * fragen zu können.
  */
 const windowNode: LocalNode = {
-  available: true,
+  /**
+   * Die Gegenstelle dieses Rechners ist der Agent nebenan. Antwortet er nicht,
+   * ist dieser Rechner keine — und das ist eine Entscheidung des Nutzers, kein
+   * Fehler: wer nur andere Geräte steuern will, braucht ihn nicht.
+   */
+  ready: async (): Promise<boolean> =>
+    (await windowNode.profile().catch(() => undefined)) !== undefined,
 
   profile: async (): Promise<DeviceProfile | undefined> =>
     usableProfile((await ask<{ profile?: unknown }>({ kind: 'local-self' })).profile),

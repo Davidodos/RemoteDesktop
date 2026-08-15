@@ -421,7 +421,8 @@ function localNode(plugins: CapacitorPlugins): LocalNode {
   }
 
   return {
-    available: true,
+    // Die Runtime lebt im Prozess dieser App; die Datei wird immer geführt.
+    ready: () => Promise.resolve(true),
     profile: async () => usableProfile((await plugin.profile()).profile),
 
     peers: async () => {

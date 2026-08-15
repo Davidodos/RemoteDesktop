@@ -80,11 +80,7 @@ export async function grantPeer(
   // Gerät auf beiden Seiten in der Liste, und jede Anfrage kam mit „kenne ich
   // nicht" zurück. Ob dieses Gerät gerade eine Adresse hat, hat mit der Frage,
   // wer es steuern darf, nichts zu tun.
-  if (!node.available) {
-    return undefined
-  }
-
-  if (peer === undefined) {
+  if (peer === undefined || !(await node.ready())) {
     return undefined
   }
 

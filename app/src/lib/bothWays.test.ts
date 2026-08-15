@@ -22,7 +22,7 @@ function node(overrides: Partial<LocalNode> = {}): LocalNode & { granted: string
 
   return {
     ...noLocalNode,
-    available: true,
+    ready: (): Promise<boolean> => Promise.resolve(true),
     profile: (): Promise<DeviceProfile | undefined> =>
       Promise.resolve({ host: '192.168.178.31', port: 8443, name: 'Handy' }),
     grant: (publicKey: string): Promise<void> => {
@@ -115,6 +115,21 @@ describe('die Gegenseite eintragen', () => {
 
     // Assert
     expect(warnung).toBeUndefined()
+  })
+
+  test('schweigt im Fenster, solange kein eigener Agent läuft', async () => {
+    // Arrange — wer nur andere Geräte steuern will, braucht keinen. Das ist eine
+    // Entscheidung und keine Störung; eine Meldung darüber wäre Lärm bei jeder
+    // Kopplung.
+    const local = node({ ready: () => Promise.resolve(false) })
+    use(local)
+
+    // Act
+    const warnung = await grantPeer({ name: 'Handy', clientKey: 'AAAA' })
+
+    // Assert
+    expect(warnung).toBeUndefined()
+    expect(local.granted).toEqual([])
   })
 
   test('schweigt bei einem Waker, der keine Gegenrichtung anbietet', async () => {
