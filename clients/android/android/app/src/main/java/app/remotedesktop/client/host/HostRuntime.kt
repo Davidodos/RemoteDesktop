@@ -16,17 +16,53 @@ import java.io.File
  */
 class HostRuntime private constructor(
     private val context: Context,
-    private val server: HostServer,
+    private val folder: File,
+    private val identity: HostIdentity,
+    private val sessions: SessionStore,
     private val codes: PairingCodes,
     private val pairing: PairingService,
     private val peers: PeerInbox,
     private val local: LocalClient,
-    private val agentFingerprint: String,
+    private val version: String,
     /** Die offenen Rückfragen „darf dieses Gerät jetzt verbinden?". */
     val connections: ConnectionRequests,
-    val material: HostCertificate.Material,
     val deviceName: String,
 ) {
+
+    private val agentFingerprint: String = identity.fingerprint
+
+    /**
+     * Zertifikat und Server entstehen zusammen und werden zusammen ersetzt.
+     *
+     * <p>
+     * **Der Befund dahinter:** beide entstanden genau einmal, beim ersten Zugriff
+     * auf die Runtime. Damit stand im Zertifikat die Adressliste von damals,
+     * während die Freigabeseite die von jetzt anzeigte. Ein Handy wechselt sein
+     * Netz mehrmals am Tag — und wer die angezeigte Adresse abtippte, landete auf
+     * einem Zertifikat, das genau diese Adresse nicht abdeckt. Die Verbindung
+     * scheiterte im Handschlag, also lange bevor irgendjemand nach einem Ausweis
+     * gefragt hätte: am Bildschirm stand „antwortet nicht", obwohl das Handy
+     * lauschte und antwortete.
+     * </p>
+     *
+     * <p>
+     * Die Stelle selbst überlebt das Neuausstellen — nur das Serverzertifikat
+     * wird ersetzt. Deshalb ist es folgenlos: kein gekoppeltes Gerät muss etwas
+     * erneut bestätigen, und der Fingerabdruck, der im QR-Code steht, bleibt
+     * derselbe.
+     * </p>
+     */
+    private var current: Endpoint = endpoint()
+
+    val material: HostCertificate.Material get() = current.material
+
+    private val server: HostServer get() = current.server
+
+    /** Was zusammengehört: ein Zertifikat und der Server, der es vorzeigt. */
+    private data class Endpoint(
+        val material: HostCertificate.Material,
+        val server: HostServer,
+    )
 
     companion object {
 
@@ -48,51 +84,25 @@ class HostRuntime private constructor(
             val folder = File(context.filesDir, FOLDER).apply { mkdirs() }
             val name = deviceNameOf(context)
 
-            // Die eigenen Adressen stehen im Zertifikat. Wechselt die Adresse —
-            // und bei DHCP tut sie das —, wird beim nächsten Start ein neues
-            // Serverzertifikat ausgestellt; die Stelle darüber bleibt.
-            val material = HostCertificate.loadOrCreate(
-                folder,
-                name,
-                (HostAddresses.all(context) + "localhost").distinct(),
-            )
-
             val clients = ClientStore(File(folder, "clients.json"))
             val codes = PairingCodes()
             val sessions = SessionStore()
-            val pairing = PairingService(clients, codes, ChallengeStore(), sessions)
-            val identity = HostIdentity.loadOrCreate(File(folder, "hostkey.txt"))
 
             // Die beiden Hälften der Gegenrichtung: der Eingang für fremde
             // Steckbriefe, der Ausweis für den eigenen.
-            val peers = PeerInbox(File(folder, "peers.json"))
-            val local = LocalClient(File(folder, "localclient.json"))
-
-            // Jede Verbindung wird am Gerät einzeln bestätigt.
-            val connections = ConnectionRequests()
-
-            val server = HostServer(
-                identity = identity,
-                pairing = pairing,
-                codes = codes,
-                material = material,
-                deviceName = name,
-                version = versionOf(context),
-                sessions = sessions,
-                peers = peers,
-                local = local,
-                screen = { ScreenCapture.scaled(screenOf(context)) },
-                address = { HostAddresses.best(context) },
-                screenSource = { ScreenCapture.open(context, screenOf(context)) },
-                input = { command ->
-                    RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
-                },
-                confirm = connections::ask,
-            )
-
             return HostRuntime(
-                context, server, codes, pairing, peers, local, identity.fingerprint,
-                connections, material, name,
+                context = context,
+                folder = folder,
+                identity = HostIdentity.loadOrCreate(File(folder, "hostkey.txt")),
+                sessions = sessions,
+                codes = codes,
+                pairing = PairingService(clients, codes, ChallengeStore(), sessions),
+                peers = PeerInbox(File(folder, "peers.json")),
+                local = LocalClient(File(folder, "localclient.json")),
+                version = versionOf(context),
+                // Jede Verbindung wird am Gerät einzeln bestätigt.
+                connections = ConnectionRequests(),
+                deviceName = name,
             )
         }
 
@@ -152,10 +162,64 @@ class HostRuntime private constructor(
     /** Unter welchen Adressen dieses Handy gerade erreichbar ist. */
     fun addresses(): List<String> = HostAddresses.all(context)
 
+    /**
+     * Baut Zertifikat und Server für die Adressen, die dieses Gerät **jetzt**
+     * hat.
+     *
+     * Ins Zertifikat kommt nur, worüber jemand hereinkommt: eine
+     * Mobilfunkadresse stünde dort als Versprechen, das der Anbieter nicht
+     * einlöst. `localhost` gehört dazu, weil die eigene Oberfläche über die
+     * Rückkopplung fragt.
+     */
+    private fun endpoint(): Endpoint {
+        val names = (HostAddresses.routable(context) + "localhost").distinct()
+
+        // Stellt nur dann neu aus, wenn die Liste sich geändert hat oder das
+        // alte Zertifikat abläuft — die Stelle darüber bleibt in jedem Fall.
+        val material = HostCertificate.loadOrCreate(folder, deviceName, names)
+
+        val server = HostServer(
+            identity = identity,
+            pairing = pairing,
+            codes = codes,
+            material = material,
+            deviceName = deviceName,
+            version = version,
+            sessions = sessions,
+            peers = peers,
+            local = local,
+            screen = { ScreenCapture.scaled(screenOf(context)) },
+            address = { HostAddresses.best(context) },
+            screenSource = { ScreenCapture.open(context, screenOf(context)) },
+            input = { command ->
+                RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
+            },
+            confirm = connections::ask,
+        )
+
+        return Endpoint(material, server)
+    }
+
+    /**
+     * Startet den Host — und stellt vorher sicher, dass sein Zertifikat die
+     * Adressen abdeckt, unter denen er gleich angezeigt wird.
+     *
+     * Nachgesehen wird bei jedem Einschalten und nicht nur beim ersten: das
+     * Einschalten ist der Augenblick, in dem jemand hinsieht, und zwischen zwei
+     * Einschaltvorgängen liegt oft ein Netzwechsel. Deckt das vorhandene
+     * Zertifikat die Liste schon ab, kostet der Aufruf nichts.
+     */
     fun start() {
-        if (!server.isRunning) {
-            server.start()
+        if (server.isRunning) {
+            return
         }
+
+        // Der alte Server lauscht nicht mehr; ihn zu ersetzen kostet nichts als
+        // den Blick auf die Adressliste. Die Stelle bleibt dabei dieselbe —
+        // erneuert wird höchstens das Serverzertifikat.
+        current = endpoint()
+
+        server.start()
     }
 
     fun stop() {
@@ -182,7 +246,11 @@ class HostRuntime private constructor(
      * `null` nur ohne Adresse im Netz: dann beschreibt er nichts.
      */
     fun profile(): DeviceProfile? {
-        val address = HostAddresses.best(context) ?: addresses().firstOrNull() ?: return null
+        // Nur eine Adresse, unter der jemand hereinkommt. Die Mobilfunkadresse
+        // stand vorher mit in der Auswahl und gewann sie sogar, sobald das WLAN
+        // gerade kein Internet hatte — die Gegenseite trug sie ein und lief von
+        // da an in eine Zeitüberschreitung.
+        val address = HostAddresses.routable(context).firstOrNull() ?: return null
 
         return DeviceProfile(
             host = address,
@@ -212,7 +280,10 @@ class HostRuntime private constructor(
 
     /** Der QR-Inhalt zum angezeigten Code, oder `null` ohne erreichbare Adresse. */
     fun pairingUri(code: String): String? {
-        val address = addresses().firstOrNull() ?: return null
+        // Dieselbe Wahl wie beim Steckbrief: was im QR-Code steht, muss ein Ziel
+        // sein. Eine Adresse, die nur nach außen taugt, führt hier ins Leere —
+        // und der Fehlschlag fällt erst auf, wenn schon jemand gescannt hat.
+        val address = HostAddresses.routable(context).firstOrNull() ?: return null
 
         return PairingUri.build(address, port, code, material.fingerprint)
     }

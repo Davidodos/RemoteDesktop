@@ -3,6 +3,7 @@ package app.remotedesktop.client.host
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
+import android.net.NetworkCapabilities
 import android.os.Build
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -16,15 +17,24 @@ import java.net.NetworkInterface
  * Mobilfunk, dazu Tunnel und Attrappen, die Android für sich selbst führt. In
  * den Einstellungen standen sie alle nebeneinander, und **keine** davon
  * funktionierte zum Abtippen: die richtige ging in den anderen unter, und die
- * anderen führen ins Nichts. Eine Liste, aus der man raten muss, ist schlechter
- * als eine Angabe.
+ * anderen führen ins Nichts.
  * </p>
  *
  * <p>
- * Gefragt wird deshalb das System, welches Netz gerade das aktive ist, und
- * dessen Adresse zählt. Nur wenn das nichts hergibt, wird noch einmal über die
- * Schnittstellen gegangen — dann aber ohne alles, was ohnehin nicht in Frage
- * kommt.
+ * **Der zweite Befund:** danach zählte, was das System als *aktives* Netz
+ * meldet. Das ist die Antwort auf eine andere Frage. Aktiv ist das Netz, über
+ * das dieses Handy ins Internet geht — bei einem WLAN ohne Internet ist das der
+ * Mobilfunk. Dessen Adresse stand dann vorn, und über sie erreicht dieses Gerät
+ * niemand: sie liegt hinter dem CGNAT des Anbieters, der eingehende
+ * Verbindungen gar nicht erst durchlässt. Angezeigt wurde also verlässlich die
+ * eine Adresse, die nicht funktioniert.
+ * </p>
+ *
+ * <p>
+ * Gefragt wird deshalb nicht mehr, worüber das Handy hinausgeht, sondern worüber
+ * es hereingelassen wird — und das sagt der Transport des Netzes, nicht seine
+ * Rolle: ein VPN zuerst, weil seine Adresse bleibt, dann WLAN und Ethernet,
+ * Mobilfunk zuletzt und nur, wenn es sonst nichts gibt.
  * </p>
  */
 object HostAddresses {
@@ -36,6 +46,34 @@ object HostAddresses {
     private val IGNORED = listOf("dummy", "rmnet_ims", "lo", "p2p", "ap")
 
     /**
+     * Woran ein anderes Gerät hier ankommt — in der Reihenfolge, in der es
+     * gelingt.
+     *
+     * Die Reihenfolge ist die ganze Aussage: `ordinal` entscheidet, was in den
+     * Steckbrief und in die Anzeige kommt.
+     */
+    enum class Reach {
+        /**
+         * Tailscale, WireGuard und alles andere mit `TRANSPORT_VPN`. Zuerst,
+         * weil diese Adresse bleibt: sie hängt nicht am Netz, in dem das Handy
+         * gerade steht, und überlebt den Weg von zuhause ins Büro.
+         */
+        VPN,
+
+        /** WLAN und Ethernet — im selben Netz erreichbar, solange man dort ist. */
+        LOCAL,
+
+        /**
+         * Mobilfunk. Steht nur hier, damit die Anzeige nicht leer bleibt; als
+         * Ziel taugt die Adresse fast nie, siehe [isRoutable].
+         */
+        CELLULAR,
+    }
+
+    /** Eine Adresse mit der Auskunft, was sie wert ist. */
+    data class Candidate(val address: String, val reach: Reach)
+
+    /**
      * Die Adresse, unter der ein anderes Gerät dieses hier erreicht — oder
      * `null`, wenn es gerade in keinem Netz hängt.
      */
@@ -45,18 +83,57 @@ object HostAddresses {
      * Alle Adressen, die in Frage kommen, die brauchbarste zuerst.
      *
      * Mehr als eine gibt es, wenn WLAN und ein VPN nebeneinander laufen. Dann
-     * ist die Reihenfolge eine Auskunft und keine Aufzählung: vorn steht, was
-     * das System gerade benutzt.
+     * ist die Reihenfolge eine Auskunft und keine Aufzählung.
      */
-    fun all(context: Context): List<String> {
-        val active = fromActiveNetwork(context)
+    fun all(context: Context): List<String> = rank(candidates(context))
 
-        // Was das System als aktives Netz meldet, kommt zuerst — der Rest
-        // dahinter, falls jemand zwei Wege hat und den anderen braucht.
-        return (active + fromInterfaces()).distinct()
+    /**
+     * Nur die Adressen, unter denen dieses Gerät wirklich erreichbar ist.
+     *
+     * Das ist die Liste für den Steckbrief und für das Zertifikat. Eine
+     * Mobilfunkadresse gehört in keins von beidem: sie steht im Zertifikat als
+     * Versprechen, das niemand einlösen kann, und im Steckbrief als Adresse, an
+     * der die Gegenseite hängen bleibt.
+     */
+    fun routable(context: Context): List<String> =
+        rank(candidates(context).filter { isRoutable(it.reach) })
+
+    /**
+     * Ob über diese Art Netz überhaupt jemand hereinkommt.
+     *
+     * Mobilfunk nicht: die Adresse liegt beim Anbieter hinter einem NAT, das
+     * eingehende Verbindungen nicht durchlässt. Sie anzuzeigen ist eine
+     * Auskunft, sie zu benutzen eine Sackgasse.
+     */
+    fun isRoutable(reach: Reach): Boolean = reach != Reach.CELLULAR
+
+    /**
+     * Bringt die Kandidaten in die Reihenfolge, in der sie gelingen — und wirft
+     * Doppelte weg.
+     *
+     * Getrennt vom Einsammeln, weil das `Context` braucht und diese Regel nicht:
+     * so steht der Teil unter Test, in dem die Entscheidung fällt.
+     */
+    internal fun rank(candidates: List<Candidate>): List<String> = candidates
+        .sortedBy { it.reach.ordinal }
+        .map { it.address }
+        .distinct()
+
+    /**
+     * Alle Netze, die dieses Gerät gerade hat — nicht nur das aktive.
+     *
+     * Über `allNetworks`, weil ein Handy mehrere gleichzeitig führt und das
+     * aktive das falsche ist: siehe oben. Gibt das nichts her, bleibt der Weg
+     * über die Schnittstellen; dort fehlt die Auskunft über den Transport, und
+     * alles gilt als lokal.
+     */
+    private fun candidates(context: Context): List<Candidate> {
+        val fromNetworks = fromNetworks(context)
+
+        return fromNetworks.ifEmpty { fromInterfaces().map { Candidate(it, Reach.LOCAL) } }
     }
 
-    private fun fromActiveNetwork(context: Context): List<String> {
+    private fun fromNetworks(context: Context): List<Candidate> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
             return emptyList()
         }
@@ -65,25 +142,51 @@ object HostAddresses {
             val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE)
                 as ConnectivityManager
 
-            val network = manager.activeNetwork ?: return emptyList()
-            val properties: LinkProperties = manager.getLinkProperties(network)
-                ?: return emptyList()
+            manager.allNetworks.flatMap { network ->
+                val capabilities = manager.getNetworkCapabilities(network)
+                val properties: LinkProperties? = manager.getLinkProperties(network)
 
-            properties.linkAddresses
-                .map { it.address }
-                .filterIsInstance<Inet4Address>()
-                .filter(::isUsable)
-                .mapNotNull { it.hostAddress }
+                if (capabilities == null || properties == null) {
+                    return@flatMap emptyList()
+                }
+
+                val reach = reachOf(capabilities) ?: return@flatMap emptyList()
+
+                properties.linkAddresses
+                    .map { it.address }
+                    .filterIsInstance<Inet4Address>()
+                    .filter(::isUsable)
+                    .mapNotNull { it.hostAddress }
+                    .map { Candidate(it, reach) }
+            }
         }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Was für ein Netz das ist. `null` bei allem, was kein Weg zu diesem Gerät
+     * ist — Bluetooth-Kopplungen und was Android sonst noch führt.
+     *
+     * Auf VPN wird zuerst geprüft: ein Tailscale-Netz trägt daneben oft noch
+     * den Transport des Netzes, auf dem es aufsitzt.
+     */
+    private fun reachOf(capabilities: NetworkCapabilities): Reach? = when {
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> Reach.VPN
+
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> Reach.LOCAL
+
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> Reach.CELLULAR
+
+        else -> null
     }
 
     private fun fromInterfaces(): List<String> = runCatching {
         NetworkInterface.getNetworkInterfaces().toList()
             .filter { it.isUp && !it.isLoopback }
             .filter { candidate -> IGNORED.none { candidate.name.startsWith(it) } }
-            .flatMap { candidate -> candidate.inetAddresses.toList().map { candidate to it } }
-            .filter { (_, address) -> address is Inet4Address && isUsable(address) }
-            .mapNotNull { (_, address) -> address.hostAddress }
+            .flatMap { candidate -> candidate.inetAddresses.toList() }
+            .filter { address -> address is Inet4Address && isUsable(address) }
+            .mapNotNull { it.hostAddress }
     }.getOrDefault(emptyList())
 
     /**
