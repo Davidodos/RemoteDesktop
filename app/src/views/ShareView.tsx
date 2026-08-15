@@ -212,28 +212,26 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
           <h2>Bildschirm</h2>
           <p className="settings-hint">
             {status?.sharingScreen === true
-              ? 'Die Aufnahme läuft. Sie endet, wenn dieses Handy neu startet — ' +
-                'danach muss sie hier wieder eingeschaltet werden.'
-              : 'Ohne Aufnahme lässt sich dieses Gerät steuern, aber nicht ' +
-                'ansehen. Android fragt beim Einschalten selbst noch einmal nach.'}
+              ? 'Die Aufnahme läuft. Sie endet, wenn dieses Handy neu startet ' +
+                'oder du sie hier beendest — danach fragt Android bei der ' +
+                'nächsten zugelassenen Verbindung wieder nach.'
+              : 'Android fragt danach, sobald du die erste Verbindung zulässt — ' +
+                'nicht vorher. Bis dahin liegt hier keine Erlaubnis herum, die ' +
+                'jemand vergessen könnte. Lehnst du sie dann ab, lässt sich ' +
+                'dieses Gerät bedienen, aber nicht ansehen.'}
           </p>
 
-          <button
-            type="button"
-            className="settings-entry"
-            onClick={() => {
-              const action =
-                status?.sharingScreen === true ? host.disableScreen() : host.enableScreen()
-
-              void action.then(setStatus, describe(setError))
-            }}
-          >
-            <span>
-              {status?.sharingScreen === true
-                ? 'Bildschirmaufnahme beenden'
-                : 'Bildschirm freigeben'}
-            </span>
-          </button>
+          {status?.sharingScreen === true && (
+            <button
+              type="button"
+              className="settings-entry"
+              onClick={() => {
+                void host.disableScreen().then(setStatus, describe(setError))
+              }}
+            >
+              <span>Bildschirmaufnahme beenden</span>
+            </button>
+          )}
         </section>
       )}
 
