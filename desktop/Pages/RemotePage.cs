@@ -154,6 +154,22 @@ public sealed class RemotePage : Control
                    ?? throw new InvalidOperationException(
                        "WebView2 hat sich ohne Fehler, aber auch ohne Kern initialisiert.");
 
+        // **Erst den Zwischenspeicher wegräumen, dann laden.**
+        //
+        // Der Befund dahinter: die Oberfläche kommt über einen virtuellen Host
+        // und damit über `https` — für WebView2 ist das eine Website wie jede
+        // andere, und sie wird zwischengespeichert. Der Ordner dafür liegt im
+        // Profil des Benutzers und überlebt jede Deinstallation. Wer eine neue
+        // Fassung installierte, bekam deshalb die alte zu sehen: dieselbe
+        // Meldung, derselbe Fehler, an einem Code, der längst behoben war. Ein
+        // Fehlerbild, das sich nicht ändert, obwohl man es geändert hat, ist das
+        // teuerste, das es gibt — es lenkt jede Suche auf die falsche Fährte.
+        //
+        // Nur der Zwischenspeicher, ausdrücklich nicht der lokale Speicher: dort
+        // liegen der Schlüssel dieses Fensters und die Geräteliste. Sie zu
+        // löschen hieße, bei jedem Start alle Kopplungen zu verlieren.
+        await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
+
         core.SetVirtualHostNameToFolderMapping(
             VirtualHost, appDirectory, CoreWebView2HostResourceAccessKind.Allow);
 
