@@ -525,6 +525,93 @@ Ob das reicht, zeigt erst das Gerät: wenn auch die richtige Adresse nicht
 antwortet, liegt es nicht an der Auswahl, sondern daran, dass der Server nicht
 lauscht oder das WLAN Geräte voneinander trennt (AP-Isolation).
 
+## Phase 31g — ein Geräte-Tab statt dreier (OFFEN, als Nächstes)
+
+Wunsch vom 15.08.2026. Die Windows-Oberfläche hat heute fünf Einträge in der
+Leiste, und drei davon reden über dasselbe: „Fernsteuerung" zeigt die
+Geräteliste der App, „Geräte" die `clients.json` des Agents, „Netz" eine
+Einstellung. Wer ein Handy koppelt, sieht es an einer Stelle und steuert es an
+einer anderen — und muss selbst wissen, dass das zwei Listen desselben Paares
+sind.
+
+### Die Leiste
+
+| vorher | nachher |
+|---|---|
+| Übersicht · Fernsteuerung · Geräte · Netz · Einstellungen | Übersicht · **Geräte** · Einstellungen |
+
+- **Fernsteuerung + Geräte werden eins.** Der neue Tab ist die WebView
+  (`RemotePage`); die native `DevicesPage` entfällt. Sie kann nichts, was die
+  App nicht auch kann — nur eben in einer zweiten Liste.
+- **Netz wandert unter Einstellungen.** Ein Netzmodus wird einmal eingestellt
+  und danach nie wieder angefasst; er gehört nicht neben etwas, das man täglich
+  benutzt.
+
+**Was dafür über die Brücke muss.** Die beiden Aufgaben der `DevicesPage`
+hängen an Endpunkten, die absichtlich nur am Rechner selbst erreichbar sind:
+
+- `local-code` — Kopplungscode und QR-Inhalt (`POST /api/pair/code`)
+- `local-clients` — wer diesen Rechner steuern darf, samt Widerruf
+  (`GET`/`DELETE /api/clients`)
+
+Damit ist `platform.host` im Fenster nicht mehr `noHost`, sondern eine Umsetzung
+über die Brücke. Das ist die richtige Auflösung: „dieses Gerät freigeben" heißt
+am PC „der Agent läuft", und das ist eine Auskunft und kein Schalter.
+
+### Der Kopplungscode
+
+Wie bisher — mit vier Wegen, auf denen er wieder verschwindet: **Ablauf** (der
+Countdown steht dabei), **Benutzung**, **Tabwechsel** und **ein Knopf daneben**.
+Ein Code, der noch dasteht, wenn er nicht mehr gilt, wird abgetippt und
+scheitert ohne erkennbaren Grund; einer, der nach dem Einlösen stehen bleibt,
+sieht aus, als könne man ihn noch einmal benutzen.
+
+### Jedes Gerät zeigt drei Angaben
+
+| Angabe | Woher |
+|---|---|
+| Name | wie bisher, mit eigenem Namen überschreibbar |
+| zuletzt verbunden | **neu**, lokal gemerkt beim Verbinden |
+| Plattform | **neu im Protokoll**: `platform: "windows" \| "android"` in `/api/info` und im Steckbrief |
+
+`platform` gehört in den Steckbrief und nicht nur in `/api/info`: die Liste soll
+das Symbol auch dann zeigen, wenn das Gerät gerade aus ist. Ein Agent ohne das
+Feld ist älter als 31g — dann steht dort nichts, statt „Windows" zu raten.
+
+### Und drei Knöpfe
+
+1. **Entfernen** — hebt die Kopplung **bei beiden** auf, mit Rückfrage, die das
+   ausspricht. Danach soll nichts mehr davon übrig sein, als hätten sich die
+   Geräte nie gekannt:
+   - hier: Gerät aus der Liste, Partner aus der eigenen `clients.json`, seine
+     Stelle aus `trusted.json`
+   - dort: dieses Gerät aus seiner `clients.json` **und** aus seiner Geräteliste
+   - **Was dafür fehlt:** ein Weg, sich beim Partner selbst auszutragen —
+     `DELETE /api/pair/self` mit dem eigenen Sitzungstoken. `/api/clients/{id}`
+     geht nicht: der ist nur am Rechner selbst erreichbar, und das soll er
+     bleiben. Und die Kennung des Partners in der **eigenen** `clients.json`
+     muss beim Koppeln mitgeschrieben werden (Fingerabdruck über
+     `peer.clientKey`), sonst weiß später niemand, welcher Eintrag zu welchem
+     Gerät gehört
+   - Ist die Gegenseite nicht erreichbar, wird **hier trotzdem** entfernt und
+     gesagt, dass drüben ein Rest bleibt. Ein Entfernen, das an einem
+     ausgeschalteten Handy scheitert, wäre keins
+2. **Verbindung testen** — in beide Richtungen, und die Antwort sagt beides:
+   - hin: `/api/info` und eine Anmeldung; daraus die Rechte, die dieses Gerät
+     dort hat
+   - her: steht der Partner in der eigenen `clients.json`, und mit welchen
+     Rechten
+   - Das ist die Auskunft, die heute fehlt: „antwortet nicht" verschweigt, ob es
+     am Netz, am Vertrauen oder an einer fehlenden Freigabe liegt
+3. **Verbinden** — ausgegraut, solange es nichts zu verbinden gibt: Gerät nicht
+   erreichbar, oder erreichbar ohne `screen`/`input` (am Handy die
+   Bedienungshilfe, am PC ein Agent, der nicht läuft). Ein Knopf, der nur eine
+   Fehlermeldung erzeugt, ist schlimmer als keiner
+
+**Abnahme:** alle vier Testläufe, APK und desktop bauen — und am echten Gerät:
+koppeln, testen, verbinden, entfernen, und danach steht auf beiden Seiten
+nichts mehr voneinander.
+
 ## Phase 31 — Beide Richtungen im Fenster und in der App
 
 - Die Geräteliste zeigt Handys mit eigenem Symbol; alles Weitere folgt schon

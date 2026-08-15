@@ -11,9 +11,11 @@ Stand 14.08.2026: **Phasen 27–30 erledigt** (Handy liefert Bild und nimmt
 Eingaben an), dazu 31a und 31c–31f. **31e ist gebaut**: eine Kopplung ist
 immer beidseitig (Steckbrief-Austausch in einem Aufruf statt weitergereichtem
 Code, der Entwurf aus 31b ist ersetzt), der Handy-Host läuft nur, solange die
-App offen ist, und jede Verbindung wird am Handy einzeln bestätigt. **Als
-Nächstes: die Prüfung am echten Gerät** — dort funktionierte die Fernsteuerung
-eines Handys zuletzt noch nicht.
+App offen ist, und jede Verbindung wird am Handy einzeln bestätigt. **Als Nächstes: Phase 31g** — ein Geräte-Tab statt dreier (Fernsteuerung +
+Geräte zusammen, Netz unter die Einstellungen), je Gerät Plattform und
+„zuletzt verbunden", dazu Entfernen auf beiden Seiten, ein Verbindungstest in
+beide Richtungen und ein Verbinden-Knopf, der ausgegraut ist, wenn nichts
+geht.
 Leitsatz: das Handy wird ein Agent und spricht dasselbe Protokoll; was ein Gerät
 kann, sagt es selbst über `capabilities` in `/api/info`.
 
