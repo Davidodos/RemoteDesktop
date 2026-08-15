@@ -1,3 +1,4 @@
+import { ensureTrust } from './certificateTrust.ts'
 import type { Device, DeviceStatus } from './types.ts'
 
 /**
@@ -15,10 +16,27 @@ const PROBE_TIMEOUT_MS = 3000
  * die ehrlichere Auskunft: dass die NAS einen Rechner erreicht, heißt nicht,
  * dass das Handy es auch tut.
  *
- * Gefragt wird `/health` — der einzige Endpunkt, der ohne Ausweis auskommt.
- * Eine Anmeldung nur zum Nachsehen, ob jemand da ist, wäre verkehrt herum.
+ * Eine Anmeldung nur zum Nachsehen, ob jemand da ist, wäre verkehrt herum —
+ * gefragt wird deshalb `/health`.
  */
 export async function isReachable(device: Device): Promise<boolean> {
+  if (await knock(device)) {
+    return true
+  }
+
+  // Ein zweiter Anlauf, aber nur, wenn es dafür einen Grund gibt: ein
+  // Zertifikat, dem dieses Gerät noch nicht vertraut, sieht von hier aus genau
+  // so aus wie ein Rechner, der schläft. Das ist der Fall, der am echten Gerät
+  // ein eingeschaltetes Handy dauerhaft als „offline" führte — bestätigt wurde
+  // beim Eintragen in die Liste, und da lief die Gegenstelle noch nicht.
+  return (await ensureTrust(device)) && (await knock(device))
+}
+
+/**
+ * Einmal anklopfen. Gefragt wird `/health` — der einzige Endpunkt, der ohne
+ * Ausweis auskommt.
+ */
+async function knock(device: Device): Promise<boolean> {
   try {
     const response = await fetch(`https://${device.host}:${device.port}/health`, {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),

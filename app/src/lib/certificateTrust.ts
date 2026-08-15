@@ -15,6 +15,8 @@
  * nicht, wird nichts installiert.
  */
 
+import { getPlatform } from '../platform/index.ts'
+
 /** Der Port, auf dem der Agent ausschließlich sein CA-Zertifikat anbietet. */
 export const TRUST_PORT = 8442
 
@@ -160,4 +162,59 @@ function toBase64(data: Uint8Array): string {
  */
 export function readable(fingerprint: string): string {
   return (fingerprint.match(/../g) ?? []).join(':')
+}
+
+
+/**
+ * Der Stelle eines Geräts vertrauen — dann, wenn es gebraucht wird.
+ *
+ * <p>
+ * **Der Befund dahinter:** das Vertrauen wurde einmal hergestellt, nämlich
+ * beim Eintragen des Geräts in die Liste. War die Gegenstelle in diesem
+ * Augenblick nicht erreichbar — und das ist der Normalfall, wenn jemand erst
+ * koppelt und die Freigabe danach einschaltet —, gab es kein Zertifikat zu
+ * holen. Danach nie wieder: das Gerät stand in der Liste und meldete für immer
+ * „antwortet nicht". Von einem Gerät, das wirklich aus ist, war das nicht zu
+ * unterscheiden.
+ * </p>
+ *
+ * <p>
+ * Verglichen wird gegen den Fingerabdruck aus der Kopplung. Ohne ihn wird
+ * nichts installiert — sonst sammelte diese Stelle ein, was gerade auf dem
+ * offenen Port liegt.
+ * </p>
+ *
+ * @returns `true`, wenn danach etwas Neues bestätigt ist — nur dann lohnt ein
+ *   zweiter Versuch.
+ */
+export async function ensureTrust(device: {
+  host: string
+  caFingerprint?: string
+}): Promise<boolean> {
+  const expected = certificateFingerprint(device.caFingerprint)
+  const platform = getPlatform()
+
+  if (expected === undefined || !platform.trust.available) {
+    return false
+  }
+
+  try {
+    const found =
+      platform.trust.fetchAuthority === undefined
+        ? await downloadAuthority(device.host)
+        : await platform.trust.fetchAuthority(device.host, TRUST_PORT)
+
+    if (found.fingerprint.trim().toLowerCase() !== expected) {
+      // Nicht bestätigen: entweder sitzt jemand dazwischen, oder unter dieser
+      // Adresse steht inzwischen ein anderes Gerät.
+      return false
+    }
+
+    await platform.trust.install(found.base64, found.fingerprint)
+
+    return true
+  } catch {
+    // Die Gegenstelle ist gerade nicht erreichbar. Beim nächsten Anlauf wieder.
+    return false
+  }
 }

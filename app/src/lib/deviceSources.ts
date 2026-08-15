@@ -108,6 +108,7 @@ function toDevice(entry: unknown): Device[] {
     token,
     clientId,
     fingerprint,
+    caFingerprint,
     canWake,
     mac,
     siteId,
@@ -141,6 +142,13 @@ function toDevice(entry: unknown): Device[] {
       ...(shared ? { token: token as string } : {}),
       ...(paired ? { clientId: clientId as string } : {}),
       ...(typeof fingerprint === 'string' && fingerprint.length > 0 ? { fingerprint } : {}),
+      // Bleibt erhalten, weil das Vertrauen zu einer Stelle nachgeholt werden
+      // muss, wenn die Gegenstelle beim Eintragen noch nicht lief. Ohne ihn
+      // gäbe es später nichts mehr, wogegen man vergleichen könnte — und das
+      // Gerät bliebe für immer „nicht erreichbar".
+      ...(typeof caFingerprint === 'string' && caFingerprint.length > 0
+        ? { caFingerprint }
+        : {}),
       canWake: canWake === true,
       // Standort und MAC merkt sich die App, solange der Rechner wach ist —
       // ohne sie kann ihn später niemand wecken (siehe `wake.ts`).
