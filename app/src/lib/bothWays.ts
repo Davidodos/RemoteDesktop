@@ -41,6 +41,19 @@ export async function announceSelf(): Promise<void> {
 }
 
 /**
+ * Der Ausweis der Gegenseite, so wie er über die Leitung kommt.
+ *
+ * `clientKey` fehlt, wenn die Gegenstelle zwar antwortet, ihr eigenes Fenster
+ * den Ausweis aber nie hinterlegt hat. Das ist ein anderer Fall als „keine
+ * Gegenseite" und wird seit dem Befund in {@link grantPeer} auch anders
+ * behandelt.
+ */
+export interface PeerCredential {
+  name: string
+  clientKey?: string
+}
+
+/**
  * Trägt die Gegenseite bei sich ein: ihre Oberfläche darf dieses Gerät steuern.
  *
  * Ohne Rückfrage. Der Schlüssel kam über eine Verbindung, an deren Anfang jemand
@@ -52,14 +65,39 @@ export async function announceSelf(): Promise<void> {
  *   und danach sucht niemand mehr.
  */
 export async function grantPeer(
-  peer: { name: string; clientKey: string } | undefined,
+  peer: PeerCredential | undefined,
 ): Promise<string | undefined> {
   const node = getPlatform().node
 
   // Kein Ziel, keine Gegenrichtung — im Browser ist das der Normalfall und
   // kein Fehler.
-  if (peer === undefined || (await node.profile()) === undefined) {
+  //
+  // Gefragt wird `available` und **nicht mehr**, ob es gerade einen Steckbrief
+  // gibt. Das war der Fehler: ein Steckbrief braucht eine Adresse, und ein
+  // Handy, das im Augenblick der Kopplung in keinem Netz hing, hatte keine.
+  // Dann wurde der Schlüssel der Gegenseite nicht eingetragen — und weil das
+  // still geschah, sah es aus wie eine gelungene Kopplung. Danach stand das
+  // Gerät auf beiden Seiten in der Liste, und jede Anfrage kam mit „kenne ich
+  // nicht" zurück. Ob dieses Gerät gerade eine Adresse hat, hat mit der Frage,
+  // wer es steuern darf, nichts zu tun.
+  if (!node.available) {
     return undefined
+  }
+
+  if (peer === undefined) {
+    return undefined
+  }
+
+  // Die Gegenseite ist eine Gegenstelle, hat aber keinen Ausweis mitgeschickt:
+  // ihr Fenster hat ihn dem eigenen Agent nie hinterlegt. Das ist der Fall, der
+  // vorher genauso aussah wie „gar keine Gegenrichtung angeboten" — und deshalb
+  // nie jemandem auffiel.
+  if (peer.clientKey === undefined) {
+    return (
+      `${peer.name} kann dieses Gerät noch nicht steuern: die Gegenseite hat ` +
+      'ihren Ausweis nicht mitgeschickt. Dort läuft der Agent vermutlich noch ' +
+      'nicht — starten, und danach noch einmal koppeln.'
+    )
   }
 
   try {

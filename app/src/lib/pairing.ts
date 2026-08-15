@@ -1,5 +1,6 @@
 import { postJson } from '../transport/direct.ts'
 import { TransportError } from '../transport/index.ts'
+import type { PeerCredential } from './bothWays.ts'
 import { certificateFingerprint } from './certificateTrust.ts'
 import { createClientKey, type ClientKeyPair } from './clientKey.ts'
 import type { DeviceProfile } from '../platform/index.ts'
@@ -69,10 +70,12 @@ export interface PairTarget {
 export interface PairedBothWays {
   device: Device
   /**
-   * Der Ausweis der Gegenseite — `undefined`, wenn sie keinen mitgeschickt hat.
-   * Dann ist die Kopplung einseitig, und der Aufrufer sagt das.
+   * Der Ausweis der Gegenseite — `undefined` nur, wenn sie gar keiner ist (ein
+   * Waker, oder ein Agent älter als Phase 31e). Ist sie eine Gegenstelle, steht
+   * hier ein Eintrag; ob er einen `clientKey` trägt, entscheidet über die
+   * Gegenrichtung. Siehe `grantPeer`.
    */
-  peer?: { name: string; clientKey: string }
+  peer?: PeerCredential
 }
 
 /**
@@ -156,11 +159,23 @@ export async function pairBothWays(target: PairTarget): Promise<PairedBothWays> 
 
   const clientKey = response.peer?.clientKey
 
+  // Ein Waker und ein Agent älter als Phase 31e melden das Feld gar nicht — dann
+  // gibt es keine Gegenrichtung, und das ist kein Fehler.
+  //
+  // Ein Agent, der `peer` schickt, dessen `clientKey` aber leer ist, ist etwas
+  // anderes: dort läuft eine Gegenstelle, die ihren Ausweis nicht hinterlegt
+  // hat. Beides in ein `undefined` zu falten war der Grund, warum eine
+  // einseitige Kopplung wie eine gelungene aussah — siehe `grantPeer`.
+  if (response.peer === undefined) {
+    return { device }
+  }
+
   return {
     device,
-    ...(typeof clientKey === 'string' && clientKey.length > 0
-      ? { peer: { name: response.peer?.name ?? device.name, clientKey } }
-      : {}),
+    peer: {
+      name: response.peer.name ?? device.name,
+      ...(typeof clientKey === 'string' && clientKey.length > 0 ? { clientKey } : {}),
+    },
   }
 }
 

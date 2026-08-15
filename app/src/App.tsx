@@ -128,8 +128,6 @@ function Shell(): React.JSX.Element {
   useEffect(() => {
     let current = true
 
-    void announceSelf()
-
     const look = (): void => void collectPeers().then(
       (all) => {
         if (all !== undefined && current) {
@@ -150,9 +148,25 @@ function Shell(): React.JSX.Element {
       },
     )
 
-    look()
+    // Der eigene Ausweis geht im selben Takt hinaus wie die Steckbriefe
+    // hereinkommen — und nicht mehr genau einmal beim Start.
+    //
+    // **Der Befund dahinter:** der Agent läuft als geplante Aufgabe und startet
+    // mit der Anmeldung; das Fenster tut dasselbe. Wer beim ersten Versuch
+    // verliert, verlor für die ganze Sitzung: der Ausweis blieb unhinterlegt,
+    // jede Kopplung schickte der Gegenseite ein leeres `clientKey` mit, und die
+    // trug diesen Rechner nie ein. Am Bildschirm stand danach „kennt dieses
+    // Gerät nicht mehr" — direkt nach einer Kopplung, die eben erst gelungen
+    // war. Der Aufruf geht an den eigenen Rechner, ist gleichbedeutend mit sich
+    // selbst und kostet nichts, sobald er einmal durch ist.
+    const tick = (): void => {
+      void announceSelf()
+      look()
+    }
 
-    const timer = window.setInterval(look, PEER_POLL_INTERVAL_MS)
+    tick()
+
+    const timer = window.setInterval(tick, PEER_POLL_INTERVAL_MS)
 
     return () => {
       current = false

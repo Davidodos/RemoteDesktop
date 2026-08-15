@@ -421,6 +421,7 @@ function localNode(plugins: CapacitorPlugins): LocalNode {
   }
 
   return {
+    available: true,
     profile: async () => usableProfile((await plugin.profile()).profile),
 
     peers: async () => {

@@ -165,6 +165,8 @@ const windowTrust: TrustService = {
  * fragen zu können.
  */
 const windowNode: LocalNode = {
+  available: true,
+
   profile: async (): Promise<DeviceProfile | undefined> =>
     usableProfile((await ask<{ profile?: unknown }>({ kind: 'local-self' })).profile),
 

@@ -26,6 +26,26 @@
  */
 export interface LocalNode {
   /**
+   * Ob dieses Gerät überhaupt eine Gegenstelle hat, die man eintragen kann.
+   *
+   * <p>
+   * **Nicht dasselbe wie ein vorhandener Steckbrief**, und die Verwechslung war
+   * ein Fehler: die Gegenrichtung hing an {@link profile}, also an einer
+   * Adresse. Ein Handy, das gerade in keinem Netz hängt, hat keine — und trug
+   * den Schlüssel der Gegenseite deshalb **nicht** ein. Danach stand das Gerät
+   * in der Liste und antwortete auf jede Anfrage mit „kenne ich nicht", ohne
+   * dass irgendwo stand, warum.
+   * </p>
+   *
+   * <p>
+   * Eine Adresse ist eine Auskunft über das Netz von jetzt; ein Eintrag in einer
+   * Datei gilt, sobald der Server startet. Gefragt wird deshalb nur noch, ob es
+   * hier jemanden gibt, der die Datei führt.
+   * </p>
+   */
+  readonly available: boolean
+
+  /**
    * Der eigene Steckbrief — er geht mit, wenn dieses Gerät ein anderes koppelt.
    *
    * `undefined` heißt: dieses Gerät ist kein mögliches Ziel (kein Agent, keine
@@ -101,6 +121,7 @@ export interface DeviceProfile {
 
 /** Für Umgebungen, die selbst keine Gegenstelle sind — der Browser vor allem. */
 export const noLocalNode: LocalNode = {
+  available: false,
   profile: (): Promise<DeviceProfile | undefined> => Promise.resolve(undefined),
   peers: (): Promise<DeviceProfile[]> => Promise.resolve([]),
   forget: (): Promise<void> => Promise.resolve(),
