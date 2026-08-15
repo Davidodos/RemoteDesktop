@@ -133,6 +133,16 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Ohne diese Erlaubnis gibt der ConnectivityManager nichts heraus: weder
+         das aktive Netz noch die Auskunft, ob ein Netz WLAN, VPN oder Mobilfunk
+         ist. Sie fehlte, und der Fehlschlag war lautlos — die Abfrage lief in
+         ein leeres Ergebnis und fiel auf die rohe Aufzählung der Schnittstellen
+         zurück. Die kennt keinen Unterschied zwischen einem WLAN und dem
+         Mobilfunk, und so stand auf der Freigabeseite verlässlich eine
+         rmnet-Adresse ganz vorn: die eine, über die dieses Handy niemand
+         erreicht. Jede Sortierung nach Erreichbarkeit hängt an dieser Zeile. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Der Vordergrunddienst und seine Benachrichtigung. FOREGROUND_SERVICE
          reicht seit Android 14 nicht mehr allein — der Typ braucht seine eigene
          Erlaubnis. -->
