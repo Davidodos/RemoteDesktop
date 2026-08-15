@@ -213,6 +213,14 @@ function NameStep({
     setBusy(true)
     setError(undefined)
 
+    /**
+     * Warum die Stelle nicht geholt werden konnte. Ein Fehlschlag dort ist für
+     * sich genommen keiner — bei einem Zertifikat von Tailscale gibt es nichts
+     * zu holen. Scheitert danach aber die Kopplung, ist er meist der Grund, und
+     * dann gehört er in die Meldung.
+     */
+    let hindernis: string | undefined
+
     try {
       // Ohne QR-Code kam kein Fingerabdruck mit. Dann wird die Stelle geholt
       // und **gezeigt**: verglichen wird mit dem, was auf dem Bildschirm der
@@ -221,12 +229,14 @@ function NameStep({
       if (certificateFingerprint(target.caFingerprint) === undefined && !confirmed) {
         const found = await discover(platform, target.host)
 
-        if (found !== undefined) {
-          setOffered(found)
+        if (found.certificate !== undefined) {
+          setOffered(found.certificate)
           setBusy(false)
 
           return
         }
+
+        hindernis = found.failure
       }
 
       const trusted = await trust()
@@ -256,7 +266,15 @@ function NameStep({
 
       onPaired(saveLocalDevice(device), device, trusted, warnung)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : String(failure))
+      const message = failure instanceof Error ? failure.message : String(failure)
+
+      setError(
+        hindernis === undefined
+          ? message
+          : `${message}\n\nDas Zertifikat dieses Geräts ließ sich vorher nicht ` +
+            `holen: ${hindernis}. Ohne bestätigte Stelle kann die Verbindung ` +
+            'nicht zustande kommen — das ist vermutlich der eigentliche Grund.',
+      )
     } finally {
       setBusy(false)
     }
@@ -453,18 +471,39 @@ function defaultLabel(): string {
 async function discover(
   platform: ReturnType<typeof getPlatform>,
   host: string,
-): Promise<{ base64: string; fingerprint: string } | undefined> {
+): Promise<Discovered> {
   if (!platform.trust.available) {
-    return undefined
+    return {}
   }
 
   try {
-    return platform.trust.fetchAuthority === undefined
-      ? await downloadAuthority(host)
-      : await platform.trust.fetchAuthority(host, TRUST_PORT)
-  } catch {
-    return undefined
+    const certificate =
+      platform.trust.fetchAuthority === undefined
+        ? await downloadAuthority(host)
+        : await platform.trust.fetchAuthority(host, TRUST_PORT)
+
+    return { certificate }
+  } catch (failure) {
+    // **Der Grund geht mit.** Vorher endete er hier, und der Ablauf lief weiter
+    // in die verschlüsselte Verbindung — die ohne bestätigte Stelle scheitern
+    // *muss*. Am Bildschirm stand danach „antwortet nicht", während die
+    // Gegenstelle nachweislich antwortete: erreichbar auf beiden Ports, das
+    // Zertifikat abholbar. Ein verschluckter Fehler an dieser Stelle kostet
+    // jeden, der ihn sucht, den Blick auf die eine Auskunft, die weiterhilft.
+    return { failure: failure instanceof Error ? failure.message : String(failure) }
   }
+}
+
+/**
+ * Was beim Holen der Stelle herauskam.
+ *
+ * Beides fehlt, wo es nichts zu holen gibt — eine Umgebung ohne Vertrauensweg.
+ * Das ist kein Fehler und bleibt still.
+ */
+interface Discovered {
+  certificate?: { base64: string; fingerprint: string }
+  /** Warum es nicht ging. Steht später in der Meldung, falls die Kopplung scheitert. */
+  failure?: string
 }
 
 /**
