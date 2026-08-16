@@ -630,7 +630,7 @@ Android-Gerätenamen. Behoben: der Steckbrief trägt den eingetippten Namen.
 Der Name gilt ab der Kopplung und ändert sich nicht mehr
 mit. Wer ein Gerät später umbenennt, benennt es nur bei sich um. Das ist so gewollt.
 
-## Phase 31g — ein Geräte-Tab statt dreier (OFFEN, als Nächstes)
+## Phase 31g — ein Geräte-Tab statt dreier ✅ (16.08.2026, am Gerät noch zu prüfen)
 
 Wunsch vom 15.08.2026. Die Windows-Oberfläche hat heute fünf Einträge in der
 Leiste, und drei davon reden über dasselbe: „Fernsteuerung" zeigt die
@@ -717,21 +717,68 @@ Feld ist älter als 31g — dann steht dort nichts, statt „Windows" zu raten.
 koppeln, testen, verbinden, entfernen, und danach steht auf beiden Seiten
 nichts mehr voneinander.
 
-## Phase 31 — Beide Richtungen im Fenster und in der App
+### Wie es gebaut wurde
+
+- **Die Leiste** hat drei Einträge (`desktop/Ui/NavigationRail.cs`).
+  `DevicesPage.cs` ist gelöscht; „Netz" führt über eine Karte in
+  `SettingsPage`. Im Infobereich führen „Fernsteuerung" und „Geräte koppeln"
+  auf denselben Eintrag, weil es dieselbe Seite ist.
+- **`platform.host` im Fenster** (`webview2.ts`, `windowHost`) läuft über die
+  Brücke: `local-status`, `local-code`, `local-clients`, `local-revoke`. Neu in
+  der Schnittstelle ist `toggleable`: am Handy lebt der Server mit der App und
+  die Freigabe ist ein Schalter, am Rechner heißt „freigegeben" schlicht „der
+  Agent läuft" — eine Auskunft. Bild und Bedienungshilfe verwaltet ohnehin nur
+  Android; diese Abschnitte sind im Fenster nicht da statt leer.
+- **Der Kopplungscode** verschwindet auf vier Wegen: Ablauf (mit Countdown),
+  Benutzung (die Liste der zugelassenen Geräte ist um einen Eintrag gewachsen),
+  Verlassen der Seite und ein Knopf daneben.
+- **`platform`** steht in `/api/info` **und** im Steckbrief, `lastConnectedAt`
+  ausschließlich lokal (`rememberContact`, höchstens einmal je Minute
+  geschrieben). Beides kommt aus derselben Antwort: wer `/api/info`
+  beantwortet, war erreichbar und sagt dabei, was er ist.
+- **Entfernen bei beiden** über `DELETE /api/unpair` — mit dem eigenen
+  Sitzungstoken, und nur für sich selbst. Der Pfad liegt ausdrücklich *nicht*
+  unter `/api/pair/…`: alles darunter ist ohne Ausweis erreichbar, weil der
+  Kopplungsaufruf die Berechtigung erst erzeugt, und ein Widerruf ohne Ausweis
+  wäre ein Weg, die Kopplung eines fremden Geräts über das Netz zu beenden. Ein
+  Test hält das fest. Auf der eigenen Seite räumt `lib/removeDevice.ts` die
+  drei übrigen Stellen ab: Geräteliste, eigene `clients.json` (über
+  `peerClientId`, beim Koppeln aus dem Ausweis der Gegenseite ausgerechnet) und
+  die bestätigten Zertifizierungsstellen.
+- **Der Verbindungstest** (`lib/connectionTest.ts`) meldet sich für die
+  Hinrichtung ausdrücklich selbst an, am Transport vorbei: der merkt sich ein
+  Token und wirft weg, was bei der Anmeldung sonst gesagt wurde — unter anderem
+  die Rechte, und genau die sind hier die Frage.
+
+**Was dabei anders kam als geplant:** die Kennung des Partners steht im *Gerät*
+(`peerClientId`) und nicht in der eigenen `clients.json`. Dort wäre sie ein
+zweites Feld für dieselbe Angabe — der Eintrag hat seine Kennung bereits, sie
+ist der Fingerabdruck über den Ausweis, und beide Seiten rechnen ihn gleich aus.
+
+## Phase 31 — Beide Richtungen im Fenster und in der App ✅ (16.08.2026)
 
 - Die Geräteliste zeigt Handys mit eigenem Symbol; alles Weitere folgt schon
-  aus Phase 27
+  aus Phase 27 → in 31g gebaut (`ComputerIcon`/`PhoneIcon`, gespeist aus
+  `platform`)
 - Kopplung eines Handys **am PC**: Adresse und Code werden getippt. Der Weg ist
   derselbe wie beim Handy, nur ohne Kamera — die Seite dafür gibt es bereits
+  → sie ist unverändert die richtige: im Fenster steht `capabilities.camera`
+  auf `false`, und `PairingView` zeigt dann das Formular
 - `desktop/TrustImport.cs` muss die CA eines Handys ebenso annehmen wie die
-  eines Rechners; prüfen, dass nichts auf „Rechner" festgenagelt ist
-- Ein Gerät darf sich nicht selbst steuern: `lib/selfConnection.ts` bekommt den
-  Fall „dieses Handy ist der eigene Host" dazu
-- `docs/ARCHITEKTUR.md` und `docs/NETZ.md` nachziehen: das Bild mit den zwei
-  Rechnern stimmt dann nicht mehr
+  eines Rechners → nachgesehen: dort ist nichts auf Windows festgenagelt, es
+  ist derselbe Port, dieselbe Datei, dieselbe Prüfung. Die Meldungen sagen
+  jetzt „Gerät" statt „Rechner"
+- Ein Gerät darf sich nicht selbst steuern → erledigt in 31h: die Sperre
+  vergleicht Fingerabdrücke statt Namen, und der eigene kommt aus dem
+  Steckbrief der eigenen Gegenstelle — am Handy also aus dem eigenen Host. Der
+  Namensvergleich hatte zugeschlagen, weil ein Handy „David" heißt und der
+  Rechner auch
+- `docs/ARCHITEKTUR.md` und `docs/NETZ.md` nachgezogen: das Bild zeigt zwei
+  gleichberechtigte Geräte statt einer Fernbedienung und zweier Rechner, und
+  „Netz" steht dort, wo es jetzt steht
 
 **Abnahme:** PC steuert Handy, Handy steuert Handy, Handy steuert PC — alles
-aus derselben Oberfläche.
+aus derselben Oberfläche. **Am echten Gerät noch zu prüfen.**
 
 ---
 

@@ -2,7 +2,8 @@
 
 RemoteDesktop braucht **kein** Tailscale. Es braucht nur einen Weg, auf dem dein
 Handy den Rechner erreicht. Dafür gibt es vier Möglichkeiten; du wählst sie im
-Einrichtungsassistenten und später jederzeit im Fenster unter **Netz**.
+Einrichtungsassistenten und später jederzeit im Fenster unter **Einstellungen →
+Netz**.
 
 | | Wann | Von unterwegs | Aufwand |
 |---|---|---|---|
@@ -22,7 +23,7 @@ dein Handy auflösen können. Ohne sie geht es im Assistenten nicht weiter.
 Der Rechner steht zuhause, das Handy hängt im WLAN. Mehr braucht es nicht: kein
 VPN, kein Konto, keine Freigabe am Router.
 
-Im Fenster steht unter **Netz** bereits die Adresse, die dein Router diesem
+Im Fenster steht unter **Einstellungen → Netz** bereits die Adresse, die dein Router diesem
 Rechner gegeben hat — meist etwas wie `192.168.178.20`. Du bestätigst sie, und
 das war's.
 
@@ -75,7 +76,8 @@ Adresse **und** ein Zertifikat von Tailscale, das auf genau diese Adresse
 lautet. Ein Assistent, den man mit einer halben Einrichtung verlassen kann,
 verschiebt den Fehlschlag nur auf das Handy.
 
-Nach einer Änderung im Fenster unter **Netz** den Agent einmal beenden und
+Nach einer Änderung im Fenster unter **Einstellungen → Netz** den Agent einmal
+beenden und
 starten.
 
 ---
@@ -178,6 +180,6 @@ Tailscale — dort ist das Zertifikat öffentlich anerkannt.
 
 Der Modus liegt in `C:\Program Files\RemoteDesktop\data\setup.json` und lässt sich
 im Fenster umstellen. Danach den Agent einmal neu starten (im Fenster unter
-**Komponenten**), damit er sein Zertifikat auf die neue Adresse ausstellt.
+**Übersicht**), damit er sein Zertifikat auf die neue Adresse ausstellt.
 Gekoppelte Geräte bleiben gekoppelt — die Kopplung hängt an Schlüsseln, nicht an
 Adressen. Nur die Adresse musst du in der App am Gerät nachziehen.

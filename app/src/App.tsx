@@ -471,6 +471,7 @@ function Shell(): React.JSX.Element {
             onPair={() => setPairing(true)}
             onSelect={(device) => void select(device)}
             onSettings={() => setPage('settings')}
+            onShare={() => setPage('share')}
           />
         )}
       </>
@@ -540,6 +541,7 @@ function Shell(): React.JSX.Element {
             onDevices={applyDevices}
             onError={setError}
             onPair={() => setPairing(true)}
+            onShare={() => setPage('share')}
             onSelect={(device) => {
               void select(device).then(() => setPage('screen'))
             }}

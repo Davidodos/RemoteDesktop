@@ -13,7 +13,12 @@ public sealed record FetchedCertificate(X509Certificate2 Certificate, string Fin
 }
 
 /// <summary>
-/// Einem Rechner vertrauen, der sich sein Zertifikat selbst ausgestellt hat.
+/// Einem Gerät vertrauen, das sich sein Zertifikat selbst ausgestellt hat.
+///
+/// Gerät und nicht Rechner: seit V4 steht am anderen Ende ebenso gut ein Handy,
+/// und es liefert seine Stelle auf demselben Weg — derselbe Port, dieselbe
+/// Datei, dieselbe Prüfung. Hier ist ausdrücklich nichts auf Windows
+/// festgenagelt.
 ///
 /// <para>
 /// Nötig, seit Tailscale nicht mehr Voraussetzung ist: im Heimnetz und im
@@ -47,7 +52,7 @@ public static class TrustImport
 
         if (raw.Length == 0)
         {
-            throw new InvalidOperationException("Der Rechner hat eine leere Datei geliefert.");
+            throw new InvalidOperationException("Das Gerät hat eine leere Datei geliefert.");
         }
 
         var certificate = new X509Certificate2(raw);

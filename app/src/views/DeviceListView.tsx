@@ -7,6 +7,7 @@ import { testConnection, type ConnectionReport } from '../lib/connectionTest.ts'
 import { removeDevice } from '../lib/removeDevice.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
+import { getPlatform } from '../platform/index.ts'
 import { lastSeen } from '../lib/lastSeen.ts'
 import { ComputerIcon, PhoneIcon } from './icons.tsx'
 import type { Device, DeviceStatus } from '../lib/types.ts'
@@ -35,6 +36,16 @@ interface Props {
   onBack?: () => void
   /** Zu den Einstellungen — solange noch kein Gerät verbunden ist. */
   onSettings?: () => void
+  /**
+   * Zu „dieses Gerät freigeben" — dort steht der Kopplungscode, den ein
+   * anderes Gerät einlöst.
+   *
+   * Er steht hier und nicht nur unter den Einstellungen, weil beides zusammen
+   * die eine Frage beantwortet, wegen der man diese Seite öffnet: welche
+   * Geräte gibt es, und wie kommt eines dazu — in die eine oder die andere
+   * Richtung.
+   */
+  onShare?: () => void
 }
 
 /**
@@ -56,6 +67,7 @@ export function DeviceListView({
   onDevices,
   onBack,
   onSettings,
+  onShare,
 }: Props): React.JSX.Element {
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
 
@@ -266,6 +278,15 @@ export function DeviceListView({
       <button type="button" className="pair-button" onClick={onPair}>
         Gerät koppeln
       </button>
+
+      {/* Die andere Richtung: nicht dieses Gerät koppelt sich an ein anderes,
+          sondern ein anderes an dieses. Der Knopf steht nur da, wo es
+          überhaupt geht — im Browser gibt es nichts freizugeben. */}
+      {onShare !== undefined && getPlatform().host.available && (
+        <button type="button" className="pair-button" onClick={onShare}>
+          Dieses Gerät koppeln lassen
+        </button>
+      )}
 
       <button type="button" className="refresh-button" onClick={() => void refresh()}>
         Aktualisieren

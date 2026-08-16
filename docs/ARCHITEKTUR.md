@@ -6,23 +6,34 @@ Ein einziges UI — kein Wechsel zwischen Apps.
 ## Topologie
 
 ```
-        ┌─────────────────────────────┐
-        │  Handy (Android APK)        │
-        │  Capacitor + React          │
-        │  Widget · Kachel · Kürzel   │
-        └──────────┬──────────────────┘
-                   │ Tailscale (LAN = direkt, unterwegs = DERP/direkt)
-        ┌──────────┴──────────┬────────────────────┐
-        │                     │                    │
-  ┌─────▼──────┐     ┌────────▼───────┐   ┌────────▼────────┐
-  │ NAS: Waker │     │ PC  (Agent)    │   │ Laptop (Agent)  │
-  │ Docker     │     │ :8443 HTTPS    │   │ :8443 HTTPS     │
-  │ :3080      │     │ 3 Monitore     │   │ 1 Monitor       │
-  └────────────┘     └────────────────┘   └─────────────────┘
-   WOL + siteId        Screen + Input       Screen + Input
-   Kopplung            Power/Media/Aktionen Power/Media/Aktionen
-                       WOL + siteId         WOL + siteId
+  ┌─────────────────────────┐     ┌─────────────────────────┐
+  │ Handy (Android APK)     │     │ PC / Laptop (Windows)   │
+  │ Capacitor + React       │     │ Fenster + Agent         │
+  │ Widget · Kachel · Kürzel│     │ :8443 HTTPS             │
+  │ :8443 HTTPS (Host)      │     │ 3 bzw. 1 Monitor        │
+  └───────────┬─────────────┘     └────────────┬────────────┘
+              │                                │
+              └───────────┬────────────────────┘
+                          │ Heimnetz oder VPN (siehe NETZ.md)
+                    ┌─────▼──────┐
+                    │ NAS: Waker │
+                    │ Docker     │
+                    │ :3080      │
+                    └────────────┘
+                     WOL + siteId
 ```
+
+**Jede Linie geht in beide Richtungen.** Seit V4 ist das Handy kein reiner
+Client mehr: es spricht unter `.../host/` dasselbe Protokoll wie ein
+Windows-Agent — derselbe Port, dieselbe Kopplung, dasselbe `/api/info`. Was ein
+Gerät kann, sagt es dort selbst über `capabilities`; was es *ist*, über
+`platform`. Ein Rechner steuert damit ein Handy genauso, wie ein Handy einen
+Rechner steuert, und beide benutzen dafür dieselbe Oberfläche.
+
+Der Unterschied zwischen den beiden Seiten ist nur, woran der Server hängt: am
+Rechner an einer geplanten Aufgabe, die mit der Anmeldung startet, am Handy an
+der geöffneten App. Deshalb ist „dieses Gerät freigeben" am Handy ein Schalter
+und am Rechner eine Auskunft.
 
 **Warum ein Waker auf der NAS?** Wenn der PC ausgeschaltet ist, ist er im
 Tailnet offline — Wake-on-LAN muss von einem Gerät im selben LAN-Broadcast
@@ -170,6 +181,23 @@ klicken, ohne das Overlay dafür zuzuklappen.
 - **Shortcuts** — frei benennbare Tastenkombinationen (`lib/shortcuts.ts`, im
   localStorage). Die Tasten werden auf der Bildschirmtastatur ausgewählt, nicht
   getippt: so kann nur entstehen, was der Agent auch auflöst
+
+### 4. Fenster (`desktop/`) — C# / WinForms + WebView2
+
+Die einzige `.exe`, die ein Mensch startet. Ein Fenster mit Seiten, keine zwei
+Fenster und kein `MessageBox.Show`.
+
+Die Leiste hat seit Phase 31g **drei** Einträge: Übersicht · Geräte ·
+Einstellungen. „Geräte" *ist* die React-App aus `app/` — dieselbe Liste, die
+auch am Handy steht. Bis dahin gab es daneben eine zweite, native Geräteseite,
+die dasselbe Paar in einer eigenen Liste führte: wer ein Handy koppelte, sah es
+an einer Stelle und steuerte es an einer anderen. Was die App dafür braucht und
+selbst nicht darf — Kopplungscode, die Liste der zugelassenen Geräte, Widerruf,
+Zertifikate bestätigen —, läuft über eine Brücke zum Wirtsprogramm
+(`Pages/RemotePage.cs`).
+
+„Netz" steht unter „Einstellungen": ein Netzmodus wird einmal eingestellt und
+danach nie wieder angefasst.
 
 ## Video: Stufenplan
 

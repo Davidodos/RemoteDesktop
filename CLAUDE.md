@@ -18,11 +18,13 @@ offenen Punkte von dort sind gebaut: der Client-Schlüssel liegt in
 `{app}\data\clientkey.json` (am Handy in `clientkey.txt`) und wird nirgends
 mehr hinterlegt, und Koppeln geht bei eingerichtetem, aber gestopptem Agent —
 das Fenster liest und schreibt dann die Dateien selbst.
-**Als Nächstes: Phase 31g** — ein Geräte-Tab statt dreier (Fernsteuerung +
-Geräte zusammen, Netz unter die Einstellungen), je Gerät Plattform und
-„zuletzt verbunden", dazu Entfernen auf beiden Seiten, ein Verbindungstest in
-beide Richtungen und ein Verbinden-Knopf, der ausgegraut ist, wenn nichts
-geht.
+**Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
+(Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
+Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen
+Plattform und „zuletzt verbunden", dazu Entfernen auf beiden Seiten
+(`DELETE /api/unpair`), ein Verbindungstest in beide Richtungen und ein
+Verbinden-Knopf, der ausgegraut ist, wenn nichts geht. **Am echten Gerät noch
+zu prüfen** — danach ist Teil B (Dateimanager, Phasen 32–35) dran.
 Leitsatz: das Handy wird ein Agent und spricht dasselbe Protokoll; was ein Gerät
 kann, sagt es selbst über `capabilities` in `/api/info`.
 
