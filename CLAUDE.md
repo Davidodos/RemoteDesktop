@@ -7,11 +7,18 @@ Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.
 
 **V4 (läuft):** beide Richtungen — ein Handy lässt sich ebenso steuern wie ein
 PC — und ein Dateimanager. Arbeitsanweisung in **`docs/TASKS-V4.md`**.
-Stand 14.08.2026: **Phasen 27–30 erledigt** (Handy liefert Bild und nimmt
+Stand 16.08.2026: **Phasen 27–30 erledigt** (Handy liefert Bild und nimmt
 Eingaben an), dazu 31a und 31c–31f. **31e ist gebaut**: eine Kopplung ist
 immer beidseitig (Steckbrief-Austausch in einem Aufruf statt weitergereichtem
 Code, der Entwurf aus 31b ist ersetzt), der Handy-Host läuft nur, solange die
-App offen ist, und jede Verbindung wird am Handy einzeln bestätigt. **Als Nächstes: Phase 31g** — ein Geräte-Tab statt dreier (Fernsteuerung +
+App offen ist, und jede Verbindung wird am Handy einzeln bestätigt.
+**Die Kopplung läuft seit dem 16.08. in beide Richtungen, am Gerät geprüft** —
+was so lange im Weg stand und was daran noch offen ist, steht in
+`docs/TASKS-V4.md` unter **31h**. Zwei Punkte von dort sind noch zu bauen: der
+Client-Schlüssel gehört nach `{app}\data` (heute hängt er am localStorage der
+WebView und damit daran, dass der Fernsteuerungs-Tab einmal offen war), und
+Koppeln soll bei eingerichtetem, aber gestopptem Agent gehen.
+**Als Nächstes: Phase 31g** — ein Geräte-Tab statt dreier (Fernsteuerung +
 Geräte zusammen, Netz unter die Einstellungen), je Gerät Plattform und
 „zuletzt verbunden", dazu Entfernen auf beiden Seiten, ein Verbindungstest in
 beide Richtungen und ein Verbinden-Knopf, der ausgegraut ist, wenn nichts

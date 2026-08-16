@@ -525,6 +525,88 @@ Ob das reicht, zeigt erst das Gerät: wenn auch die richtige Adresse nicht
 antwortet, liegt es nicht an der Auswahl, sondern daran, dass der Server nicht
 lauscht oder das WLAN Geräte voneinander trennt (AP-Isolation).
 
+## Phase 31h — die Kopplung, und warum sie so lange nicht ging (16.08.2026)
+
+Die Kopplung funktioniert seit dem 16.08. **in beide Richtungen**, am echten
+Gerät geprüft. Der Weg dorthin ist der Teil, der hier festgehalten gehört: an
+derselben Meldung wurde über mehrere Sitzungen gearbeitet, und die meisten
+Befunde waren echte Fehler, ohne das Symptom zu erklären.
+
+### Was tatsächlich die Ursache war
+
+**Alte Daten und alter Code überlebten jede Neuinstallation.** Zwei Speicher
+liegen außerhalb dessen, was eine Deinstallation anfasst:
+
+- Im Fenster kommt die Oberfläche über einen virtuellen Host und damit über
+  `https`. Für WebView2 ist das eine Website wie jede andere — sie wird
+  zwischengespeichert, und der Ordner liegt unter
+  `%LOCALAPPDATA%\RemoteDesktop\WebView2`, nicht neben der `.exe`. Wer neu
+  installierte, bekam die alte App zu sehen. Im selben Ordner liegt der
+  localStorage: Geräteliste und Client-Schlüssel — daher die Kopplungen, die
+  nach dem Löschen des Ordners wiederkamen.
+- Am Handy stand `allowBackup="true"`. Android stellt damit `filesDir` und die
+  Preferences aus dem Cloud-Backup wieder her: `clients.json`, `peers.json`,
+  den privaten Host-Schlüssel und die eigene CA. Für eine App mit
+  Geräteidentitäten ist das nicht nur lästig, sondern falsch.
+
+**Die Lehre:** ein Fehlerbild, das sich nicht ändert, obwohl man es geändert
+hat, ist zuerst ein Verdacht auf alten Code — nicht auf die Logik. Wer hier
+sucht, prüft als Erstes, ob eine geänderte Meldung wirklich ankommt.
+
+### Die Fehler, die nebenbei gefunden wurden
+
+Alle echt, alle behoben, keiner davon allein die Ursache:
+
+| Befund | Wirkung |
+|---|---|
+| `ACCESS_NETWORK_STATE` fehlte im Manifest | `ConnectivityManager` gab nichts heraus; die Adressliste fiel still auf die rohe Interface-Aufzählung zurück, und vorn stand eine `rmnet`-Adresse |
+| Zertifikat und Server entstanden einmal je Prozess | nach einem Netzwechsel zeigte die App eine Adresse, die das eigene Zertifikat nicht abdeckte → TLS-Fehler, der wie „nicht erreichbar" aussieht |
+| `grantPeer` hing an `profile()` | ohne Netzadresse wurde der Schlüssel der Gegenseite nicht eingetragen |
+| Ausweis ging einmal beim Start an den Agent | wer den ersten Versuch verlor, verlor für die ganze Sitzung |
+| `discover` verschluckte den Grund | „antwortet nicht" bei einer Gegenstelle, die nachweislich antwortet |
+| Sperre gegen Selbstverbindung verglich **Namen** | ein Handy, das „David" heißt, galt als der Rechner „David" |
+
+### Wo der Ausweis herkommt — offener Umbau
+
+Der Client-Schlüssel des Fensters liegt im localStorage der WebView, und der
+Agent kennt ihn nur, weil die React-App ihn über `/api/pair/local` hinterlegt
+(`announceSelf`). Das hat zwei Folgen, die beide unerwünscht sind:
+
+- **Der Ausweis hängt am Lebenslauf einer Weboberfläche.** `RemotePage` baut die
+  WebView erst beim ersten Anzeigen auf. Wer das Fenster öffnet, auf „Geräte"
+  geht und dort einen QR-Code erzeugt, hat nie eine laufende React-App — der
+  Ausweis bleibt unhinterlegt, und die Gegenseite bekommt beim Koppeln ein
+  leeres `clientKey`. Symptom: „die Gegenseite hat ihren Ausweis nicht
+  mitgeschickt".
+- **Koppeln setzt einen laufenden Agent voraus.** Gewünscht ist: eingerichtet
+  genügt. Wer diesen Rechner nur zum Steuern anderer benutzt, soll den Agent
+  nicht starten müssen, um ein Gerät zu koppeln.
+
+Beides löst derselbe Umbau:
+
+1. Das Schlüsselpaar des Rechners nach `{app}\data\clientkey.json` — erzeugt
+   von wem auch immer zuerst kommt. Agent **und** Fenster lesen dieselbe Datei;
+   `register` und `announceSelf` entfallen ersatzlos.
+2. `desktop/LocalNode.cs`: bei laufendem Agent weiter über HTTP (er hält
+   `clients.json` im Speicher, eine Datei unter ihm zu ändern ginge verloren),
+   bei gestopptem Agent direkt auf die Dateien im Datenordner. Beim nächsten
+   Start liest er sie ohnehin neu.
+
+Halb umgestellt ist schlechter als gar nicht: benutzten Fenster und Agent
+verschiedene Schlüssel, käme wieder ein 401 heraus.
+
+### Namen kommen von dem, der koppelt
+
+Beim Koppeln werden zwei Namen vergeben — wie dieses Gerät drüben heißen soll
+und wie die Gegenseite hier heißt. Der erste ging bis zum 16.08. nur in die
+`clients.json` der Gegenseite; in ihre **Geräteliste** kam der Selbstname aus
+dem Steckbrief. Wer am Handy „Handy" eintippte, fand am PC „David" wieder — den
+Android-Gerätenamen. Behoben: der Steckbrief trägt den eingetippten Namen.
+
+Was noch offen ist: der Name gilt ab der Kopplung und ändert sich nicht mehr
+mit. Wer ein Gerät später umbenennt, benennt es nur bei sich um. Ob das reicht
+oder ob eine Umbenennung mitwandern soll, ist eine Entscheidung für 31g.
+
 ## Phase 31g — ein Geräte-Tab statt dreier (OFFEN, als Nächstes)
 
 Wunsch vom 15.08.2026. Die Windows-Oberfläche hat heute fünf Einträge in der
