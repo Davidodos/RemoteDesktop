@@ -76,6 +76,6 @@ describe('noLocalNode', () => {
     await expect(noLocalNode.profile()).resolves.toBeUndefined()
     await expect(noLocalNode.peers()).resolves.toEqual([])
     await expect(noLocalNode.grant('egal', 'egal')).resolves.toBeUndefined()
-    await expect(noLocalNode.register('egal')).resolves.toBeUndefined()
+    await expect(noLocalNode.key()).resolves.toBeUndefined()
   })
 })

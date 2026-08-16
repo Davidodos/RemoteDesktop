@@ -263,18 +263,22 @@ class HostPlugin : Plugin() {
     }
 
     /**
-     * Den Ausweis dieser App hinterlegen. Ohne ihn bliebe jede Kopplung
-     * einseitig: die Gegenseite bekäme in der Antwort nichts, was sie in ihre
-     * eigene Liste eintragen könnte.
+     * Der Ausweis dieses Handys, mit dem sich die Oberfläche bei fremden
+     * Geräten anmeldet — beide Hälften.
+     *
+     * Er kommt von hier und wird nicht mehr von der App hinterlegt: sonst hinge
+     * er am Lebenslauf einer Weboberfläche, und der Host schickte beim Koppeln
+     * ein leeres `clientKey` mit, ohne dass irgendwo stünde, warum.
      */
     @PluginMethod
-    fun registerLocalClient(call: PluginCall) {
-        if (!HostRuntime.of(context).rememberLocalClient(call.getString("publicKey"))) {
-            call.reject("Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel.")
-            return
-        }
+    fun localClientKey(call: PluginCall) {
+        val (publicKey, privateKey) = HostRuntime.of(context).localClientKey()
 
-        call.resolve()
+        call.resolve(
+            JSObject()
+                .put("publicKey", publicKey)
+                .put("privateKey", privateKey),
+        )
     }
 
     @PluginMethod

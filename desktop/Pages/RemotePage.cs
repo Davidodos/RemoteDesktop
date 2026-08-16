@@ -336,7 +336,7 @@ public sealed class RemotePage : Control
 
                 "local-grant" => await Granted(request),
 
-                "local-register" => await Registered(request),
+                "local-key" => Ausweis(),
 
                 _ => throw new InvalidOperationException(
                     $"Das Fenster kennt '{request.Kind}' nicht.")
@@ -379,19 +379,27 @@ public sealed class RemotePage : Control
     }
 
     /// <summary>
-    /// Der Ausweis dieses Fensters geht an den Agent nebenan, damit er beim
-    /// Koppeln mitgehen kann.
+    /// Der Ausweis dieses Rechners, mit dem sich die Seite bei fremden Geräten
+    /// anmeldet.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** er lag im localStorage der WebView, und der
+    /// Agent kannte ihn nur, weil die React-App ihn beim Start hinterlegte. Wer
+    /// das Fenster öffnete und direkt auf „Geräte" ging, hatte nie eine
+    /// laufende React-App — die Gegenseite bekam beim Koppeln ein leeres
+    /// <c>clientKey</c>. Jetzt liegt er in einer Datei, die beide lesen, und
+    /// niemand muss ihn irgendwo hinterlegen.
+    /// </para>
     /// </summary>
-    private static async Task<object> Registered(BridgeRequest request)
+    private static object Ausweis()
     {
-        if (string.IsNullOrWhiteSpace(request.PublicKey))
-        {
-            throw new InvalidOperationException("Ohne Schlüssel gibt es nichts zu hinterlegen.");
-        }
+        var key = AgentData.ClientKey()
+                  ?? throw new InvalidOperationException(
+                      "Der Ausweis dieses Rechners ließ sich nicht anlegen. Ohne ihn kann "
+                      + "sich dieses Fenster bei keinem Gerät anmelden — sind die Rechte am "
+                      + "Ordner data neben dem Programm noch in Ordnung?");
 
-        await LocalNode.RegisterAsync(request.PublicKey);
-
-        return new { stored = true };
+        return new { publicKey = key.PublicKey, privateKey = key.PrivateKey };
     }
 
     private static async Task<object> FetchAuthorityAsync(string? host)

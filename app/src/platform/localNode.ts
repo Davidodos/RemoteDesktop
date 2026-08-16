@@ -82,11 +82,38 @@ export interface LocalNode {
   grant(publicKey: string, label: string): Promise<void>
 
   /**
-   * Den eigenen Ausweis hinterlegen, damit er beim Koppeln mitgehen kann. Ohne
-   * ihn bliebe jede Kopplung einseitig: die Gegenseite bekäme in der Antwort
-   * nichts, was sie in ihre eigene Liste eintragen könnte.
+   * Der Ausweis dieses Geräts — das Schlüsselpaar, mit dem sich seine
+   * Oberfläche bei fremden Geräten anmeldet.
+   *
+   * <p>
+   * **Warum ihn die Gegenstelle führt und nicht die App:** bis zum 16.08.2026
+   * lag er im Speicher der Weboberfläche, und die Gegenstelle kannte ihn nur,
+   * weil die App ihn beim Start hinterlegte. Damit hing der Ausweis am
+   * Lebenslauf einer Oberfläche — wer im Fenster nie die Fernsteuerung
+   * anzeigte, hinterlegte nie etwas, und die Gegenseite bekam beim Koppeln ein
+   * leeres `clientKey`. Jetzt liegt er dort, wo er hingehört: bei den übrigen
+   * Schlüsseln des Geräts, und beide lesen dieselbe Stelle.
+   * </p>
+   *
+   * <p>
+   * `undefined` heißt: diese Umgebung führt keinen — im Browser ist das der
+   * Normalfall. Dann legt die App selbst einen an und bewahrt ihn in ihrem
+   * eigenen Schlüsselspeicher auf.
+   * </p>
    */
-  register(publicKey: string): Promise<void>
+  key(): Promise<ClientKey | undefined>
+}
+
+/**
+ * Ein Schlüsselpaar, wie es die Gegenstelle herausgibt: ECDSA P-256, der
+ * öffentliche Teil als Base64 im SPKI-Format, der private als Base64 im
+ * PKCS-8-Format. Genau so nimmt es die WebCrypto-API des Browsers an.
+ *
+ * Schwesterfassungen: `setup/ClientKeyFile.cs` und `host/LocalClientKey.kt`.
+ */
+export interface ClientKey {
+  publicKey: string
+  privateKey: string
 }
 
 /**
@@ -129,7 +156,7 @@ export const noLocalNode: LocalNode = {
   peers: (): Promise<DeviceProfile[]> => Promise.resolve([]),
   forget: (): Promise<void> => Promise.resolve(),
   grant: (): Promise<void> => Promise.resolve(),
-  register: (): Promise<void> => Promise.resolve(),
+  key: (): Promise<ClientKey | undefined> => Promise.resolve(undefined),
 }
 
 /**

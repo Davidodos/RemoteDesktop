@@ -1,6 +1,14 @@
 package app.remotedesktop.client.host
 
 import java.io.File
+import java.security.KeyFactory
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.SecureRandom
+import java.security.spec.ECGenParameterSpec
+import java.security.spec.PKCS8EncodedKeySpec
+import java.security.spec.X509EncodedKeySpec
+import java.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -182,53 +190,93 @@ class PeerInbox(private val file: File) {
 }
 
 /**
- * Der Ausweis der App dieses Handys — der öffentliche Schlüssel, mit dem sie
- * sich bei fremden Geräten anmeldet.
+ * Der Ausweis dieses Handys als *Client* — das Schlüsselpaar, mit dem sich seine
+ * Oberfläche bei fremden Geräten anmeldet.
  *
- * Der Host kennt ihn, weil eine Kopplung immer in beide Richtungen geht: wer
- * sich hier koppelt, bekommt ihn in der Antwort und trägt ihn bei sich ein. Der
- * Host hat ihn nicht selbst — er gehört der App, die ihn beim Start hinterlegt.
+ * **Der Befund dahinter (16.08.2026):** er gehörte der App und lag in ihrem
+ * Speicher; der Host kannte ihn nur, weil die App ihn beim Start hinterlegte.
+ * Damit hing der Ausweis am Lebenslauf einer Weboberfläche — am Rechner reichte
+ * es, das Fenster zu öffnen und die Fernsteuerung nie anzuzeigen, und die
+ * Gegenseite bekam beim Koppeln ein leeres `clientKey`. Jetzt liegt er bei den
+ * übrigen Schlüsseln des Geräts, und die App holt ihn sich von dort.
  *
- * Es ist ein öffentlicher Schlüssel. Er verrät nichts und erlaubt nichts; Macht
- * bekommt er erst dadurch, dass ihn die Gegenseite in ihre eigene `clients.json`
- * aufnimmt, und das tut sie nur nach einer bestandenen Kopplung.
+ * Der private Teil verlässt das Handy nie. Er liegt in den privaten Dateien der
+ * App, genau wie der Host-Schlüssel daneben — und beide sind seit derselben
+ * Sitzung vom Cloud-Backup ausgenommen.
+ *
+ * Schwesterfassungen: `setup/ClientKeyFile.cs` und `app/src/lib/clientKey.ts`.
  */
-class LocalClient(private val file: File) {
+class LocalClientKey(private val file: File) {
 
     private val gate = Any()
-    private var key: String? = read()
+    private var pair: KeyPair? = null
 
-    val publicKey: String? get() = synchronized(gate) { key }
+    /** Öffentlicher Schlüssel als Base64 im SPKI-Format. */
+    val publicKey: String get() = Base64.getEncoder().encodeToString(keyPair().public.encoded)
 
-    /** @return `false`, wenn der Schlüssel keiner ist. */
-    fun remember(publicKey: String?): Boolean {
-        if (!PairingService.isUsablePublicKey(publicKey.orEmpty())) {
-            return false
-        }
+    /** Privater Schlüssel als Base64 im PKCS-8-Format — so nimmt ihn WebCrypto an. */
+    val privateKey: String get() = Base64.getEncoder().encodeToString(keyPair().private.encoded)
 
-        synchronized(gate) {
-            if (key == publicKey) {
-                return true
-            }
+    /**
+     * Das abgelegte Paar, oder ein neues an derselben Stelle. Wer zuerst
+     * fragt, legt es an: der Host beim Koppeln, die App beim Anmelden.
+     */
+    private fun keyPair(): KeyPair = synchronized(gate) {
+        pair?.let { return it }
 
-            key = publicKey
+        val loaded = existing() ?: create()
 
-            file.parentFile?.mkdirs()
-            file.writeText(JSONObject().put("publicKey", publicKey).toString())
-        }
+        pair = loaded
 
-        return true
+        loaded
     }
 
-    private fun read(): String? {
+    private fun create(): KeyPair {
+        val created = KeyPairGenerator.getInstance("EC").apply {
+            initialize(ECGenParameterSpec("secp256r1"), SecureRandom())
+        }.generateKeyPair()
+
+        file.parentFile?.mkdirs()
+
+        // Beide Hälften, eine je Zeile — dasselbe Format wie beim
+        // Host-Schlüssel. Java gibt aus einem privaten EC-Schlüssel den
+        // öffentlichen nicht wieder heraus.
+        file.writeText(
+            Base64.getEncoder().encodeToString(created.private.encoded) +
+                "\n" +
+                Base64.getEncoder().encodeToString(created.public.encoded),
+        )
+
+        return created
+    }
+
+    /**
+     * Eine unlesbare Datei zählt als „keine": dann entsteht ein neues Paar, und
+     * alle Kopplungen müssen erneuert werden. Unangenehm, aber sichtbar — ein
+     * halber Ausweis wäre es nicht.
+     */
+    private fun existing(): KeyPair? {
         if (!file.exists()) {
             return null
         }
 
-        return try {
-            JSONObject(file.readText()).optString("publicKey").ifEmpty { null }
-        } catch (broken: Exception) {
-            null
-        }
+        return runCatching {
+            val lines = file.readText().trim().lines()
+
+            if (lines.size != 2) {
+                return null
+            }
+
+            val factory = KeyFactory.getInstance("EC")
+
+            KeyPair(
+                factory.generatePublic(
+                    X509EncodedKeySpec(Base64.getDecoder().decode(lines[1].trim())),
+                ),
+                factory.generatePrivate(
+                    PKCS8EncodedKeySpec(Base64.getDecoder().decode(lines[0].trim())),
+                ),
+            )
+        }.getOrNull()
     }
 }

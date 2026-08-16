@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
-import { announceSelf, collectPeers } from './lib/bothWays.ts'
+import { collectPeers } from './lib/bothWays.ts'
 import { capabilitiesOf } from './lib/capabilities.ts'
 import { deviceLabel } from './lib/deviceNames.ts'
 import { collectDevices, localDeviceSource, saveLocalDevice } from './lib/deviceSources.ts'
@@ -154,20 +154,7 @@ function Shell(): React.JSX.Element {
       },
     )
 
-    // Der eigene Ausweis geht im selben Takt hinaus wie die Steckbriefe
-    // hereinkommen — und nicht mehr genau einmal beim Start.
-    //
-    // **Der Befund dahinter:** der Agent läuft als geplante Aufgabe und startet
-    // mit der Anmeldung; das Fenster tut dasselbe. Wer beim ersten Versuch
-    // verliert, verlor für die ganze Sitzung: der Ausweis blieb unhinterlegt,
-    // jede Kopplung schickte der Gegenseite ein leeres `clientKey` mit, und die
-    // trug diesen Rechner nie ein. Am Bildschirm stand danach „kennt dieses
-    // Gerät nicht mehr" — direkt nach einer Kopplung, die eben erst gelungen
-    // war. Der Aufruf geht an den eigenen Rechner, ist gleichbedeutend mit sich
-    // selbst und kostet nichts, sobald er einmal durch ist.
     const tick = (): void => {
-      void announceSelf()
-
       // Der eigene Fingerabdruck, für die Sperre gegen Selbstverbindung. Er
       // kommt aus demselben Steckbrief, der beim Koppeln mitgeht, und wird hier
       // nur mitgenommen — eine eigene Anfrage dafür wäre eine zweite Quelle für

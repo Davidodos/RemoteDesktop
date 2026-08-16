@@ -88,15 +88,6 @@ public static class PairingEndpoints
                     }
             }));
 
-        // Das Fenster hinterlegt seinen Ausweis. Ohne ihn bliebe jede Kopplung
-        // einseitig — die Gegenseite bekäme in der Antwort nichts, was sie in
-        // ihre eigene Liste eintragen könnte.
-        app.MapPost("/api/pair/local", (LocalClientRequest request, LocalClient local) =>
-            local.Remember(request.PublicKey)
-                ? Results.Ok(new { stored = true })
-                : Results.BadRequest(
-                    new { error = "Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel." }));
-
         // Die Steckbriefe abholen, die beim Koppeln hier abgegeben wurden.
         //
         // Lesen leert den Eingang **nicht**. Es tat es einmal, und das war
@@ -319,8 +310,6 @@ internal sealed record ProfileRequest(
     string? CaFingerprint,
     string? AgentFingerprint,
     string? ClientKey);
-
-internal sealed record LocalClientRequest(string? PublicKey);
 
 internal sealed record GrantRequest(string? PublicKey, string? Label);
 

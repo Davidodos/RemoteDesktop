@@ -41,11 +41,37 @@ public static class AgentPaths
         "clients.json",
         "cert.crt",
         "cert.key",
-        "agent.pfx",
-        "agentca.pfx",
-        "agentca.crt",
+        ServerCertificateFile,
+        AuthorityFile,
+        AuthorityPublicFile,
+        ClientKeyFile.FileName,
         CoordinatorConfig.FileName
     ];
+
+    /// <summary>
+    /// Das Zertifikat, das der Agent beim Verbinden vorzeigt — mitsamt seinem
+    /// privaten Schlüssel.
+    ///
+    /// Die drei Namen stehen hier und nicht nur im Agent, weil das Fenster sie
+    /// ebenfalls braucht: bei gestopptem Agent liest es den eigenen Steckbrief
+    /// aus denselben Dateien, die der Agent sonst anböte.
+    /// </summary>
+    public const string ServerCertificateFile = "agent.pfx";
+
+    /// <summary>Die eigene CA — der Anker, dem ein Client einmal vertraut.</summary>
+    public const string AuthorityFile = "agentca.pfx";
+
+    /// <summary>Ihr öffentlicher Teil, so wie ihn ein Client zum Bestätigen bekommt.</summary>
+    public const string AuthorityPublicFile = "agentca.crt";
+
+    /// <summary>Der private Schlüssel des Agents — seine Kennung nach außen.</summary>
+    public const string IdentityFile = "agentkey.txt";
+
+    /// <summary>Wer diesen Rechner steuern darf.</summary>
+    public const string ClientsFileName = "clients.json";
+
+    /// <summary>Die Steckbriefe, die beim Koppeln hier abgegeben wurden.</summary>
+    public const string PeersFileName = "peers.json";
 
     /// <summary>Der Datenordner zu einer Installation.</summary>
     public static string For(string installDirectory) =>

@@ -1,5 +1,4 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using RemoteDesktopSetup;
 
 namespace RemoteDesktopAgent.Auth;
 
@@ -11,8 +10,23 @@ namespace RemoteDesktopAgent.Auth;
 /// **Wozu der Agent ihn kennt:** eine Kopplung geht immer in beide Richtungen.
 /// Wer sich hier koppelt, soll ohne einen zweiten Aufruf auch von hier aus
 /// erreichbar werden — dafür braucht er den Schlüssel dieser Oberfläche, und
-/// bekommt ihn in der Antwort auf <c>/api/pair</c>. Der Agent hat ihn nicht
-/// selbst: er gehört dem Fenster, das ihn beim Start hier hinterlegt.
+/// bekommt ihn in der Antwort auf <c>/api/pair</c>.
+/// </para>
+///
+/// <para>
+/// **Woher der Agent ihn hat:** aus <c>clientkey.json</c> im Datenordner, und
+/// damit aus derselben Datei, aus der das Fenster ihn liest. Bis zum 16.08.2026
+/// hinterlegte ihn die React-App über <c>/api/pair/local</c> — und wer das
+/// Fenster öffnete, ohne die Fernsteuerung anzuzeigen, hinterlegte gar nichts.
+/// Die Gegenseite bekam dann ein leeres <c>clientKey</c>, ohne dass irgendwo
+/// stand, warum. Siehe <see cref="ClientKeyFile"/>.
+/// </para>
+///
+/// <para>
+/// Gelesen wird bei jedem Zugriff und nicht einmal beim Start: die Datei kann
+/// nach dem Start des Agents entstehen — nämlich dann, wenn das Fenster zuerst
+/// kommt. Ein zwischengespeichertes <c>null</c> hielte diesen Agent bis zum
+/// nächsten Neustart für ausweislos.
 /// </para>
 ///
 /// <para>
@@ -22,85 +36,37 @@ namespace RemoteDesktopAgent.Auth;
 /// Kopplung.
 /// </para>
 /// </summary>
-public sealed class LocalClient
+public sealed class LocalClient(string path)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    /// <summary><c>null</c>, solange die Datei noch nicht da ist.</summary>
+    public string? PublicKey => ClientKeyFile.Read(path)?.PublicKey;
+
+    /// <summary>
+    /// Legt das Schlüsselpaar an, falls es noch keins gibt.
+    ///
+    /// <para>
+    /// Der Agent läuft mit den höchsten verfügbaren Rechten und kommt in den
+    /// Datenordner hinein; das Fenster nur, wenn der Installer den Ordner dafür
+    /// freigegeben hat. Wer zuerst kommt, legt die Datei an — deshalb tun es
+    /// beide, und keiner von beiden überschreibt sie.
+    /// </para>
+    /// </summary>
+    /// <returns>
+    /// Ein Satz, wenn es nicht geklappt hat — für das Log. Der Agent startet
+    /// trotzdem: ohne Ausweis bleibt eine Kopplung einseitig, aber steuerbar
+    /// ist dieser Rechner deswegen nicht weniger.
+    /// </returns>
+    public string? Ensure()
     {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never
-    };
-
-    private readonly string _path;
-    private readonly object _gate = new();
-    private string? _publicKey;
-
-    public LocalClient(string path)
-    {
-        _path = path;
-        _publicKey = Read(path);
-    }
-
-    /// <summary><c>null</c>, solange das Fenster hier noch nie gelaufen ist.</summary>
-    public string? PublicKey
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _publicKey;
-            }
-        }
-    }
-
-    /// <returns><c>false</c>, wenn der Schlüssel keiner ist.</returns>
-    public bool Remember(string? publicKey)
-    {
-        if (!PairingService.IsUsablePublicKey(publicKey ?? string.Empty))
-        {
-            return false;
-        }
-
-        lock (_gate)
-        {
-            if (_publicKey == publicKey)
-            {
-                return true;
-            }
-
-            _publicKey = publicKey;
-
-            var temporary = _path + ".tmp";
-
-            Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? ".");
-            File.WriteAllText(
-                temporary, JsonSerializer.Serialize(new Stored(publicKey!), JsonOptions));
-            File.Move(temporary, _path, overwrite: true);
-
-            return true;
-        }
-    }
-
-    private static string? Read(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
         try
         {
-            return JsonSerializer.Deserialize<Stored>(File.ReadAllText(path), JsonOptions)
-                ?.PublicKey;
-        }
-        catch (Exception ex) when (ex is JsonException or IOException)
-        {
-            // Ohne den Schlüssel bleibt die Kopplung einseitig, und das Fenster
-            // legt ihn beim nächsten Start ohnehin neu hin. Kein Grund, den
-            // Agent am Starten zu hindern.
+            ClientKeyFile.LoadOrCreate(path);
+
             return null;
         }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+            return failure.Message;
+        }
     }
-
-    private sealed record Stored(string PublicKey);
 }

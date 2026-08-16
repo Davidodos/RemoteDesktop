@@ -5,7 +5,8 @@ using System.Text.Json;
 namespace RemoteDesktopClient;
 
 /// <summary>
-/// Dieser Rechner als Gegenstelle — gefragt wird der Agent nebenan.
+/// Dieser Rechner als Gegenstelle — gefragt wird der Agent nebenan, und wenn
+/// der nicht läuft, sein Datenordner.
 ///
 /// <para>
 /// **Warum das Fenster fragt und nicht die Seite:** der Agent weist sich mit
@@ -22,6 +23,16 @@ namespace RemoteDesktopClient;
 /// </para>
 ///
 /// <para>
+/// **Zwei Wege zu denselben Daten.** Läuft der Agent, geht alles über ihn: er
+/// hält <c>clients.json</c> im Speicher, und eine Datei unter ihm zu ändern
+/// ginge beim nächsten Schreiben verloren. Läuft er nicht, liest und schreibt
+/// das Fenster die Dateien selbst — beim nächsten Start liest der Agent sie
+/// ohnehin neu. Das ist der ganze Unterschied zwischen „koppeln geht nur mit
+/// laufendem Agent" und „eingerichtet genügt": wer diesen Rechner nur zum
+/// Steuern benutzt, soll den Agent nicht dafür starten müssen.
+/// </para>
+///
+/// <para>
 /// **Vier Wege statt zweier.** Bis Phase 31e reichte das Fenster einen
 /// Kopplungscode weiter, den die Gegenseite binnen fünf Minuten einlösen
 /// musste. Jetzt geht der Steckbrief bei der Kopplung mit, und was danach zu
@@ -31,27 +42,44 @@ namespace RemoteDesktopClient;
 /// </summary>
 public static class LocalNode
 {
-    /// <summary>Der Agent lauscht immer hier; andere Ports sieht die Einrichtung nicht vor.</summary>
-    private const int AgentPort = 8443;
-
     private static readonly HttpClient Client = Build();
 
     /// <summary>
     /// Der eigene Steckbrief: Adresse, Port, Name und die beiden Fingerabdrücke.
     ///
     /// Er hängt ausdrücklich **nicht** daran, ob dieser Rechner gerade steuerbar
-    /// sein will — er beschreibt, wie er erreichbar wäre.
+    /// sein will — er beschreibt, wie er erreichbar wäre. Deshalb kommt er bei
+    /// gestopptem Agent aus dem Datenordner statt gar nicht.
     /// </summary>
-    /// <returns><c>null</c>, wenn kein Agent läuft. Dann bleibt es bei einer Richtung.</returns>
-    public static Task<JsonElement?> SelfAsync(CancellationToken cancellationToken = default) =>
-        ReadAsync("/api/pair/self", "profile", cancellationToken);
+    /// <returns>
+    /// <c>null</c>, wenn keine Adresse eingetragen ist. Dann ist dieser Rechner
+    /// kein mögliches Ziel, und es bleibt bei einer Richtung.
+    /// </returns>
+    public static async Task<object?> SelfAsync(CancellationToken cancellationToken = default)
+    {
+        var running = await ReadAsync("/api/pair/self", "profile", cancellationToken);
+
+        // Ein Agent, der antwortet, hat recht: er kennt sein eigenes Zertifikat
+        // und nicht nur die Dateien, aus denen es entstanden ist. Antwortet er
+        // mit `null`, ist das ebenfalls seine Auskunft — dann fehlt die Adresse,
+        // und der Datenordner wüsste es auch nicht besser.
+        if (running is { } answered)
+        {
+            return answered.ValueKind == JsonValueKind.Null ? null : answered;
+        }
+
+        return AgentData.Profile();
+    }
 
     /// <summary>
-    /// Die Steckbriefe, die beim Koppeln hier abgegeben wurden. Einmalig: beim
-    /// Abholen ist der Eingang leer.
+    /// Die Steckbriefe, die beim Koppeln hier abgegeben wurden.
+    ///
+    /// Nur mit laufendem Agent, und das ist keine Einschränkung: dort landet
+    /// überhaupt nur etwas, wenn ein anderes Gerät diesen Rechner gekoppelt
+    /// hat — und dafür musste er antworten.
     /// </summary>
-    public static Task<JsonElement?> PeersAsync(CancellationToken cancellationToken = default) =>
-        ReadAsync("/api/pair/peers", "peers", cancellationToken);
+    public static async Task<object?> PeersAsync(CancellationToken cancellationToken = default) =>
+        await ReadAsync("/api/pair/peers", "peers", cancellationToken);
 
     /// <summary>
     /// Vergisst die Steckbriefe, die in der Liste stehen. Erst nach dem
@@ -64,29 +92,39 @@ public static class LocalNode
     /// <summary>
     /// Trägt die Oberfläche der Gegenseite in die <c>clients.json</c> dieses
     /// Rechners ein — die Gegenrichtung, ohne einen zweiten Aufruf über das Netz.
+    ///
+    /// Bei gestopptem Agent schreibt das Fenster die Datei selbst. Ein Eintrag
+    /// wirkt, sobald der Agent startet; er hat keine Frist.
     /// </summary>
-    public static Task GrantAsync(
-        string publicKey, string? label, CancellationToken cancellationToken = default) =>
-        PostAsync(
-            "/api/pair/grant",
-            new { publicKey, label = label ?? string.Empty },
-            cancellationToken);
+    public static async Task GrantAsync(
+        string publicKey, string? label, CancellationToken cancellationToken = default)
+    {
+        if (await PostAsync(
+                "/api/pair/grant",
+                new { publicKey, label = label ?? string.Empty },
+                cancellationToken))
+        {
+            return;
+        }
+
+        AgentData.Grant(publicKey, label ?? string.Empty);
+    }
 
     /// <summary>
-    /// Hinterlegt den Ausweis dieses Fensters beim eigenen Agent, damit er beim
-    /// Koppeln mitgehen kann. Ohne ihn bliebe jede Kopplung einseitig.
+    /// Liest beim Agent und meldet, ob er überhaupt geantwortet hat.
     /// </summary>
-    public static Task RegisterAsync(
-        string publicKey, CancellationToken cancellationToken = default) =>
-        PostAsync("/api/pair/local", new { publicKey }, cancellationToken);
-
+    /// <returns>
+    /// <c>null</c>, wenn kein Agent läuft oder er die Anfrage abgelehnt hat.
+    /// Ein <c>JsonValueKind.Null</c> ist etwas anderes: dann hat er geantwortet,
+    /// und die Antwort lautet „gibt es nicht".
+    /// </returns>
     private static async Task<JsonElement?> ReadAsync(
         string path, string field, CancellationToken cancellationToken)
     {
         try
         {
             using var response = await Client.GetAsync(
-                $"https://127.0.0.1:{AgentPort}{path}", cancellationToken);
+                $"https://127.0.0.1:{AgentData.AgentPort}{path}", cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -100,28 +138,42 @@ public static class LocalNode
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
                                        or JsonException)
         {
-            // Kein Agent, keine Gegenrichtung. Das ist der Normalfall auf einem
-            // Rechner, der nur steuern und nicht gesteuert werden soll.
+            // Kein Agent. Das ist der Normalfall auf einem Rechner, der nur
+            // steuern und nicht gesteuert werden soll.
             return null;
         }
     }
 
     /// <summary>
-    /// Hier wird ein Fehlschlag **nicht** verschluckt: die beiden schreibenden
-    /// Wege sind die Gegenrichtung selbst. Bleibt einer still liegen, sieht das
-    /// später aus wie eine Kopplung, die nie angeboten wurde — und danach sucht
-    /// niemand mehr.
+    /// Schreibt beim Agent.
     /// </summary>
-    private static async Task PostAsync(
+    /// <returns>
+    /// <c>false</c>, wenn er nicht läuft — dann ist der Aufrufer dran, und zwar
+    /// mit den Dateien. Ein Fehlschlag eines <em>laufenden</em> Agents fliegt
+    /// dagegen weiter: die schreibenden Wege sind die Gegenrichtung selbst, und
+    /// bleibt einer still liegen, sieht das später aus wie eine Kopplung, die
+    /// nie angeboten wurde.
+    /// </returns>
+    private static async Task<bool> PostAsync(
         string path, object payload, CancellationToken cancellationToken)
     {
         using var content = new StringContent(
             JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-        using var response = await Client.PostAsync(
-            $"https://127.0.0.1:{AgentPort}{path}", content, cancellationToken);
+        try
+        {
+            using var response = await Client.PostAsync(
+                $"https://127.0.0.1:{AgentData.AgentPort}{path}", content, cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+            response.EnsureSuccessStatusCode();
+
+            return true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException { StatusCode: null }
+                                       or TaskCanceledException)
+        {
+            return false;
+        }
     }
 
     private static HttpClient Build()

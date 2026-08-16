@@ -83,7 +83,6 @@ public class LocalOnlyReachabilityTests
     [Theory]
     [InlineData("/api/pair/code")]
     [InlineData("/api/pair/self")]
-    [InlineData("/api/pair/local")]
     [InlineData("/api/pair/peers")]
     [InlineData("/api/pair/grant")]
     [InlineData("/api/clients")]

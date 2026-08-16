@@ -1,4 +1,5 @@
 using RemoteDesktopAgent.Auth;
+using RemoteDesktopSetup;
 using Xunit;
 
 namespace RemoteDesktopAgent.Tests;
@@ -13,33 +14,52 @@ public class LocalClientTests : IDisposable
     private readonly string _folder = Path.Combine(
         Path.GetTempPath(), $"localclient-{Guid.NewGuid():N}");
 
-    private string Path_ => System.IO.Path.Combine(_folder, "localclient.json");
+    private string KeyPath => ClientKeyFile.In(_folder);
 
     [Fact]
-    public void Vor_dem_ersten_Start_des_Fensters_gibt_es_keinen()
+    public void Ohne_Datei_gibt_es_keinen()
     {
-        Assert.Null(new LocalClient(Path_).PublicKey);
+        Assert.Null(new LocalClient(KeyPath).PublicKey);
     }
 
     [Fact]
-    public void Hinterlegt_und_nach_einem_Neustart_noch_da()
+    public void Angelegt_und_nach_einem_Neustart_noch_da()
     {
-        using var client = new TestClient();
+        var local = new LocalClient(KeyPath);
 
-        Assert.True(new LocalClient(Path_).Remember(client.PublicKey));
-        Assert.Equal(client.PublicKey, new LocalClient(Path_).PublicKey);
+        Assert.Null(local.Ensure());
+
+        var first = local.PublicKey;
+
+        Assert.NotNull(first);
+        Assert.Equal(first, new LocalClient(KeyPath).PublicKey);
     }
 
     [Fact]
-    public void Was_kein_Schluessel_ist_wird_abgelehnt()
+    public void Ein_zweiter_Aufruf_stellt_keinen_neuen_aus()
     {
-        var local = new LocalClient(Path_);
+        var local = new LocalClient(KeyPath);
 
-        // Abgelehnt und nicht gespeichert: er landete sonst als Karteileiche im
-        // Steckbrief, den dieser Rechner an jede Gegenseite ausliefert.
-        Assert.False(local.Remember("kein Schlüssel"));
-        Assert.False(local.Remember(null));
-        Assert.Null(local.PublicKey);
+        local.Ensure();
+
+        var first = local.PublicKey;
+
+        local.Ensure();
+
+        // Ein zweiter Schlüssel wäre schlimmer als keiner: jede bestehende
+        // Kopplung zeigte auf den ersten, und die Anmeldung liefe ab dann in
+        // ein 401, das wie ein Fehler der Gegenstelle aussieht.
+        Assert.Equal(first, local.PublicKey);
+    }
+
+    [Fact]
+    public void Was_das_Fenster_anlegt_findet_der_Agent()
+    {
+        // Der ganze Zweck der Datei: beide lesen dieselbe. Hier legt sie der
+        // eine an, und der andere kennt sie, ohne dass jemand etwas hinterlegt.
+        var written = ClientKeyFile.LoadOrCreate(KeyPath);
+
+        Assert.Equal(written.PublicKey, new LocalClient(KeyPath).PublicKey);
     }
 
     public void Dispose()

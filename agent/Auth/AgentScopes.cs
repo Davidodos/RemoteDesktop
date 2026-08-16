@@ -1,3 +1,5 @@
+using RemoteDesktopSetup;
+
 namespace RemoteDesktopAgent.Auth;
 
 /// <summary>
@@ -11,15 +13,18 @@ namespace RemoteDesktopAgent.Auth;
 /// </summary>
 public static class AgentScopes
 {
-    public const string Screen = "screen";
-    public const string Input = "input";
-    public const string Media = "media";
-    public const string Power = "power";
-    public const string Actions = "actions";
-    public const string Wake = "wake";
+    // Die Namen selbst stehen in der gemeinsamen Bibliothek: das Fenster trägt
+    // bei gestopptem Agent selbst ein Gerät ein, und zwar mit allen Rechten.
+    // Zwei Listen, die auseinanderlaufen können, wären genau die Art Fehler,
+    // die erst am echten Gerät auffällt.
+    public const string Screen = AgentScopeNames.Screen;
+    public const string Input = AgentScopeNames.Input;
+    public const string Media = AgentScopeNames.Media;
+    public const string Power = AgentScopeNames.Power;
+    public const string Actions = AgentScopeNames.Actions;
+    public const string Wake = AgentScopeNames.Wake;
 
-    public static readonly IReadOnlyList<string> All =
-        [Screen, Input, Media, Power, Actions, Wake];
+    public static readonly IReadOnlyList<string> All = AgentScopeNames.All;
 
     /// <summary>
     /// Pfade, die jeder angemeldete Client aufrufen darf. <c>/api/info</c> sagt

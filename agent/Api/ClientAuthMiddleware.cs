@@ -39,7 +39,6 @@ public static class ClientAuthMiddleware
     [
         "/api/pair/code",
         "/api/pair/self",
-        "/api/pair/local",
         "/api/pair/peers",
         "/api/pair/grant",
         "/api/clients"

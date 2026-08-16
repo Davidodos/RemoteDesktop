@@ -12,13 +12,13 @@ namespace RemoteDesktopAgent.Services;
 public sealed class CertificateVault(string directory, TimeProvider? time = null)
 {
     /// <summary>Die eigene CA — der Anker, dem ein Client einmal vertraut.</summary>
-    public const string AuthorityFile = "agentca.pfx";
+    public const string AuthorityFile = RemoteDesktopSetup.AgentPaths.AuthorityFile;
 
     /// <summary>Ihr öffentlicher Teil, so wie ihn ein Client zum Bestätigen bekommt.</summary>
-    public const string AuthorityPublicFile = "agentca.crt";
+    public const string AuthorityPublicFile = RemoteDesktopSetup.AgentPaths.AuthorityPublicFile;
 
     /// <summary>Das Zertifikat, das der Agent beim Verbinden vorzeigt.</summary>
-    public const string ServerFile = "agent.pfx";
+    public const string ServerFile = RemoteDesktopSetup.AgentPaths.ServerCertificateFile;
 
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 

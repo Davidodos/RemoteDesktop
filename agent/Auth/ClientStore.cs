@@ -1,5 +1,4 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using RemoteDesktopSetup;
 
 namespace RemoteDesktopAgent.Auth;
 
@@ -10,16 +9,16 @@ namespace RemoteDesktopAgent.Auth;
 /// Der Agent vertraut ausschließlich dieser Datei. Auch wenn später ein
 /// Kontodienst behauptet, ein Gerät gehöre dazu — steht es hier nicht drin,
 /// kommt es nicht herein.
+///
+/// <para>
+/// Gelesen und geschrieben wird über <see cref="ClientsFile"/> — dieselbe
+/// Klasse, die das Fenster bei gestopptem Agent benutzt. Der Unterschied liegt
+/// hier: dieser Store hält die Liste im Speicher, weil jeder Aufruf gegen sie
+/// geprüft wird.
+/// </para>
 /// </summary>
 public sealed class ClientStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Never
-    };
-
     private readonly string _path;
     private readonly object _gate = new();
     private List<PairedClient> _clients;
@@ -96,40 +95,12 @@ public sealed class ClientStore
         }
     }
 
-    private void Write()
-    {
-        var json = JsonSerializer.Serialize(_clients, JsonOptions);
-
-        // Erst daneben schreiben, dann umbenennen: ein Absturz mitten im
-        // Schreiben würde sonst die Liste aller zugelassenen Geräte zerstören —
-        // und damit den Fernzugang zu dem Rechner, an dem man gerade nicht sitzt.
-        var temporary = _path + ".tmp";
-
-        Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? ".");
-        File.WriteAllText(temporary, json);
-        File.Move(temporary, _path, overwrite: true);
-    }
+    private void Write() => ClientsFile.Write(_path, _clients);
 
     /// <summary>
     /// Eine fehlende Datei ist der Normalfall beim ersten Start. Eine kaputte
     /// Datei ist es nicht — deshalb fliegt die Ausnahme, statt still mit einer
     /// leeren Liste weiterzulaufen und alle gekoppelten Geräte auszusperren.
     /// </summary>
-    private static List<PairedClient> Read(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return [];
-        }
-
-        var content = File.ReadAllText(path);
-
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return [];
-        }
-
-        return JsonSerializer.Deserialize<List<PairedClient>>(content, JsonOptions)
-               ?? throw new InvalidOperationException($"{path} enthält keine Client-Liste.");
-    }
+    private static List<PairedClient> Read(string path) => ClientsFile.Read(path);
 }

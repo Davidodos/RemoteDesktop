@@ -2,7 +2,10 @@ import type { SurfaceBoard } from '../lib/surfaceBoard.ts'
 import { findLatestApk, isDifferentVersion } from './appUpdate.ts'
 import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
-import { noHost, noLocalNode, noTrust, usableProfile } from './index.ts'
+// Werte direkt aus den definierenden Modulen — siehe web.ts.
+import { noHost } from './host.ts'
+import { noLocalNode, usableProfile } from './localNode.ts'
+import { noTrust } from './trust.ts'
 import type {
   ConnectionRequest,
   HostClient,
@@ -115,7 +118,7 @@ interface HostPlugin {
   peers(): Promise<{ peers?: unknown }>
   forgetPeers(options: { ids: string[] }): Promise<void>
   grant(options: { publicKey: string; label: string }): Promise<void>
-  registerLocalClient(options: { publicKey: string }): Promise<void>
+  localClientKey(): Promise<{ publicKey?: string; privateKey?: string }>
   clients(): Promise<{ clients: HostClient[] }>
   revoke(options: { id: string }): Promise<void>
   answerConnection(options: { id: string; allow: boolean }): Promise<void>
@@ -439,7 +442,23 @@ function localNode(plugins: CapacitorPlugins): LocalNode {
 
     forget: (ids) => plugin.forgetPeers({ ids }),
     grant: (publicKey, label) => plugin.grant({ publicKey, label }),
-    register: (publicKey) => plugin.registerLocalClient({ publicKey }),
+
+    /**
+     * Der Ausweis dieses Handys liegt bei den übrigen Schlüsseln des Hosts und
+     * nicht im Speicher der Weboberfläche. Eine ältere APK kennt den Weg nicht;
+     * dann legt die App selbst einen an, wie im Browser.
+     */
+    key: async () => {
+      if (typeof plugin.localClientKey !== 'function') {
+        return undefined
+      }
+
+      const { publicKey, privateKey } = await plugin.localClientKey()
+
+      return typeof publicKey === 'string' && typeof privateKey === 'string'
+        ? { publicKey, privateKey }
+        : undefined
+    },
   }
 }
 

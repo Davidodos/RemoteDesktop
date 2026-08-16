@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { getPlatform, setPlatform, type Platform } from '../platform/index.ts'
 import { ensureClientKey, PairingError, pairWithAgent } from './pairing.ts'
 import { storage } from './storage.ts'
 
@@ -13,6 +14,12 @@ const ANSWER = {
   hostname: 'PC',
   agentFingerprint: 'a1b2c3d4e5f60708',
 }
+
+/** Ein Ausweis, wie ihn die Gegenstelle dieses Geräts herausgäbe. */
+const GERAET = { publicKey: 'oeffentlich', privateKey: 'privat' }
+
+/** Die Vorgabe-Plattform, damit jeder Test wieder von ihr ausgeht. */
+const original = getPlatform()
 
 function respond(status: number, body: unknown): Response {
   const text = JSON.stringify(body)
@@ -34,9 +41,11 @@ function fetchMock(): ReturnType<typeof vi.fn<(url: string, options: RequestInit
 
 beforeEach(() => {
   localStorage.clear()
+  setPlatform(original)
 })
 
 afterEach(() => {
+  setPlatform(original)
   vi.unstubAllGlobals()
 })
 
@@ -70,6 +79,46 @@ describe('das eigene Schlüsselpaar', () => {
 
     // Assert — sonst liefe die Kopplung durch und jede Anmeldung danach nicht.
     expect(key.privateKey.length).toBeGreaterThan(0)
+  })
+
+  test('führt die Gegenstelle eines, gilt ihres', async () => {
+    // Arrange — am Rechner liegt das Paar in {app}\data, am Handy bei den
+    // Schlüsseln des Hosts. Dort liest es außer dieser App auch der Server
+    // nebenan, und der schickt den öffentlichen Teil beim Koppeln mit.
+    const platform = getPlatform()
+
+    setPlatform({
+      ...platform,
+      node: { ...platform.node, key: () => Promise.resolve(GERAET) },
+    } as Platform)
+
+    // Act
+    const key = await ensureClientKey()
+
+    // Assert
+    expect(key).toEqual(GERAET)
+
+    // Und nichts davon landet nebenbei im eigenen Speicher: zwei Ablagen
+    // desselben Ausweises wären zwei Gelegenheiten, verschiedene zu benutzen.
+    expect(storage.getClientKey()).toBeUndefined()
+  })
+
+  test('ohne Gegenstelle bleibt es beim eigenen Speicher', async () => {
+    // Arrange — der Browser führt keinen. Das ist kein Fehler: was niemand
+    // steuern kann, muss auch niemand kennen.
+    const platform = getPlatform()
+
+    setPlatform({
+      ...platform,
+      node: { ...platform.node, key: () => Promise.reject(new Error('kein Fenster')) },
+    } as Platform)
+
+    // Act
+    const key = await ensureClientKey()
+
+    // Assert
+    expect(key.privateKey.length).toBeGreaterThan(0)
+    expect(storage.getClientKey()).toContain(key.publicKey)
   })
 })
 

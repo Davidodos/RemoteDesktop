@@ -27,20 +27,6 @@ import type { Device } from './types.ts'
  */
 
 /**
- * Hinterlegt den eigenen Ausweis beim eigenen Agent.
- *
- * Beim Start, und deshalb still: ohne einen Agent nebenan gibt es hier nichts zu
- * tun, und das ist der Normalfall im Browser. Ohne ihn bliebe allerdings jede
- * Kopplung einseitig — die Gegenseite bekäme in der Antwort nichts, was sie in
- * ihre eigene Liste eintragen könnte.
- */
-export async function announceSelf(): Promise<void> {
-  const key = await ensureClientKey()
-
-  await getPlatform().node.register(key.publicKey).catch(() => undefined)
-}
-
-/**
  * Der Ausweis der Gegenseite, so wie er über die Leitung kommt.
  *
  * `clientKey` fehlt, wenn die Gegenstelle zwar antwortet, ihr eigenes Fenster
@@ -84,15 +70,19 @@ export async function grantPeer(
     return undefined
   }
 
-  // Die Gegenseite ist eine Gegenstelle, hat aber keinen Ausweis mitgeschickt:
-  // ihr Fenster hat ihn dem eigenen Agent nie hinterlegt. Das ist der Fall, der
-  // vorher genauso aussah wie „gar keine Gegenrichtung angeboten" — und deshalb
-  // nie jemandem auffiel.
+  // Die Gegenseite ist eine Gegenstelle, hat aber keinen Ausweis mitgeschickt.
+  // Das ist der Fall, der vorher genauso aussah wie „gar keine Gegenrichtung
+  // angeboten" — und deshalb nie jemandem auffiel.
+  //
+  // Seit 31h liegt der Ausweis dort in einer Datei neben den übrigen
+  // Schlüsseln, und die legt an, wer zuerst kommt. Bleibt das Feld trotzdem
+  // leer, ist die Gegenseite entweder älter als dieser Umbau oder kommt in
+  // ihren eigenen Datenordner nicht hinein.
   if (peer.clientKey === undefined) {
     return (
       `${peer.name} kann dieses Gerät noch nicht steuern: die Gegenseite hat ` +
-      'ihren Ausweis nicht mitgeschickt. Dort läuft der Agent vermutlich noch ' +
-      'nicht — starten, und danach noch einmal koppeln.'
+      'ihren Ausweis nicht mitgeschickt. Dort läuft vermutlich eine ältere ' +
+      'Fassung — dort aktualisieren, und danach noch einmal koppeln.'
     )
   }
 

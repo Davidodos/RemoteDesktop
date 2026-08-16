@@ -452,7 +452,9 @@ entstanden:
   Lesen weg
 - **Das Fenster hinterlegt seinen Ausweis beim eigenen Agent** (`LocalClient`,
   `POST /api/pair/local`, beim Start). Der Agent hat ihn nicht selbst — er
-  gehört der Oberfläche. Ohne ihn bliebe jede Kopplung einseitig
+  gehört der Oberfläche. Ohne ihn bliebe jede Kopplung einseitig.
+  → *Ersetzt in 31h:* der Ausweis liegt jetzt in einer Datei, die beide lesen,
+  und wird nirgends mehr hinterlegt
 - **Alles unter `/api/pair/…` steht einzeln in `LocalOnly`.** `/api/pair` ist
   absichtlich ohne Ausweis erreichbar, und die Prüfung darunter vergleicht auf
   Segmentgrenzen — ohne die Einträge käme jeder im Netz an die Steckbriefe oder
@@ -566,34 +568,56 @@ Alle echt, alle behoben, keiner davon allein die Ursache:
 | `discover` verschluckte den Grund | „antwortet nicht" bei einer Gegenstelle, die nachweislich antwortet |
 | Sperre gegen Selbstverbindung verglich **Namen** | ein Handy, das „David" heißt, galt als der Rechner „David" |
 
-### Wo der Ausweis herkommt — offener Umbau
+### Wo der Ausweis herkommt (erledigt)
 
-Der Client-Schlüssel des Fensters liegt im localStorage der WebView, und der
-Agent kennt ihn nur, weil die React-App ihn über `/api/pair/local` hinterlegt
-(`announceSelf`). Das hat zwei Folgen, die beide unerwünscht sind:
+Der Client-Schlüssel des Fensters lag im localStorage der WebView, und der Agent
+kannte ihn nur, weil die React-App ihn über `/api/pair/local` hinterlegte
+(`announceSelf`). Das hatte zwei Folgen, die beide unerwünscht waren:
 
-- **Der Ausweis hängt am Lebenslauf einer Weboberfläche.** `RemotePage` baut die
-  WebView erst beim ersten Anzeigen auf. Wer das Fenster öffnet, auf „Geräte"
-  geht und dort einen QR-Code erzeugt, hat nie eine laufende React-App — der
-  Ausweis bleibt unhinterlegt, und die Gegenseite bekommt beim Koppeln ein
-  leeres `clientKey`. Symptom: „die Gegenseite hat ihren Ausweis nicht
-  mitgeschickt".
-- **Koppeln setzt einen laufenden Agent voraus.** Gewünscht ist: eingerichtet
+- **Der Ausweis hing am Lebenslauf einer Weboberfläche.** `RemotePage` baut die
+  WebView erst beim ersten Anzeigen auf. Wer das Fenster öffnete, auf „Geräte"
+  ging und dort einen QR-Code erzeugte, hatte nie eine laufende React-App — der
+  Ausweis blieb unhinterlegt, und die Gegenseite bekam beim Koppeln ein leeres
+  `clientKey`. Symptom: „die Gegenseite hat ihren Ausweis nicht mitgeschickt".
+- **Koppeln setzte einen laufenden Agent voraus.** Gewünscht ist: eingerichtet
   genügt. Wer diesen Rechner nur zum Steuern anderer benutzt, soll den Agent
   nicht starten müssen, um ein Gerät zu koppeln.
 
-Beides löst derselbe Umbau:
+**Beides löst derselbe Umbau, und der steht:**
 
-1. Das Schlüsselpaar des Rechners nach `{app}\data\clientkey.json` — erzeugt
-   von wem auch immer zuerst kommt. Agent **und** Fenster lesen dieselbe Datei;
-   `register` und `announceSelf` entfallen ersatzlos.
-2. `desktop/LocalNode.cs`: bei laufendem Agent weiter über HTTP (er hält
-   `clients.json` im Speicher, eine Datei unter ihm zu ändern ginge verloren),
-   bei gestopptem Agent direkt auf die Dateien im Datenordner. Beim nächsten
-   Start liest er sie ohnehin neu.
+1. Das Schlüsselpaar des Rechners liegt in `{app}\data\clientkey.json`
+   (`setup/ClientKeyFile.cs`) — angelegt von wem auch immer zuerst kommt. Agent
+   **und** Fenster lesen dieselbe Datei; `register`, `announceSelf` und
+   `POST /api/pair/local` sind ersatzlos weg. Am Handy dasselbe: der Ausweis
+   liegt in `clientkey.txt` bei den übrigen Schlüsseln des Hosts
+   (`host/LocalClientKey.kt`), die App holt ihn über `localClientKey()` ab,
+   statt einen eigenen zu erzeugen.
+2. `desktop/LocalNode.cs` fragt bei laufendem Agent weiter über HTTP (er hält
+   `clients.json` im Speicher, eine Datei unter ihm zu ändern ginge verloren)
+   und geht bei gestopptem Agent auf die Dateien im Datenordner
+   (`desktop/AgentData.cs`, `setup/ClientsFile.cs`). Beim nächsten Start liest
+   er sie ohnehin neu.
 
-Halb umgestellt ist schlechter als gar nicht: benutzten Fenster und Agent
-verschiedene Schlüssel, käme wieder ein 401 heraus.
+**Der Preis dafür steht im Installer:** `{app}\data` bekommt `users-modify`.
+Der Agent läuft erhöht und kommt ohnehin hinein, das Fenster nicht — und ohne
+Schreibrecht bliebe für „koppeln bei gestopptem Agent" nur eine Rückfrage von
+Windows bei jeder einzelnen Kopplung. Was es kostet: ein zweiter,
+nicht-administrativer Benutzer dieses Rechners könnte sich selbst in die
+`clients.json` eintragen. Lesen durfte er den Ordner ohnehin (er erbt die Rechte
+von „Programme"), und der Agent läuft in der Sitzung genau des Benutzers, der
+ihn eingerichtet hat.
+
+**Zwei Befunde nebenbei**, beide aus derselben Ecke:
+
+- `platform/index.ts` und `platform/web.ts` importierten sich gegenseitig. In
+  einem solchen Kreis entsteht das zuerst Gefragte zuletzt: die
+  Vorgabe-Plattform des Browsers hatte ein leeres `node` und ein leeres
+  `trust`. Aufgefallen ist es erst, als jemand `platform.node` im Browser las.
+  Jetzt holen sich die drei Umsetzungen ihre Werte aus den definierenden
+  Modulen, und `noTrust` hat eine eigene Datei.
+- Die `clients.json` hat jetzt **eine** Fassung (`setup/ClientsFile.cs`), die
+  der Agent und das Fenster benutzen. Zwei Fassungen desselben Formats wären
+  ein Fehler, der erst am echten Gerät auffiele.
 
 ### Namen kommen von dem, der koppelt
 
@@ -603,9 +627,8 @@ und wie die Gegenseite hier heißt. Der erste ging bis zum 16.08. nur in die
 dem Steckbrief. Wer am Handy „Handy" eintippte, fand am PC „David" wieder — den
 Android-Gerätenamen. Behoben: der Steckbrief trägt den eingetippten Namen.
 
-Was noch offen ist: der Name gilt ab der Kopplung und ändert sich nicht mehr
-mit. Wer ein Gerät später umbenennt, benennt es nur bei sich um. Ob das reicht
-oder ob eine Umbenennung mitwandern soll, ist eine Entscheidung für 31g.
+Der Name gilt ab der Kopplung und ändert sich nicht mehr
+mit. Wer ein Gerät später umbenennt, benennt es nur bei sich um. Das ist so gewollt.
 
 ## Phase 31g — ein Geräte-Tab statt dreier (OFFEN, als Nächstes)
 

@@ -1,9 +1,12 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
-import { noHost, usableProfile } from './index.ts'
+// Werte direkt aus den definierenden Modulen — siehe web.ts.
+import { noHost } from './host.ts'
+import { usableProfile } from './localNode.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
+  ClientKey,
   ClipboardAccess,
   KeyValueStore,
   Platform,
@@ -196,8 +199,20 @@ const windowNode: LocalNode = {
     await ask({ kind: 'local-grant', publicKey, label })
   },
 
-  register: async (publicKey: string): Promise<void> => {
-    await ask({ kind: 'local-register', publicKey })
+  /**
+   * Der Ausweis dieses Rechners kommt aus `{app}\data\clientkey.json` — aus
+   * derselben Datei, die der Agent liest. Vorher lag er im localStorage dieser
+   * WebView, und der Agent kannte ihn nur, wenn die Seite ihn hinterlegt
+   * hatte: wer das Fenster öffnete und direkt auf „Geräte" ging, koppelte
+   * ohne Ausweis, und die Gegenseite konnte diesen Rechner danach nicht
+   * steuern.
+   */
+  key: async (): Promise<ClientKey | undefined> => {
+    const { publicKey, privateKey } = await ask<Partial<ClientKey>>({ kind: 'local-key' })
+
+    return typeof publicKey === 'string' && typeof privateKey === 'string'
+      ? { publicKey, privateKey }
+      : undefined
   },
 }
 

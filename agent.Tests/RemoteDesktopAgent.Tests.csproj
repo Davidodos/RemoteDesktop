@@ -9,6 +9,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      Die clients.json wird von zwei Programmen geschrieben: vom Agent, solange
+      er läuft, und vom Fenster, wenn er es nicht tut. Das Format steht deshalb
+      in der gemeinsamen Bibliothek. Der alte Name bleibt, weil er im Agent das
+      Richtige sagt — dort ist es ein gekoppelter Client und keine Zeile in
+      einer Datei.
+    -->
+    <Using Include="RemoteDesktopSetup.ClientEntry" Alias="PairedClient" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />

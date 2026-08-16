@@ -116,7 +116,14 @@ builder.Services.AddSingleton<ChallengeStore>();
 // Eingang, bis das Fenster ihn abholt; der Ausweis des Fensters liegt hier,
 // damit er beim Koppeln mitgehen kann. Beides ohne Frist und ohne Netzaufruf.
 builder.Services.AddSingleton(new PeerInbox(settings.PeersPath));
-builder.Services.AddSingleton(new LocalClient(settings.LocalClientPath));
+
+// Der Ausweis der eigenen Oberfläche. Er wird hier angelegt, falls er noch
+// fehlt: der Agent läuft mit den höchsten verfügbaren Rechten und kommt in den
+// Datenordner hinein. Kommt das Fenster zuerst, legt es ihn an — gelesen wird
+// dieselbe Datei. Siehe LocalClient.
+var localClient = new LocalClient(settings.LocalClientPath);
+
+builder.Services.AddSingleton(localClient);
 builder.Services.AddSingleton<SessionStore>();
 
 // Wer gerade Bild oder Eingabe offen hält. Ohne diese Liste überlebte eine
@@ -223,6 +230,15 @@ app.MapUpdateEndpoints();
 // nächsten Start nicht mehr — geweckt wird ohnehin erst nach einem Neustart,
 // und der setzt ihn richtig.
 var site = SiteIdentity.Resolve(NetworkAdapters.List());
+
+// Der Ausweis der eigenen Oberfläche, angelegt falls er fehlt. Ein Fehlschlag
+// hält den Agent nicht auf — er steht im Log, weil sich sonst später nur zeigt,
+// dass eine Kopplung einseitig blieb, ohne dass irgendwo stünde, warum.
+if (localClient.Ensure() is { } keyFailure)
+{
+    app.Logger.LogWarning(
+        "Der Ausweis dieses Rechners ließ sich nicht anlegen: {Reason}", keyFailure);
+}
 
 app.Logger.LogInformation(
     "Standort-Kennung {SiteId}, eigene MAC {Mac}.",
@@ -606,14 +622,17 @@ internal sealed record AgentSettings(
         // Kopplungen und der eigene Schlüssel gehören zu den Daten, nicht zum
         // Programm: sie stehen im Datenordner. Die Aktionen sind Konfiguration
         // und bleiben neben der actions.example.json liegen.
-        var clientsPath = Resolve(configuration["Agent:ClientsPath"], dataDirectory, "clients.json");
-        var identityPath = Resolve(configuration["Agent:IdentityPath"], dataDirectory, "agentkey.txt");
+        var clientsPath = Resolve(
+            configuration["Agent:ClientsPath"], dataDirectory, AgentPaths.ClientsFileName);
+
+        var identityPath = Resolve(
+            configuration["Agent:IdentityPath"], dataDirectory, AgentPaths.IdentityFile);
 
         // Die beiden Hälften der Gegenrichtung. Nicht konfigurierbar: sie sind
         // Zustand und kein Einstellungspunkt, und wo Zustand liegt, steht in
         // AgentPaths.
-        var peersPath = Path.Combine(dataDirectory, "peers.json");
-        var localClientPath = Path.Combine(dataDirectory, "localclient.json");
+        var peersPath = Path.Combine(dataDirectory, AgentPaths.PeersFileName);
+        var localClientPath = ClientKeyFile.In(dataDirectory);
         var actionsPath = Resolve(
             configuration["Agent:ActionsPath"], AppContext.BaseDirectory, "actions.json");
 

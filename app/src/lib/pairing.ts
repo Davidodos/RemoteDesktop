@@ -3,7 +3,7 @@ import { TransportError } from '../transport/index.ts'
 import type { PeerCredential } from './bothWays.ts'
 import { certificateFingerprint } from './certificateTrust.ts'
 import { createClientKey, type ClientKeyPair } from './clientKey.ts'
-import type { DeviceProfile } from '../platform/index.ts'
+import { getPlatform, type DeviceProfile } from '../platform/index.ts'
 import { storage } from './storage.ts'
 import type { Device } from './types.ts'
 
@@ -79,12 +79,43 @@ export interface PairedBothWays {
 }
 
 /**
- * Das eigene Schlüsselpaar, beim ersten Bedarf erzeugt.
+ * Das eigene Schlüsselpaar.
  *
- * Ein Paar für alle Rechner: die Identität dieses Handys ist überall dieselbe,
+ * <p>
+ * Ein Paar für alle Rechner: die Identität dieses Geräts ist überall dieselbe,
  * freigeschaltet wird sie bei jedem Agent einzeln.
+ * </p>
+ *
+ * <p>
+ * **Führt die Gegenstelle dieses Geräts eines, gilt ihres.** Am Rechner liegt
+ * es in `{app}\data\clientkey.json`, am Handy bei den übrigen Schlüsseln des
+ * Hosts — an beiden Stellen liest es außer dieser App auch der Server nebenan,
+ * und der braucht es: beim Koppeln schickt er den öffentlichen Teil mit, damit
+ * die Gegenseite dieses Gerät ohne einen zweiten Aufruf steuern darf.
+ * </p>
+ *
+ * <p>
+ * **Der Befund dahinter (16.08.2026):** vorher lag das Paar nur hier, und die
+ * App hinterlegte den öffentlichen Teil beim Start beim eigenen Server. Wer im
+ * Fenster nie die Fernsteuerung anzeigte, hinterlegte nie etwas — die
+ * Gegenseite bekam ein leeres `clientKey` und konnte diesen Rechner danach
+ * nicht steuern, ohne dass irgendwo stand, warum.
+ * </p>
+ *
+ * <p>
+ * Im Browser gibt es keine Gegenstelle. Dort bleibt es beim eigenen Speicher,
+ * und das ist richtig so: was niemand steuern kann, muss auch niemand kennen.
+ * </p>
  */
 export async function ensureClientKey(): Promise<ClientKeyPair> {
+  const provided = await getPlatform()
+    .node.key()
+    .catch(() => undefined)
+
+  if (provided !== undefined) {
+    return provided
+  }
+
   const existing = parseClientKey(storage.getClientKey())
 
   if (existing !== undefined) {

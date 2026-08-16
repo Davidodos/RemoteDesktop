@@ -13,11 +13,11 @@ immer beidseitig (Steckbrief-Austausch in einem Aufruf statt weitergereichtem
 Code, der Entwurf aus 31b ist ersetzt), der Handy-Host läuft nur, solange die
 App offen ist, und jede Verbindung wird am Handy einzeln bestätigt.
 **Die Kopplung läuft seit dem 16.08. in beide Richtungen, am Gerät geprüft** —
-was so lange im Weg stand und was daran noch offen ist, steht in
-`docs/TASKS-V4.md` unter **31h**. Zwei Punkte von dort sind noch zu bauen: der
-Client-Schlüssel gehört nach `{app}\data` (heute hängt er am localStorage der
-WebView und damit daran, dass der Fernsteuerungs-Tab einmal offen war), und
-Koppeln soll bei eingerichtetem, aber gestopptem Agent gehen.
+was so lange im Weg stand, steht in `docs/TASKS-V4.md` unter **31h**. Die zwei
+offenen Punkte von dort sind gebaut: der Client-Schlüssel liegt in
+`{app}\data\clientkey.json` (am Handy in `clientkey.txt`) und wird nirgends
+mehr hinterlegt, und Koppeln geht bei eingerichtetem, aber gestopptem Agent —
+das Fenster liest und schreibt dann die Dateien selbst.
 **Als Nächstes: Phase 31g** — ein Geräte-Tab statt dreier (Fernsteuerung +
 Geräte zusammen, Netz unter die Einstellungen), je Gerät Plattform und
 „zuletzt verbunden", dazu Entfernen auf beiden Seiten, ein Verbindungstest in

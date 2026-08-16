@@ -22,7 +22,7 @@ class HostRuntime private constructor(
     private val codes: PairingCodes,
     private val pairing: PairingService,
     private val peers: PeerInbox,
-    private val local: LocalClient,
+    private val local: LocalClientKey,
     private val version: String,
     /** Die offenen Rückfragen „darf dieses Gerät jetzt verbinden?". */
     val connections: ConnectionRequests,
@@ -98,7 +98,7 @@ class HostRuntime private constructor(
                 codes = codes,
                 pairing = PairingService(clients, codes, ChallengeStore(), sessions),
                 peers = PeerInbox(File(folder, "peers.json")),
-                local = LocalClient(File(folder, "localclient.json")),
+                local = LocalClientKey(File(folder, "clientkey.txt")),
                 version = versionOf(context),
                 // Jede Verbindung wird am Gerät einzeln bestätigt.
                 connections = ConnectionRequests(),
@@ -271,8 +271,14 @@ class HostRuntime private constructor(
     /** Die Gegenrichtung eintragen: diese Oberfläche darf dieses Handy steuern. */
     fun grant(publicKey: String, label: String): Boolean = pairing.grant(publicKey, label)
 
-    /** Den Ausweis der eigenen App hinterlegen, damit er beim Koppeln mitgeht. */
-    fun rememberLocalClient(publicKey: String?): Boolean = local.remember(publicKey)
+    /**
+     * Der Ausweis dieses Handys als Client — beide Hälften.
+     *
+     * Die App holt ihn sich hier ab, statt selbst einen zu erzeugen und ihn zu
+     * hinterlegen: so kennt ihn der Host auch dann, wenn die Oberfläche noch
+     * nie an der Reihe war. Der öffentliche Teil geht bei jeder Kopplung mit.
+     */
+    fun localClientKey(): Pair<String, String> = local.publicKey to local.privateKey
 
     fun clients(): List<PairedClient> = pairing.listClients()
 

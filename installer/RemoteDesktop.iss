@@ -83,15 +83,25 @@ Type: filesandordirs; Name: "{app}\client"
 
 [Dirs]
 ; Zertifikate, privater Schlüssel, gekoppelte Geräte und das Netzprofil — alles
-; in einem Ordner neben dem Programm. Nur Administratoren und das System dürfen
-; hinein: der Schlüssel des Agents liegt im Klartext, und wer ihn hat, ist der
-; Agent.
+; in einem Ordner neben dem Programm.
 ;
 ; Der Installer kennt den Inhalt nicht, also überschreibt ein Update ihn auch
 ; nicht — Kopplungen und die eigene Zertifizierungsstelle überstehen jede neue
 ; Fassung. Beim Deinstallieren wird er dagegen mit weggeräumt, siehe
 ; [UninstallDelete]: was zum Programm gehört, soll auch mit ihm verschwinden.
-Name: "{app}\data"; Permissions: admins-full system-full
+;
+; „users-modify" seit 31h, und das ist eine bewusste Abwägung. Der Agent läuft
+; erhöht und kommt ohnehin hinein; das Fenster nicht. Es muss aber zwei Dateien
+; schreiben können: seinen eigenen Ausweis (clientkey.json) und die
+; Gegenrichtung einer Kopplung (clients.json), wenn der Agent eingerichtet, aber
+; gestoppt ist. Die Alternative wäre eine Rückfrage von Windows bei jeder
+; Kopplung — für einen Rechner, der nur andere steuern soll, bei jeder einzelnen.
+;
+; Was das kostet: ein zweiter, nicht-administrativer Benutzer dieses Rechners
+; könnte sich selbst in die clients.json eintragen. Lesen durfte er den Ordner
+; ohnehin schon (er erbt die Rechte von „Programme"), und der Agent läuft in der
+; Sitzung genau des Benutzers, der ihn eingerichtet hat.
+Name: "{app}\data"; Permissions: admins-full system-full users-modify
 
 [UninstallDelete]
 ; Der Datenordner. Er entsteht zur Laufzeit, deshalb weiß der Uninstaller sonst

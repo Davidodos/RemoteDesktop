@@ -25,6 +25,17 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      Die clients.json wird von zwei Programmen geschrieben: vom Agent, solange
+      er läuft, und vom Fenster, wenn er es nicht tut. Das Format steht deshalb
+      in der gemeinsamen Bibliothek. Der alte Name bleibt, weil er im Agent das
+      Richtige sagt — dort ist es ein gekoppelter Client und keine Zeile in
+      einer Datei.
+    -->
+    <Using Include="RemoteDesktopSetup.ClientEntry" Alias="PairedClient" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Das Netzprofil (Heimnetz · Tailscale · eigenes VPN) liest der Agent aus
          derselben Datei wie die Oberfläche. Die Logik dafür liegt in einem
          Projekt ohne Windows-Bezug und ist dort geprüft — zwei Leser derselben

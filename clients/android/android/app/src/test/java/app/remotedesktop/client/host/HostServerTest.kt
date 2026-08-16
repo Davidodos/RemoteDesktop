@@ -47,7 +47,7 @@ class HostServerTest {
      * Anmeldeweg in diesem Test an einer Frage, die niemand beantwortet.
      */
     private var zugestimmt = true
-    private lateinit var local: LocalClient
+    private lateinit var local: LocalClientKey
     private lateinit var trust: SSLContext
 
     private val client = KeyPairGenerator.getInstance("EC").apply {
@@ -65,7 +65,7 @@ class HostServerTest {
         val sessions = SessionStore()
 
         peers = PeerInbox(File(folder, "peers.json"))
-        local = LocalClient(File(folder, "localclient.json"))
+        local = LocalClientKey(File(folder, "clientkey.txt"))
 
         server = HostServer(
             identity = HostIdentity.loadOrCreate(File(folder, "hostkey.txt")),
@@ -266,8 +266,6 @@ class HostServerTest {
 
     @Test
     fun `die Antwort traegt den Ausweis dieser App zurueck`() {
-        local.remember(publicKey())
-
         val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
 
         val answer = JSONObject(
@@ -282,8 +280,10 @@ class HostServerTest {
         )
 
         // Ohne dieses Feld bliebe die Kopplung einseitig: die Gegenseite hätte
-        // nichts, was sie in ihre eigene clients.json eintragen könnte.
-        assertEquals(publicKey(), answer.getJSONObject("peer").getString("clientKey"))
+        // nichts, was sie in ihre eigene clients.json eintragen könnte. Er ist
+        // ohne Zutun der App da: sie hinterlegt ihn nicht mehr, sondern holt
+        // ihn sich von hier.
+        assertEquals(local.publicKey, answer.getJSONObject("peer").getString("clientKey"))
         assertEquals("Pixel", answer.getJSONObject("peer").getString("name"))
     }
 

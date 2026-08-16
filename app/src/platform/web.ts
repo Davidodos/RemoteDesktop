@@ -1,6 +1,11 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
-import { noHost, noLocalNode, noTrust } from './index.ts'
+// Direkt aus den definierenden Modulen und nicht über die Sammelstelle: die
+// importiert ihrerseits diese Datei, und in einem Kreis entsteht das zuerst
+// Gefragte zuletzt. Die Vorgabe-Plattform hatte deshalb ein leeres `node`.
+import { noHost } from './host.ts'
+import { noLocalNode } from './localNode.ts'
+import { noTrust } from './trust.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,

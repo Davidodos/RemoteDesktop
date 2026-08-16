@@ -34,7 +34,7 @@ class HostServer(
      * beiden Hälften der Gegenrichtung. Siehe [DeviceProfile].
      */
     private val peers: PeerInbox,
-    private val local: LocalClient,
+    private val local: LocalClientKey,
     private val screen: () -> Screen,
     private val address: () -> String?,
     /**
