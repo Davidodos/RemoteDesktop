@@ -247,12 +247,22 @@ function NameStep({
       // Steckbrief beschreibt, wie dieses Gerät erreichbar wäre.
       const self = await platform.node.profile().catch(() => undefined)
 
+      // **Der eingetippte Name gilt, nicht der, den dieses Gerät von sich
+      // angibt.** Genau danach wird auf dieser Seite gefragt: „wie soll dieses
+      // Gerät am anderen heißen?". Er ging bisher nur in die `clients.json` der
+      // Gegenseite — in ihre Geräteliste kam der Selbstname aus dem Steckbrief,
+      // bei einem Handy also das, was unter „Gerätename" in den
+      // Android-Einstellungen steht. Wer „Handy" eintippte, fand drüben „David"
+      // wieder und konnte nicht wissen, woher das kam.
+      const steckbrief =
+        self === undefined ? undefined : { ...self, name: label.trim() }
+
       const { device: paired, peer } = await pairBothWays({
         host: target.host,
         port: target.port,
         code: target.code,
         label: label.trim(),
-        ...(self === undefined ? {} : { self }),
+        ...(steckbrief === undefined ? {} : { self: steckbrief }),
       })
 
       // Und die andere Hälfte, ohne einen zweiten Aufruf über das Netz: die

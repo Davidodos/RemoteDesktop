@@ -74,6 +74,12 @@ function Shell(): React.JSX.Element {
   const reported = useRef<string | undefined>(undefined)
 
   /**
+   * Der Fingerabdruck des eigenen Agents. Daran — und ausdrücklich nicht am
+   * Namen — erkennt die App, dass ein Ziel dieser Rechner selbst ist.
+   */
+  const eigenerFingerabdruck = useRef<string | undefined>(undefined)
+
+  /**
    * Die Liste hat sich geändert — umbenannt oder entfernt.
    *
    * Ist das verbundene Gerät weg, endet auch die Verbindung: alles andere wäre
@@ -161,6 +167,18 @@ function Shell(): React.JSX.Element {
     // selbst und kostet nichts, sobald er einmal durch ist.
     const tick = (): void => {
       void announceSelf()
+
+      // Der eigene Fingerabdruck, für die Sperre gegen Selbstverbindung. Er
+      // kommt aus demselben Steckbrief, der beim Koppeln mitgeht, und wird hier
+      // nur mitgenommen — eine eigene Anfrage dafür wäre eine zweite Quelle für
+      // dieselbe Angabe.
+      void getPlatform()
+        .node.profile()
+        .then(
+          (self) => (eigenerFingerabdruck.current = self?.agentFingerprint),
+          () => undefined,
+        )
+
       look()
     }
 
@@ -295,7 +313,15 @@ function Shell(): React.JSX.Element {
       return
     }
 
-    if (isSelfConnection(probe.hostname, getPlatform().machineName)) {
+    if (
+      isSelfConnection(
+        { name: probe.hostname, fingerprint: device.fingerprint },
+        {
+          name: getPlatform().machineName,
+          fingerprint: eigenerFingerabdruck.current,
+        },
+      )
+    ) {
       setError(selfConnectionMessage(probe.hostname))
       return
     }
@@ -368,7 +394,15 @@ function Shell(): React.JSX.Element {
 
           // Der Name kommt aus `/api/info` des frisch gekoppelten Agents —
           // eine zweite Anfrage braucht es hier nicht.
-          if (isSelfConnection(paired.name, getPlatform().machineName)) {
+          if (
+            isSelfConnection(
+              { name: paired.name, fingerprint: paired.fingerprint },
+              {
+                name: getPlatform().machineName,
+                fingerprint: eigenerFingerabdruck.current,
+              },
+            )
+          ) {
             setError(selfConnectionMessage(paired.name))
             return
           }
