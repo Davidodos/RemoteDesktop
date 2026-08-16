@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { readable } from '../lib/certificateTrust.ts'
 import { getPlatform } from '../platform/index.ts'
@@ -33,6 +33,9 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
   const [error, setError] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
 
+  /** Wie viele Geräte beim letzten Nachsehen zugelassen waren. */
+  const bekannt = useRef(0)
+
   const refresh = useCallback((): void => {
     if (!host.available) {
       return
@@ -45,14 +48,17 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
       // als ließe er sich noch einmal einlösen — er gilt aber genau einmal.
       // Dass jemand ihn benutzt hat, sagt niemand ausdrücklich; es zeigt sich
       // daran, dass die Liste um einen Eintrag gewachsen ist.
-      setClients((vorher) => {
-        if (fresh.length > vorher.length) {
-          setPairing(undefined)
-          setQr(undefined)
-        }
+      //
+      // Gezählt wird in einem Ref und nicht im Zustand: ein Vergleich in einer
+      // Zustandsfunktion müsste dort etwas anderes anstoßen, und die Funktion
+      // soll rechnen und nichts auslösen.
+      if (fresh.length > bekannt.current) {
+        setPairing(undefined)
+        setQr(undefined)
+      }
 
-        return fresh
-      })
+      bekannt.current = fresh.length
+      setClients(fresh)
     }, () => undefined)
   }, [host])
 
