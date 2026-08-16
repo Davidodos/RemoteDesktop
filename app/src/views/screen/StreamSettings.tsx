@@ -22,6 +22,14 @@ const QUALITIES: { mode: QualityMode; label: string }[] = [
 interface Props {
   transport: Transport
   quality: QualityMode
+  /**
+   * Ob das verbundene Gerät H.264 überhaupt anbietet.
+   *
+   * Ein Handy tut das nicht. Dann steht hier keine Wahl zwischen zwei Wegen,
+   * von denen einer nie funktioniert — eine Einstellung, die nichts bewirkt,
+   * ist eine Frage ohne Antwort.
+   */
+  canH264: boolean
   /** Ob der gerade gezeigte Monitor schon der Standard dieses Geräts ist. */
   isDefaultMonitor: boolean
   onTransport: (mode: Transport) => void
@@ -38,6 +46,7 @@ interface Props {
 export function StreamSettings({
   transport,
   quality,
+  canH264,
   isDefaultMonitor,
   onTransport,
   onQuality,
@@ -59,16 +68,17 @@ export function StreamSettings({
       {/* Zwei getrennte Knöpfe statt eines Umschalters: bei einem einzelnen ist
           nie klar, ob die Beschriftung den aktuellen Zustand zeigt oder das,
           was ein Druck bewirkt. */}
-      {TRANSPORTS.map(({ mode, label }) => (
-        <button
-          key={mode}
-          type="button"
-          className={transport === mode ? 'quality-button active' : 'quality-button'}
-          onClick={() => onTransport(mode)}
-        >
-          {label}
-        </button>
-      ))}
+      {canH264 &&
+        TRANSPORTS.map(({ mode, label }) => (
+          <button
+            key={mode}
+            type="button"
+            className={transport === mode ? 'quality-button active' : 'quality-button'}
+            onClick={() => onTransport(mode)}
+          >
+            {label}
+          </button>
+        ))}
 
       {/* Die Qualitätsstufen gelten nur für den JPEG-Weg — bei H.264 regelt das
           der Encoder auf dem Rechner. */}

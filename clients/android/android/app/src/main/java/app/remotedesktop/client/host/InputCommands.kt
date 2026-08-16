@@ -34,6 +34,20 @@ sealed interface InputCommand {
     data class KeyCombo(val modifiers: List<String>, val key: String) : InputCommand
 
     data class TypeText(val text: String) : InputCommand
+
+    /**
+     * Zwei Finger auseinander oder zusammen — der Zoom eines Berührungsgeräts.
+     *
+     * <p>
+     * Die einzige Nachricht, die es beim Windows-Agent nicht gibt, und das mit
+     * Absicht: dort wäre sie sinnlos. Sie entsteht am Rechner aus einem
+     * gezogenen Rechtsklick, weil eine Maus keine zwei Finger hat, und geht nur
+     * an Geräte, die Berührungen erwarten.
+     * </p>
+     *
+     * @param scale Faktor auf den Fingerabstand; über 1 heißt auseinander.
+     */
+    data class Pinch(val x: Double, val y: Double, val scale: Double) : InputCommand
 }
 
 /**
@@ -49,6 +63,14 @@ object InputCommands {
     private const val MAX_TEXT_LENGTH = 4096
 
     private const val MAX_SCROLL_NOTCHES = 100
+
+    /**
+     * Wie weit eine Zoomgeste gehen darf. Alles darüber wäre am Bildschirm
+     * ohnehin nicht mehr zu unterscheiden — und eine Geste, die weit über den
+     * Rand hinausführt, verwirft Android.
+     */
+    private const val MIN_PINCH = 0.1
+    private const val MAX_PINCH = 10.0
 
     private val BUTTONS = setOf("left", "right", "middle")
 
@@ -82,6 +104,12 @@ object InputCommands {
 
                 InputCommand.KeyCombo(mods, name)
             }
+
+            "pinch" -> InputCommand.Pinch(
+                json.optDouble("x", -1.0).coerceIn(0.0, 1.0),
+                json.optDouble("y", -1.0).coerceIn(0.0, 1.0),
+                json.optDouble("scale", 1.0).coerceIn(MIN_PINCH, MAX_PINCH),
+            ).takeIf { json.has("x") && json.has("y") && json.has("scale") }
 
             "text" -> json.optString("text")
                 .takeIf { it.isNotEmpty() && it.length <= MAX_TEXT_LENGTH }

@@ -4,6 +4,7 @@ import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
 // Werte direkt aus den definierenden Modulen — siehe web.ts.
 import { noHost } from './host.ts'
+import { noHotkey } from './hotkey.ts'
 import { noIdentity } from './identity.ts'
 import { noLocalNode, usableProfile } from './localNode.ts'
 import { noTrust } from './trust.ts'
@@ -411,6 +412,9 @@ export function capacitorPlatform(
     host: hostService(plugins),
     node: localNode(plugins),
     identity: deviceIdentity(plugins),
+    // Ein Handy übernimmt keinen fremden Rechner — es hat weder Maus noch
+    // Tastatur, die es dafür einfangen könnte.
+    hotkey: noHotkey,
   }
 }
 

@@ -78,6 +78,21 @@ export function PhoneIcon(props: IconProps): React.JSX.Element {
   )
 }
 
+/**
+ * Ein Stift — „umbenennen", direkt neben dem Namen.
+ *
+ * Zwei Striche und ein Winkel: er steht neben einem Wort und darf es nicht
+ * überstimmen. Alles, was mehr Kanten hätte — Radiergummi, Schraffur, Spitze —
+ * wäre bei 14 Pixeln ohnehin nur Rauschen.
+ */
+export function PencilIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon {...props}>
+      <path d="M4 20h4L19 9l-4-4L4 16z" />
+    </Icon>
+  )
+}
+
 /** Zahnrad — die Einstellungen der App. */
 export function SettingsIcon(props: IconProps): React.JSX.Element {
   return (

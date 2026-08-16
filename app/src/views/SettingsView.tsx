@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppUpdateView } from './AppUpdateView.tsx'
-import { DevicesIcon, ScreenIcon } from './icons.tsx'
+import { DevicesIcon, PencilIcon, ScreenIcon } from './icons.tsx'
 import { cleanName, MAX_NAME_LENGTH, useIdentity } from '../lib/ownName.ts'
 import { getPlatform } from '../platform/index.ts'
 
@@ -114,7 +114,7 @@ function NameCard(): React.JSX.Element | null {
           onClick={() => setDraft(state.name)}
         >
           <span>{state.name}</span>
-          <span aria-hidden="true">✎</span>
+          <PencilIcon size={14} />
         </button>
       </section>
     )
@@ -145,14 +145,17 @@ function NameCard(): React.JSX.Element | null {
           )
         }}
       >
-        <div className="device-rename-row">
-          <input
-            value={draft}
-            maxLength={MAX_NAME_LENGTH}
-            onChange={(event) => setDraft(event.target.value)}
-            autoFocus
-          />
+        {/* Eigene Zeile — siehe `RenameRow` in `DeviceListView`: neben zwei
+            Knöpfen war vom getippten Namen am Handy nichts mehr zu sehen. */}
+        <input
+          type="text"
+          value={draft}
+          maxLength={MAX_NAME_LENGTH}
+          onChange={(event) => setDraft(event.target.value)}
+          autoFocus
+        />
 
+        <div className="device-rename-row">
           <button type="submit" className="secondary">
             Übernehmen
           </button>

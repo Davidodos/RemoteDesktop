@@ -36,6 +36,17 @@ public static class AgentCapabilities
     /// </summary>
     public const string Keys = "keys";
 
+    /// <summary>
+    /// Liefert das Bild auch als H.264 über WebRTC.
+    ///
+    /// <para>
+    /// Ein Handy kann das nicht — es hat keinen WebRTC-Endpunkt. Ohne diese
+    /// Angabe versuchte die App es trotzdem bei jedem Gerät und meldete
+    /// anschließend einen Rückfall, den niemand angefordert hatte.
+    /// </para>
+    /// </summary>
+    public const string H264 = "h264";
+
     public const string Media = "media";
     public const string Power = "power";
     public const string Actions = "actions";
@@ -50,5 +61,5 @@ public static class AgentCapabilities
     /// nicht gibt, wäre schlimmer als sie zu verschweigen.
     /// </summary>
     public static readonly IReadOnlyList<string> Windows =
-        [Screen, Input, Keys, Media, Power, Actions, Wake];
+        [Screen, Input, Keys, H264, Media, Power, Actions, Wake];
 }

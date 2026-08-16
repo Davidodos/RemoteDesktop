@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
 import { collectPeers } from './lib/bothWays.ts'
-import { capabilitiesOf } from './lib/capabilities.ts'
+import { capabilitiesOf, isTouchTarget } from './lib/capabilities.ts'
+import {
+  describeHotkey,
+  hotkeyMatches,
+  parseHotkey,
+  serializeHotkey,
+  type Hotkey,
+} from './lib/hotkey.ts'
+import { touchInputFor } from './lib/touchTyping.ts'
 import { deviceLabel } from './lib/deviceNames.ts'
 import {
   collectDevices,
@@ -32,6 +40,7 @@ import { ShareView } from './views/ShareView.tsx'
 import { ActionsView } from './views/ActionsView.tsx'
 import { ShortcutsView } from './views/ShortcutsView.tsx'
 import { Sidebar, pageAvailable, type Page } from './views/Sidebar.tsx'
+import { TakeoverSetup } from './views/TakeoverSetup.tsx'
 import { TouchpadView } from './views/TouchpadView.tsx'
 import { MenuIcon } from './views/icons.tsx'
 
@@ -81,6 +90,34 @@ function Shell(): React.JSX.Element {
    */
   const [info, setInfo] = useState<AgentInfo | undefined>(undefined)
 
+  /**
+   * Was das verbundene Gerät kann — gemerkt und nicht bei jedem Zeichnen neu
+   * gerechnet: an dieser Liste hängt die Tastaturbehandlung, und eine
+   * Abhängigkeit, die sich bei jedem Rendern erneuert, hängte den Anschlag jedes
+   * Mal neu ein.
+   */
+  const abilities = useMemo(() => capabilitiesOf(info), [info])
+
+  /** Ob am anderen Ende ein Finger erwartet wird — dann geht Text hinaus. */
+  const touchTarget = isTouchTarget(abilities)
+
+  /**
+   * **Der Vollzugriff.** Solange er läuft, gehört diesem Rechner keine einzige
+   * Eingabe mehr: Maus und Tastatur landen eins zu eins drüben. Geschaltet wird
+   * er mit {@link hotkey}, und der ist die einzige Ausnahme.
+   */
+  const [takeover, setTakeover] = useState(false)
+
+  /**
+   * Das Kürzel dafür. `undefined` heißt: noch nie vergeben — dann wird beim
+   * ersten Verbinden danach gefragt. Wo es die Übernahme nicht gibt (am Handy),
+   * bleibt es dabei, und gefragt wird nie.
+   */
+  const [hotkey, setHotkey] = useState<Hotkey | undefined>(undefined)
+  const [hotkeyLoaded, setHotkeyLoaded] = useState(false)
+  /** Wer „Später" gesagt hat, wird in dieser Sitzung nicht noch einmal gefragt. */
+  const [hotkeySkipped, setHotkeySkipped] = useState(false)
+
   const inputRef = useRef<InputChannel | undefined>(undefined)
 
   /** Zuletzt gemeldeter Fehlschlag beim Abholen — er wiederholt sich sonst im Takt. */
@@ -105,6 +142,35 @@ function Shell(): React.JSX.Element {
   useEffect(() => {
     eigenerName.current = identity?.name
   }, [identity])
+
+  // Das Kürzel liegt nativ (siehe `platform/hotkey.ts`) und wird einmal beim
+  // Start geholt. Antwortet die Umgebung nicht, gilt „noch keins" — dann fragt
+  // die App eben noch einmal nach, statt eine Übernahme anzubieten, die sich
+  // nicht beenden ließe.
+  useEffect(() => {
+    const setting = getPlatform().hotkey
+
+    if (!setting.available) {
+      setHotkeyLoaded(true)
+      return
+    }
+
+    let current = true
+
+    void setting.read().then(
+      (stored) => {
+        if (current) {
+          setHotkey(parseHotkey(stored))
+          setHotkeyLoaded(true)
+        }
+      },
+      () => current && setHotkeyLoaded(true),
+    )
+
+    return () => {
+      current = false
+    }
+  }, [])
 
   /**
    * Die Liste hat sich geändert — umbenannt oder entfernt.
@@ -365,17 +431,90 @@ function Shell(): React.JSX.Element {
     setSelected(aktuell)
   }, [])
 
-  // Echte Tastatur durchreichen, sobald die Umgebung eine hat. Am Handy tut
-  // das niemand — dort bleibt es bei der Bildschirmtastatur.
+  /**
+   * Die Verbindung beenden — der Weg zurück in die Geräteliste.
+   *
+   * <p>
+   * **Warum es den braucht:** es gab ihn nicht. Man kam in eine Sitzung hinein
+   * und aus ihr nur wieder heraus, indem man ein anderes Gerät wählte oder die
+   * App schloss. Am Rechner, wo seit 31j weder Symbolreihe noch Burger-Menü in
+   * der Sitzung stehen, wäre das eine Sackgasse gewesen.
+   * </p>
+   */
+  const disconnect = useCallback((): void => {
+    setTakeover(false)
+    setSelected(undefined)
+    setInfo(undefined)
+    setPage('devices')
+    storage.setLastDevice(undefined)
+  }, [])
+
+  // Ein Gerätewechsel beendet die Übernahme. Sie gilt einer Verbindung, nicht
+  // der App — sonst hinge die Maus nach dem Wechsel an einem Rechner, den
+  // niemand mehr sieht.
+  useEffect(() => setTakeover(false), [selected])
+
+  /**
+   * Die echte Tastatur — vier Fälle, in dieser Reihenfolge.
+   *
+   * <ol>
+   * <li><b>Das Umschaltkürzel.</b> Es bleibt immer hier. Ginge es mit hinaus,
+   *   gäbe es aus der Übernahme keinen Weg zurück.</li>
+   * <li><b>Übernahme.</b> Alles hinaus, auch aus Eingabefeldern heraus — es
+   *   gibt in diesem Zustand keine eigenen mehr, das Bild füllt den
+   *   Bildschirm.</li>
+   * <li><b>Ein Handy.</b> Dort ist ein Buchstabe kein Anschlag, sondern Text.
+   *   Siehe `lib/touchTyping.ts` — davor stand bei jedem Zeichen eine
+   *   Fehlermeldung.</li>
+   * <li><b>Ein Rechner ohne Übernahme.</b> Wie bisher: was in ein Feld dieser
+   *   App gehört, bleibt hier.</li>
+   * </ol>
+   */
   useEffect(() => {
     const input = inputRef.current
+    const platform = getPlatform()
 
-    if (selected === undefined || input === undefined || !getPlatform().capabilities.physicalKeyboard) {
+    if (selected === undefined || input === undefined || !platform.capabilities.physicalKeyboard) {
       return
     }
 
     const forward = (event: KeyboardEvent, down: boolean): void => {
+      if (hotkey !== undefined && hotkeyMatches(event, hotkey)) {
+        event.preventDefault()
+
+        // Nur beim Drücken: das Loslassen desselben Griffs schaltete ihn sonst
+        // sofort wieder zurück.
+        if (down) {
+          setTakeover((running) => !running)
+        }
+
+        return
+      }
+
+      if (takeover) {
+        event.preventDefault()
+
+        const key = toAgentKey(event.code)
+
+        if (key === undefined) {
+          return
+        }
+
+        if (down) {
+          input.keyDown(key)
+        } else {
+          input.keyUp(key)
+        }
+
+        return
+      }
+
       if (!belongsToRemote(event.target)) {
+        return
+      }
+
+      if (touchTarget) {
+        forwardToTouch(event, down)
         return
       }
 
@@ -396,6 +535,50 @@ function Shell(): React.JSX.Element {
       }
     }
 
+    /**
+     * Ein Handy nimmt Text an, keine Anschläge. Zwei Sonderfälle stehen hier
+     * und nicht in `touchTyping.ts`: das Einfügen braucht die Zwischenablage,
+     * und die gibt es nur über die Plattform.
+     */
+    const forwardToTouch = (event: KeyboardEvent, down: boolean): void => {
+      if (!down) {
+        // Geschickt wird beim Drücken. Ein zweites Mal beim Loslassen wäre
+        // jeder Buchstabe doppelt.
+        return
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
+        event.preventDefault()
+
+        void platform.clipboard.readText().then(
+          (text) => text.length > 0 && input.typeText(text),
+          () =>
+            setError(
+              'Die Zwischenablage ließ sich nicht lesen. Einmal ins Fenster klicken und '
+              + 'erneut einfügen.',
+            ),
+        )
+
+        return
+      }
+
+      const touch = touchInputFor(event)
+
+      // Auch das Verschluckte wird abgefangen: F5 soll nicht nebenbei dieses
+      // Fenster neu laden, nur weil drüben nichts damit anzufangen ist.
+      event.preventDefault()
+
+      if (touch === undefined) {
+        return
+      }
+
+      if (touch.kind === 'text') {
+        input.typeText(touch.text)
+      } else {
+        input.combo(touch.key)
+      }
+    }
+
     const onDown = (event: KeyboardEvent): void => forward(event, true)
     const onUp = (event: KeyboardEvent): void => forward(event, false)
 
@@ -406,7 +589,7 @@ function Shell(): React.JSX.Element {
       window.removeEventListener('keydown', onDown)
       window.removeEventListener('keyup', onUp)
     }
-  }, [selected])
+  }, [selected, hotkey, takeover, touchTarget])
 
   // **Der erste Start** — Name und Freigabe, genau einmal. Solange die Antwort
   // von der Plattform noch aussteht, wird nichts gezeigt: eine Erststartfrage,
@@ -460,7 +643,28 @@ function Shell(): React.JSX.Element {
   }
 
   const input = inputRef.current
-  const abilities = capabilitiesOf(info)
+  const platform = getPlatform()
+
+  /**
+   * Ob dieses Fenster eine Maus hat — dann führt es durch die Sitzung mit Maus
+   * und Tastatur und braucht weder Symbolreihe noch Burger-Menü dafür.
+   */
+  const withMouse = platform.capabilities.pointerLock
+
+  /**
+   * Ob jetzt nach dem Kürzel gefragt wird.
+   *
+   * Beim **ersten** Verbinden zu einem Rechner, und nur dann: das Kürzel
+   * betrifft die Übernahme, und die gibt es nur zwischen zwei Rechnern. Bei
+   * einem Handy hätte die Frage keinen Gegenstand.
+   */
+  const askForHotkey =
+    platform.hotkey.available &&
+    hotkeyLoaded &&
+    hotkey === undefined &&
+    !hotkeySkipped &&
+    selected !== undefined &&
+    !touchTarget
 
   /**
    * Die Seite, die wirklich zu sehen ist.
@@ -493,19 +697,34 @@ function Shell(): React.JSX.Element {
           Verbindung — und damit war der einzige durchgehende Weg durch die App
           genau dann weg, wenn man ihn braucht: bevor etwas gekoppelt ist. */}
       <header className="app-header">
-        <button
-          type="button"
-          className="icon-button"
-          onClick={() => setMenuOpen(true)}
-          aria-label="Menü öffnen"
-        >
-          <MenuIcon />
-        </button>
+        {/* **Am Rechner gibt es das Menü in einer Sitzung nicht.** Alles
+            darin — Maus, Tastatur, Shortcuts — liegt dort unter den Händen,
+            und was bleibt (Medien, Ein/Aus, Aktionen) steht in der
+            Geräteliste, einen Klick auf „Trennen" entfernt. Am Handy ist es
+            der einzige Weg irgendwohin und deshalb immer da. */}
+        {!(withMouse && selected !== undefined) && (
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Menü öffnen"
+          >
+            <MenuIcon />
+          </button>
+        )}
         <span className="header-title">
           {selected === undefined ? 'RemoteDesktop' : deviceLabel(selected)}
         </span>
         {selected !== undefined && (
           <span className={`connection ${connection}`}>{describeConnection(connection)}</span>
+        )}
+        {/* Der Weg aus einer Sitzung heraus. Er steht in der Kopfzeile, weil
+            die immer da ist — auch dann, wenn mit der Verbindung etwas nicht
+            stimmt und alles andere ins Leere führt. */}
+        {selected !== undefined && (
+          <button type="button" className="link-button" onClick={disconnect}>
+            Trennen
+          </button>
         )}
       </header>
 
@@ -521,7 +740,11 @@ function Shell(): React.JSX.Element {
               device={selected}
               agent={agent}
               input={input}
+              abilities={abilities}
               visible={view === 'screen'}
+              takeover={takeover}
+              {...(hotkey === undefined ? {} : { takeoverHint: describeHotkey(hotkey) })}
+              onTakeoverEnd={() => setTakeover(false)}
               onError={setError}
             />
           </div>
@@ -564,6 +787,25 @@ function Shell(): React.JSX.Element {
           <ShortcutsView />
         ) : null}
       </main>
+
+      {askForHotkey && (
+        <TakeoverSetup
+          onChoose={(chosen) => {
+            setHotkey(chosen)
+
+            void platform.hotkey.write(serializeHotkey(chosen)).catch((failure: unknown) => {
+              // Gemerkt ist es trotzdem — für diese Sitzung. Dass es den
+              // nächsten Start nicht überlebt, muss dastehen: sonst sucht
+              // morgen jemand nach einem Kürzel, das er vergeben hat.
+              setError(
+                'Das Kürzel gilt nur für diesen Lauf — gespeichert wurde es nicht: '
+                + (failure instanceof Error ? failure.message : String(failure)),
+              )
+            })
+          }}
+          onLater={() => setHotkeySkipped(true)}
+        />
+      )}
 
       {menuOpen && (
         <Sidebar

@@ -986,6 +986,133 @@ Betrieb, und eine Deinstallation gefolgt von einer Neuinstallation.
 
 ---
 
+## Phase 31j — Steuern am Rechner ✅ (16.08.2026, am Gerät noch zu prüfen)
+
+Teil A war gebaut, und dann stellte sich beim Benutzen heraus: **vom Rechner
+aus konnte man gar nichts steuern.** Die Fläche über dem Bild hörte nur auf
+Finger (`GesturePad`), Tastenanschläge gingen als Anschläge hinaus, und ein
+Handy kann damit nichts anfangen. Diese Phase ist die Antwort darauf — und
+räumt nebenbei vier kleinere Dinge weg, die am selben Tag auffielen.
+
+### Der Stift steht am Namen
+
+Er stand am Rand der Karte, neben den drei Punkten, und sah aus wie ein
+zweiter, gleich lauter Knopf. Jetzt steht er unmittelbar hinter dem Namen: ohne
+Fläche, ohne Rahmen, gedämpft — er ändert genau das Wort links von sich. Dafür
+ist die Karte kein Knopf mehr, sondern eine Karte mit einem Knopf darin (ein
+Knopf im Knopf gibt es im HTML nicht). Das Symbol ist neu und besteht aus einem
+einzigen Strichzug; das alte hatte bei 14 Pixeln mehr Kanten als Aussage.
+
+**Das Feld darunter füllt jetzt seine eigene Zeile.** Neben zwei Knöpfen blieb
+ihm am Handy so wenig Breite, dass vom getippten Namen nichts zu sehen war.
+
+**Und die Schrift darin war unlesbar.** Die WebView des Handys hielt die Seite
+für hell und dunkelte sie selbst nach — dunkel auf dunkel. `color-scheme: dark`
+im `:root` stellt das ab; `-webkit-text-fill-color` steht daneben, weil die
+WebView sich bei Eingabefeldern nicht immer an `color` hält. (Das unsichtbare
+Feld der Texteingabe braucht dieselbe Zeile in durchsichtig — sonst wären
+plötzlich die Füllzeichen zu sehen.)
+
+### „Aktualisieren" ist weg
+
+Die Liste fragt von allein nach — alle 15 Sekunden, nach dem Wecken schneller.
+Ein Knopf, der nur vorzieht, was ohnehin gleich passiert, sieht aus wie eine
+Bedingung.
+
+### Trennen
+
+Es gab keinen Weg aus einer Sitzung heraus außer „ein anderes Gerät wählen"
+oder „App schließen". Jetzt steht „Trennen" in der Kopfzeile — dort, wo sie
+ohnehin immer ist, auch dann, wenn mit der Verbindung etwas nicht stimmt.
+
+### Eine Anmeldung je Gerät statt einer je Kanal
+
+Am Handy wurde **jede** Verbindung einzeln bestätigt, und eine einzige
+Verbindung stellte drei bis vier Karten hintereinander auf den Bildschirm.
+Grund: jeder Kanal baute sich seinen eigenen Transport — `/api/info`, der
+Eingabe-Socket, der Bild-Socket, der H.264-Versuch — und damit seinen eigenen
+Ausweis. Am Windows-Agent fiel das nicht auf. `credentialsFor` merkt sich die
+Anmeldung jetzt je Gerät (`transport/direct.ts`); `removeDevice` wirft sie weg.
+
+### H.264 ist eine Fähigkeit
+
+Die App versuchte es bei jedem Gerät zuerst und fiel zurück, wenn nichts kam.
+Am Handy kam nie etwas, und jede Verbindung dorthin begann mit „H.264 kam nicht
+zustande" — eine Entschuldigung für etwas, das gar nicht angeboten wird. Jetzt
+sagt das Gerät es selbst (`h264` in `capabilities`; für Agents ohne das Feld
+steht es im Altbestand, denn Windows konnte es immer). Wo es fehlt, ist JPEG
+kein Rückfall, sondern die Form, in der es sein Bild anbietet — und die Wahl
+zwischen zwei Wegen steht dann gar nicht erst in den Einstellungen.
+
+### Fall 1: Rechner steuert Rechner — der Vollzugriff
+
+Ein Kürzel schaltet ihn ein und wieder aus. Solange er läuft, gehören Maus und
+Tastatur dem anderen Rechner: jeder Klick, jede Taste, jede Kombination.
+
+Drei Dinge zusammen ergeben ihn, und jedes einzelne wäre zu wenig:
+
+- **Vollbild** — nicht der Optik wegen: Chromium gibt die Tastatur nur im
+  Vollbild frei
+- **Keyboard Lock** — damit Alt+Tab und Esc hinübergehen statt hier zu wirken
+- **Pointer Lock** — die Maus verschwindet hier und bewegt sich drüben
+
+Was Windows selbst abfängt, geht trotzdem nie hinaus: **Strg+Alt+Entf und
+Windows+L** kommen bei keiner Anwendung an. Das ist eine Entscheidung des
+Betriebssystems und keine Lücke hier.
+
+Weitergereicht wird die **absolute** Position und nicht die Verschiebung. Der
+Strom zeigt den echten Mauszeiger nicht (`draw_mouse=0`), und mit Pointer Lock
+ist auch der eigene weg — nur wenn die App die Position selbst führt, kann sie
+die Marke zeichnen, und nur dann kann der Zeiger nicht über den fernen Rand
+hinauslaufen.
+
+**Das Kürzel wird beim ersten Verbinden zu einem Rechner abgefragt** und danach
+nie wieder stillschweigend geändert: es ist der einzige Weg zurück, und wer es
+sucht, während die Tastatur drüben ist, findet es nicht. Es liegt in
+`{app}\data\hotkey.txt` (`setup/HotkeyFile.cs`) — nicht im `localStorage` der
+WebView, weil das Fenster es unter „Einstellungen" anzeigt und ändert, und weil
+zwei Ablagen zwei Kürzel wären, sobald jemand eine davon anfasst.
+Windows-Hälfte des Formats: `desktop/HotkeyKeys.cs`.
+
+### Fall 2: Rechner steuert Handy
+
+Bis dahin kam **nichts** an. Zwei Ursachen, beide behoben:
+
+- **Klicks.** Über dem Bild lag nur eine Fläche für Finger. `PointerPad`
+  übersetzt jetzt die Maus eins zu eins und ohne Deutung: Drücken ist Drücken,
+  Loslassen ist Loslassen. Was daraus wird — Tippen, langer Druck, Wischen —
+  entscheidet die Gegenseite, weil nur sie weiß, was sie hat. Dafür misst
+  `RemoteInputService` neuerdings, **wie lange** die Taste unten war: vorher
+  dauerte jede Geste 250 ms, egal wie lange jemand hielt, und ein langsam
+  gezogener Regler sprang
+- **Tasten.** Das Handy antwortete „„e" gibt es auf einem Handy nicht" — bei
+  jedem Buchstaben. Der Fehler lag nicht drüben: ein Buchstabe ist dort kein
+  Anschlag, sondern **Text** für das Feld, das gerade den Fokus hat. Das
+  entscheidet `lib/touchTyping.ts`. Enter, Rücktaste, Esc und Tab haben eine
+  Entsprechung und gehen als Taste; alles andere wird verschluckt statt
+  hinausgeschickt, damit die Gegenseite es ablehnen kann
+
+Dazu zwei Zugaben: **Strg+V** liest die Zwischenablage des Rechners und tippt
+sie drüben, und ein **gezogener Rechtsklick** ist die Zoomgeste — die einzige
+Geste, die sich mit einer Maus nicht nachbauen lässt. Sie ist die einzige
+Nachricht des Protokolls, die es beim Windows-Agent nicht gibt (`pinch`), und
+sie geht nur an Geräte, die Berührungen erwarten.
+
+### Am Rechner ist während der Sitzung nichts im Weg
+
+Keine Symbolreihe unter dem Bild und kein Burger-Menü. Beides ersetzte am Handy,
+was dort fehlt — Tastatur, rechte Maustaste, Mausrad; am Rechner liegt das unter
+den Händen, und es war eine zweite, umständlichere Bedienung neben der, die
+ohnehin funktioniert. Was bleibt (Medien, Ein/Aus, Aktionen), steht in der
+Geräteliste, einen Klick auf „Trennen" entfernt. **Am Handy bleibt beides.**
+
+**Abnahme:** am echten Gerät noch zu prüfen — vom PC aus einen zweiten PC
+übernehmen und wieder freigeben, vom PC aus am Handy tippen, wischen, zoomen
+und aus der Zwischenablage einfügen, und eine Verbindung zum Handy, die genau
+**eine** Rückfrage stellt.
+
+---
+
 # Teil B — Dateimanager
 
 ## Phase 32 — Dateidienst im Windows-Agent

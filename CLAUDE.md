@@ -29,6 +29,20 @@ fragt zusätzlich nach der Freigabe samt Android-Rechten. Deinstallieren räumt
 jetzt auch `%localappdata%\RemoteDesktop` weg (dort lag der `localStorage` des
 Fensters). Einzelheiten unter **31i** in `docs/TASKS-V4.md`.
 
+**Mit 31j lässt sich vom Rechner aus wirklich steuern** (16.08.2026, am Gerät
+noch zu prüfen). Vorher kam vom PC aus nichts an: über dem Bild lag nur eine
+Fläche für Finger, und Tastenanschläge gingen als Anschläge hinaus, mit denen
+ein Handy nichts anfangen kann. Jetzt übersetzt `app/src/views/screen/PointerPad.tsx`
+die Maus eins zu eins, ein **Kürzel** schaltet zwischen zwei Rechnern den
+Vollzugriff ein (Vollbild + Keyboard Lock + Pointer Lock; das Kürzel liegt in
+`{app}\data\hotkey.txt`), und an ein Handy geht ein Buchstabe als **Text**
+statt als Anschlag (`app/src/lib/touchTyping.ts`) — dazu Strg+V aus der
+Zwischenablage und die Zoomgeste per gezogenem Rechtsklick. Nebenbei: eine
+Anmeldung je Gerät statt einer je Kanal (das Handy fragte vorher drei- bis
+viermal je Verbindung), H.264 als Fähigkeit statt als Fehlversuch, „Trennen" in
+der Kopfzeile, und am Rechner während der Sitzung weder Symbolreihe noch
+Burger-Menü. Einzelheiten unter **31j** in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen
@@ -118,8 +132,15 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
   als Dienst (`setup/AgentTask.cs`). Ein Dienst sitzt in Sitzung 0 und hat dort
   weder Bildschirm noch Desktop — Bild und Eingabe scheitern dort grundsätzlich.
   Preis: ohne angemeldeten Benutzer ist der Rechner nicht erreichbar.
+- **Was ein Gerät kann, sagt es selbst** — über `capabilities` in `/api/info`,
+  nicht über seine Plattform. Daran hängen inzwischen auch das Bildformat
+  (`h264`) und die Art der Eingabe (`keys`: fehlt sie, ist ein Buchstabe dort
+  kein Anschlag, sondern Text). Etwas zu versuchen und aus dem Fehlschlag zu
+  schließen, was die Gegenseite ist, erzeugt bei jedem Verbinden eine
+  Fehlermeldung über eine Sache, die nie angeboten wurde.
 - Aller Zustand liegt in **einem** Ordner: `{app}\data` (`setup/AgentPaths.cs`) —
-  Schlüssel, Zertifikate, `clients.json`, `setup.json`, `devicename.txt`. Nichts
+  Schlüssel, Zertifikate, `clients.json`, `setup.json`, `devicename.txt`,
+  `hotkey.txt`. Nichts
   davon gehört neben die `.exe`, und nichts nach `ProgramData`. Der einzige
   Rückstand außerhalb ist `%localappdata%\RemoteDesktop` (WebView2), und den
   räumt der Uninstaller weg — siehe `installer/RemoteDesktop.iss`.

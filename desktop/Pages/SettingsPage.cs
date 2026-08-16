@@ -57,6 +57,12 @@ public sealed class SettingsPage : PageView
     /// <summary>Der Gerätename. Er steht ganz oben — siehe <see cref="NameCard"/>.</summary>
     private readonly ThemedTextBox _nameBox = new();
 
+    /// <summary>Das Kürzel für den Vollzugriff — siehe <see cref="HotkeyCard"/>.</summary>
+    private readonly ThemedTextBox _hotkeyBox = new();
+
+    /// <summary>Ob das Feld gerade auf den nächsten Anschlag wartet.</summary>
+    private bool _catchingHotkey;
+
     public SettingsPage(IAutostartHost autostart, Action openSetup, Action openNetwork)
         : base("Einstellungen", "Start, Aktualisierung und was sonst selten gebraucht wird.")
     {
@@ -93,6 +99,7 @@ public sealed class SettingsPage : PageView
         _updateAct.Click += async (_, _) => await UpdateStepAsync();
 
         Body.Add(NameCard());
+        Body.Add(HotkeyCard());
         Body.Add(AutostartCard());
         Body.Add(NetworkCard());
         Body.Add(SetupCard());
@@ -110,6 +117,13 @@ public sealed class SettingsPage : PageView
         if (!_nameBox.Focused)
         {
             _nameBox.Value = AgentData.DeviceName();
+        }
+
+        // Nicht, während das Feld auf den nächsten Anschlag wartet: „Jetzt
+        // drücken…" wäre sonst beim ersten Nachsehen wieder weg.
+        if (!_catchingHotkey)
+        {
+            _hotkeyBox.Value = Beschreibe(AgentData.Hotkey());
         }
 
         return Task.CompletedTask;
@@ -158,6 +172,96 @@ public sealed class SettingsPage : PageView
 
         return card;
     }
+
+    /// <summary>
+    /// Das Kürzel für den Vollzugriff auf einen anderen Rechner.
+    ///
+    /// <para>
+    /// Vergeben wird es beim ersten Verbinden, in der Fernsteuerung selbst —
+    /// dort sieht man, welche Taste man wirklich unter dem Finger hat. Hier
+    /// steht, was daraus geworden ist, und hier ist der Weg, es zu ändern.
+    /// </para>
+    ///
+    /// <para>
+    /// Geändert wird durch Drücken und nicht durch Tippen: <c>ctrl+alt+KeyK</c>
+    /// ist keine Schreibweise, die jemand kennen muss. Deshalb ist das Feld
+    /// gesperrt und der Knopf daneben schaltet das Zuhören ein.
+    /// </para>
+    /// </summary>
+    private Card HotkeyCard()
+    {
+        var card = new Card("Vollzugriff auf einen anderen Rechner");
+        var change = new ThemedButton("Kürzel ändern");
+
+        _hotkeyBox.ReadOnly = true;
+        _hotkeyBox.Value = Beschreibe(AgentData.Hotkey());
+
+        change.Click += (_, _) =>
+        {
+            _catchingHotkey = !_catchingHotkey;
+
+            if (_catchingHotkey)
+            {
+                change.Relabel("Abbrechen");
+                _hotkeyBox.Value = "Jetzt drücken…";
+                _hotkeyBox.FocusInput();
+                Report("Die gewünschte Tastenkombination drücken.", Tone.Working);
+
+                return;
+            }
+
+            change.Relabel("Kürzel ändern");
+            _hotkeyBox.Value = Beschreibe(AgentData.Hotkey());
+            Report("Unverändert.");
+        };
+
+        _hotkeyBox.KeyPressed += (_, pressed) =>
+        {
+            if (!_catchingHotkey)
+            {
+                return;
+            }
+
+            // Nichts von dem hier soll nebenbei etwas auslösen — auch nicht
+            // die Tabulatortaste, die sonst den Fokus weiterreicht.
+            pressed.SuppressKeyPress = true;
+            pressed.Handled = true;
+
+            // Nur Modifier: da greift jemand noch. Kein Fehler, keine Meldung.
+            if (HotkeyKeys.From(pressed) is not { } combination)
+            {
+                return;
+            }
+
+            try
+            {
+                AgentData.SetHotkey(HotkeyKeys.Serialize(combination));
+                _catchingHotkey = false;
+                change.Relabel("Kürzel ändern");
+                _hotkeyBox.Value = HotkeyKeys.Describe(combination);
+                Report($"Der Vollzugriff schaltet jetzt mit {_hotkeyBox.Value}.", Tone.Good);
+            }
+            catch (Exception failure)
+            {
+                Report($"Nicht gespeichert: {failure.Message}", Tone.Bad);
+            }
+        };
+
+        card.Body.Add(new TextBlock(
+            "Während des Vollzugriffs gehen Maus und Tastatur vollständig auf den anderen "
+            + "Rechner. Dieses Kürzel schaltet ihn ein und wieder aus — es ist das Einzige, "
+            + "was hier bleibt."));
+
+        card.Body.Add(Row.Fill(_hotkeyBox, change));
+
+        return card;
+    }
+
+    /// <summary>Was in dem Feld steht, solange niemand daran dreht.</summary>
+    private static string Beschreibe(string? stored) =>
+        HotkeyKeys.Parse(stored) is { } combination
+            ? HotkeyKeys.Describe(combination)
+            : "Noch keins — wird beim ersten Verbinden vergeben.";
 
     private void Show(AutostartMode mode)
     {

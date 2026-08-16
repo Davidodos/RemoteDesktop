@@ -41,6 +41,7 @@ public sealed class ThemedTextBox : Control, IMeasurable
         _input.GotFocus += (_, _) => Mark(true);
         _input.LostFocus += (_, _) => Mark(false);
         _input.TextChanged += (_, _) => ValueChanged?.Invoke(this, EventArgs.Empty);
+        _input.KeyDown += (_, pressed) => KeyPressed?.Invoke(this, pressed);
 
         Controls.Add(_input);
         Height = LogicalToDeviceUnits(34);
@@ -70,6 +71,29 @@ public sealed class ThemedTextBox : Control, IMeasurable
     /// aufwacht, sieht aus wie einer, der klemmt.
     /// </summary>
     public event EventHandler? ValueChanged;
+
+    /// <summary>
+    /// Der Anschlag im Feld selbst — nicht der Text, der dabei herauskommt.
+    ///
+    /// <para>
+    /// Gebraucht für das Kürzel des Vollzugriffs: das wird gedrückt und nicht
+    /// getippt. <c>ctrl+alt+KeyK</c> ist keine Schreibweise, die jemand kennen
+    /// muss, und eine Taste, die im eigenen Griff schon belegt ist, merkt man
+    /// nur, wenn man sie drückt.
+    /// </para>
+    ///
+    /// <para>
+    /// Wer zuhört, setzt <see cref="KeyEventArgs.SuppressKeyPress"/> — sonst
+    /// landet der Anschlag zusätzlich als Zeichen im Feld.
+    /// </para>
+    /// </summary>
+    public event KeyEventHandler? KeyPressed;
+
+    /// <summary>
+    /// Den Eingabefokus auf das echte Feld setzen. <see cref="Control.Focus"/>
+    /// träfe den Wirt, und der nimmt keine Anschläge entgegen.
+    /// </summary>
+    public void FocusInput() => _input.Focus();
 
     public string Value
     {

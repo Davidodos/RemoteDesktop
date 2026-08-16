@@ -132,6 +132,22 @@ export class InputChannel {
     this.send({ t: 'scroll', dy: vertical, dx: horizontal })
   }
 
+  /**
+   * Zwei Finger auseinander oder zusammen — der Zoom eines Berührungsgeräts.
+   *
+   * <p>
+   * Mittelpunkt in Anteilen von 0 bis 1, `scale` als Faktor: über 1 heißt
+   * heranholen. Am Rechner gibt es dafür keine Geste, deshalb entsteht sie dort
+   * aus gezogenem Rechtsklick — und deshalb geht dieser Befehl auch nur an
+   * Geräte, die Berührungen erwarten (siehe `lib/capabilities.ts`,
+   * `isTouchTarget`). Ein Windows-Agent lehnt ihn ab, und das ist richtig so:
+   * er hätte nichts, was er damit tun könnte.
+   * </p>
+   */
+  pinch(x: number, y: number, scale: number): void {
+    this.send({ t: 'pinch', x, y, scale })
+  }
+
   keyDown(key: string): void {
     this.send({ t: 'keydown', key })
   }

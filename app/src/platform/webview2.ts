@@ -11,6 +11,7 @@ import type {
   HostPairingCode,
   HostService,
   HostStatus,
+  HotkeySetting,
   IdentityState,
   KeyValueStore,
   Platform,
@@ -314,6 +315,30 @@ const windowIdentity = {
 }
 
 /**
+ * Das Kürzel für die vollständige Übernahme eines anderen Rechners.
+ *
+ * <p>
+ * Es liegt in <c>{app}\data\hotkey.txt</c> und nicht im localStorage dieser
+ * WebView: geändert wird es im Fenster unter „Einstellungen", und was dort
+ * steht, muss dieselbe Angabe sein wie die, auf die diese Seite hört. Zwei
+ * Ablagen wären zwei Kürzel, sobald jemand eines davon anfasst.
+ * </p>
+ */
+const windowHotkey: HotkeySetting = {
+  available: true,
+
+  read: async (): Promise<string | undefined> => {
+    const { hotkey } = await ask<{ hotkey?: unknown }>({ kind: 'local-hotkey' })
+
+    return typeof hotkey === 'string' && hotkey.length > 0 ? hotkey : undefined
+  },
+
+  write: async (value: string): Promise<void> => {
+    await ask({ kind: 'local-hotkey-set', hotkey: value })
+  },
+}
+
+/**
  * Ein Eintrag aus der Liste der zugelassenen Geräte. Geprüft und nicht
  * geglaubt: die Liste kommt bei gestopptem Agent aus einer Datei, die auch
  * eine ältere Fassung geschrieben haben kann.
@@ -490,5 +515,6 @@ export function webview2Platform(host: WebView2Host): Platform {
     host: windowHost,
     node: windowNode,
     identity: windowIdentity,
+    hotkey: windowHotkey,
   }
 }

@@ -123,6 +123,33 @@ class InputCommandsTest {
         assertNull(parse(JSONObject().put("t", "text").put("text", "")))
     }
 
+    /**
+     * Der Zoom. Er entsteht am Rechner aus einem gezogenen Rechtsklick, weil
+     * eine Maus keine zwei Finger hat — hier kommt er als Mittelpunkt und
+     * Faktor an.
+     */
+    @Test
+    fun `liest die Zoomgeste`() {
+        assertEquals(
+            InputCommand.Pinch(0.5, 0.5, 2.0),
+            parse(JSONObject().put("t", "pinch").put("x", 0.5).put("y", 0.5).put("scale", 2.0)),
+        )
+    }
+
+    /** Ein Faktor jenseits jedes Maßes führte beide Finger vom Bildschirm. */
+    @Test
+    fun `begrenzt den Zoomfaktor`() {
+        assertEquals(
+            InputCommand.Pinch(0.5, 0.5, 10.0),
+            parse(JSONObject().put("t", "pinch").put("x", 0.5).put("y", 0.5).put("scale", 500.0)),
+        )
+    }
+
+    @Test
+    fun `eine Zoomgeste ohne Mittelpunkt ist keine`() {
+        assertNull(parse(JSONObject().put("t", "pinch").put("scale", 2.0)))
+    }
+
     @Test
     fun `Unbekanntes und Kaputtes ergibt nichts`() {
         assertNull(InputCommands.parse("kein JSON"))

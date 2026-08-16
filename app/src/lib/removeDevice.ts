@@ -1,5 +1,6 @@
 import { AgentClient } from './agentClient.ts'
 import { forgetLocalDevice } from './deviceSources.ts'
+import { forgetCredentials } from '../transport/direct.ts'
 import { getPlatform } from '../platform/index.ts'
 import type { Device } from './types.ts'
 
@@ -39,6 +40,9 @@ export async function removeDevice(device: Device): Promise<Removal> {
   const rest = await forgetThere(device)
 
   await forgetHere(device)
+
+  // Die gemerkte Anmeldung gehört zu einer Kopplung, die es nicht mehr gibt.
+  forgetCredentials(device.id)
 
   return { devices: forgetLocalDevice(device.id), ...(rest === undefined ? {} : { rest }) }
 }

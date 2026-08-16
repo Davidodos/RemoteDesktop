@@ -43,11 +43,56 @@ export function directTransport(device: Device, credentials = credentialsFor(dev
  * </p>
  */
 export function credentialsFor(device: Device): Credentials {
-  if (device.clientId !== undefined) {
-    return pairedCredentials(device.clientId, clientPrivateKey, sessionExchange(device))
+  if (device.clientId === undefined) {
+    return staticCredentials(device.token ?? '')
   }
 
-  return staticCredentials(device.token ?? '')
+  // Ändert sich eines dieser drei Stücke, ist es eine andere Gegenstelle und
+  // der gemerkte Ausweis gehört nicht mehr dazu.
+  const stamp = `${device.clientId}@${device.host}:${device.port}`
+  const known = sessions.get(device.id)
+
+  if (known?.stamp === stamp) {
+    return known.credentials
+  }
+
+  const credentials = pairedCredentials(device.clientId, clientPrivateKey, sessionExchange(device))
+
+  sessions.set(device.id, { stamp, credentials })
+
+  return credentials
+}
+
+/**
+ * Eine Anmeldung je Gerät, nicht eine je Kanal.
+ *
+ * <p>
+ * **Der Befund dahinter (16.08.2026):** jeder Kanal baute sich seinen eigenen
+ * Transport — die Auskunft `/api/info`, der Eingabe-Socket, der Bild-Socket und
+ * der H.264-Versuch. Damit hatte jeder seinen eigenen Ausweis und meldete sich
+ * einzeln an. Am Windows-Agent fiel das nicht auf; am Handy schon: dort wird
+ * **jede** Anmeldung einzeln bestätigt (siehe `host/ConnectionRequests.kt`), und
+ * eine einzige Verbindung stellte deshalb drei bis vier Karten hintereinander
+ * auf den Bildschirm.
+ * </p>
+ *
+ * <p>
+ * Gemerkt wird die Anmeldung und nicht das Token: läuft sie ab oder startet der
+ * Agent neu, holt {@link pairedCredentials} selbst eine neue — dieselbe Stelle
+ * wie vorher, nur eben einmal statt viermal.
+ * </p>
+ */
+const sessions = new Map<string, { stamp: string; credentials: Credentials }>()
+
+/**
+ * Ein Gerät ist weg — sein Ausweis auch.
+ *
+ * Ohne das überlebte die Anmeldung das Entfernen: wer dasselbe Gerät gleich
+ * wieder koppelt, bekommt eine neue `clientId`, und der gemerkte Eintrag stünde
+ * mit der alten da.
+ */
+export function forgetCredentials(deviceId: string): void {
+  sessions.delete(deviceId)
 }
 
 class DirectTransport implements Transport {

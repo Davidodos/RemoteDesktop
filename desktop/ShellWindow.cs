@@ -70,6 +70,7 @@ public sealed class ShellWindow : Form
 
         _remote = new RemotePage(appDirectory);
         _remote.FullscreenToggled += ToggleFullscreen;
+        _remote.PageFullscreen += SetFullscreen;
 
         // Ohne Netzprofil ist dieser Rechner noch nie eingerichtet worden —
         // dann führt der erste Blick in den Assistenten und nicht in eine
@@ -415,6 +416,21 @@ public sealed class ShellWindow : Form
     /// die Seitenleiste ist in dem Moment die Information, die am wenigsten
     /// gebraucht wird.
     /// </summary>
+    /// <summary>
+    /// Vollbild an oder aus, statt umschalten.
+    ///
+    /// Gebraucht für den Vollzugriff: die Seite sagt, ob sie gerade etwas ins
+    /// Vollbild gelegt hat, und nicht, dass sich etwas geändert haben soll. Ein
+    /// Umschalter darauf liefe irgendwann verkehrt herum.
+    /// </summary>
+    private void SetFullscreen(bool wanted)
+    {
+        if (_fullscreen != wanted)
+        {
+            ToggleFullscreen();
+        }
+    }
+
     private void ToggleFullscreen()
     {
         _fullscreen = !_fullscreen;

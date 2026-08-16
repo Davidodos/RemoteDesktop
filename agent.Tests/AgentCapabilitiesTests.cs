@@ -10,8 +10,19 @@ public class AgentCapabilitiesTests
     public void Windows_meldet_alles_ausser_Dateien()
     {
         Assert.Equal(
-            ["screen", "input", "keys", "media", "power", "actions", "wake"],
+            ["screen", "input", "keys", "h264", "media", "power", "actions", "wake"],
             AgentCapabilities.Windows);
+    }
+
+    /// <summary>
+    /// Wie <see cref="Keys_ist_kein_Recht"/>: „h264“ sagt, in welcher Form das
+    /// Bild herauskommt, nicht wer es sehen darf. Das Recht dafür ist
+    /// <see cref="AgentScopes.Screen"/> — sonst gäbe es einen Weg an ihm vorbei.
+    /// </summary>
+    [Fact]
+    public void H264_ist_kein_Recht()
+    {
+        Assert.False(AgentScopes.IsKnown(AgentCapabilities.H264));
     }
 
     /// <summary>

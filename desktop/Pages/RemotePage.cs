@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using RemoteDesktopClient.Ui;
+using RemoteDesktopSetup;
 
 namespace RemoteDesktopClient.Pages;
 
@@ -75,6 +76,20 @@ public sealed class RemotePage : Control
     }
 
     public event Action? FullscreenToggled;
+
+    /// <summary>
+    /// Die Seite hat selbst etwas ins Vollbild gelegt — beim Vollzugriff auf
+    /// einen anderen Rechner tut sie das.
+    ///
+    /// <para>
+    /// **Warum das Fenster mitziehen muss:** das Vollbild einer Seite füllt in
+    /// WebView2 nur die Anzeigefläche, nicht den Bildschirm. Ohne diese
+    /// Meldung säße der übernommene Rechner in einem Fenster mit Titelzeile und
+    /// Seitenleiste daneben — und die Seitenleiste ist in genau diesem Moment
+    /// die Information, die am wenigsten gebraucht wird.
+    /// </para>
+    /// </summary>
+    public event Action<bool>? PageFullscreen;
 
     /// <summary>
     /// Baut die WebView beim ersten Anzeigen auf. Nicht früher: der Aufbau
@@ -205,6 +220,9 @@ public sealed class RemotePage : Control
                 error.Action = CoreWebView2ServerCertificateErrorAction.AlwaysAllow;
             }
         };
+
+        core.ContainsFullScreenElementChanged += (_, _) =>
+            PageFullscreen?.Invoke(core.ContainsFullScreenElement);
 
         core.WebMessageReceived += (_, message) => OnMessage(core, message);
 
@@ -361,6 +379,12 @@ public sealed class RemotePage : Control
                     firstRunDone = true
                 },
 
+                // Das Kürzel für den Vollzugriff. Es liegt in derselben Datei,
+                // die die Einstellungsseite anzeigt — siehe HotkeyFile.
+                "local-hotkey" => new { hotkey = AgentData.Hotkey() },
+
+                "local-hotkey-set" => Kuerzel(request.Hotkey),
+
                 "trust-forget" => Vergessen(request.Fingerprint),
 
                 _ => throw new InvalidOperationException(
@@ -438,6 +462,29 @@ public sealed class RemotePage : Control
         await LocalNode.RevokeAsync(request.ClientId);
 
         return new { revoked = request.ClientId };
+    }
+
+    /// <summary>
+    /// Das Kürzel, mit dem dieser Rechner einen anderen übernimmt und wieder
+    /// freigibt.
+    ///
+    /// <para>
+    /// Vergeben wird es in der Seite — dort sieht jemand, welche Taste er
+    /// wirklich drückt. Gespeichert wird es hier, weil es die
+    /// Einstellungsseite des Fensters anzeigt und ändert; zwei Ablagen wären
+    /// zwei Kürzel, sobald jemand eines davon anfasst.
+    /// </para>
+    /// </summary>
+    private static object Kuerzel(string? hotkey)
+    {
+        if (HotkeyFile.Sanitize(hotkey) is not { } clean)
+        {
+            throw new InvalidOperationException("Ein leeres Kürzel wäre kein Weg zurück.");
+        }
+
+        AgentData.SetHotkey(clean);
+
+        return new { hotkey = clean };
     }
 
     /// <summary>
@@ -527,7 +574,7 @@ public sealed class RemotePage : Control
     /// <summary>Was die Seite über die Brücke schickt.</summary>
     private sealed record BridgeRequest(
         string? Id, string? Kind, string? Host, string? Fingerprint, string? PublicKey,
-        string? Label, string[]? Ids, string? ClientId);
+        string? Label, string[]? Ids, string? ClientId, string? Hotkey);
 
     /// <summary>
     /// Ein leerer schwarzer Bereich sähe aus wie ein Absturz. Steht die

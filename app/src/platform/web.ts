@@ -4,6 +4,7 @@ import { noSessionKeepAlive } from './session.ts'
 // importiert ihrerseits diese Datei, und in einem Kreis entsteht das zuerst
 // Gefragte zuletzt. Die Vorgabe-Plattform hatte deshalb ein leeres `node`.
 import { noHost } from './host.ts'
+import { noHotkey } from './hotkey.ts'
 import { noIdentity } from './identity.ts'
 import { noLocalNode } from './localNode.ts'
 import { noTrust } from './trust.ts'
@@ -154,4 +155,7 @@ export const webPlatform: Platform = {
   host: noHost,
   node: noLocalNode,
   identity: noIdentity,
+  // Ein Browser-Tab übernimmt keinen Rechner: das Kürzel dafür wird im
+  // Fenster vergeben und liegt neben dem Agent, nicht im localStorage.
+  hotkey: noHotkey,
 }

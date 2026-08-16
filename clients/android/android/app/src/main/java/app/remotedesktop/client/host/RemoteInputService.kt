@@ -65,6 +65,26 @@ class RemoteInputService : AccessibilityService() {
         /** Ab hier gilt ein Druck als lang — das ist der Rechtsklick des Handys. */
         private const val LONG_PRESS_MS = 600L
 
+        /**
+         * Länger als das dauert keine Geste, egal wie lange jemand die Taste
+         * hält. Android bricht sehr lange Gesten ab, und eine Sekunde ist für
+         * jedes Wischen und jedes lange Drücken mehr als genug.
+         */
+        private const val MAX_GESTURE_MS = 2000L
+
+        /** Ab dieser Strecke war es ein Wischen und kein Tippen. */
+        private const val DRAG_SLOP_PX = 8
+
+        /**
+         * Wie weit die beiden Finger einer Zoomgeste zu Beginn auseinander
+         * stehen, gemessen an der kürzeren Bildschirmseite. Zu eng, und Android
+         * hält es für einen Finger; zu weit, und einer der beiden landet
+         * außerhalb.
+         */
+        private const val PINCH_SPREAD = 0.15f
+
+        private const val PINCH_MS = 300L
+
         /** Wie weit ein Rasterschritt des Mausrads wischt. */
         private const val SCROLL_STEP_PX = 220
 
@@ -87,6 +107,20 @@ class RemoteInputService : AccessibilityService() {
     private var dragging = false
     private var dragFromX = 0f
     private var dragFromY = 0f
+
+    /**
+     * Wann die Taste gedrückt wurde.
+     *
+     * <p>
+     * **Der Befund dahinter:** die Geste dauerte immer 250 Millisekunden, egal
+     * wie lange jemand hielt. Damit war jedes Wischen gleich schnell — ein
+     * langsam gezogener Regler sprang, und ein langer Druck ohne Bewegung wurde
+     * zu einem kurzen Tippen. Wie lange ein Finger liegt, ist aber Teil der
+     * Geste und nicht ihre Verpackung: dieselbe Strecke in 200 statt 1200
+     * Millisekunden bedeutet in vielen Apps etwas anderes.
+     * </p>
+     */
+    private var dragSince = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -146,6 +180,7 @@ class RemoteInputService : AccessibilityService() {
                 dragging = true
                 dragFromX = pointerX
                 dragFromY = pointerY
+                dragSince = android.os.SystemClock.uptimeMillis()
                 null
             }
 
@@ -156,15 +191,28 @@ class RemoteInputService : AccessibilityService() {
 
                 dragging = false
 
+                // So lange, wie die Taste wirklich unten war. Damit wird aus
+                // einem kurzen Klick ein Tippen, aus einem gehaltenen ein
+                // langer Druck und aus einem gezogenen ein Wischen in genau dem
+                // Tempo, in dem gezogen wurde.
+                val held = (android.os.SystemClock.uptimeMillis() - dragSince)
+                    .coerceIn(TAP_MS, MAX_GESTURE_MS)
+
                 // Ist der Finger stehen geblieben, war es ein Tippen und kein
                 // Ziehen — sonst käme bei jedem Klick eine Wischgeste über null
                 // Pixel heraus, und die verwirft Android.
-                if (kotlin.math.hypot(pointerX - dragFromX, pointerY - dragFromY) < 8) {
-                    tap(TAP_MS)
+                if (kotlin.math.hypot(pointerX - dragFromX, pointerY - dragFromY) < DRAG_SLOP_PX) {
+                    tap(held)
                 } else {
-                    swipe(dragFromX, dragFromY, pointerX, pointerY, 250)
+                    swipe(dragFromX, dragFromY, pointerX, pointerY, held)
                 }
             }
+
+            is InputCommand.Pinch -> pinch(
+                (command.x * display.widthPixels).toFloat(),
+                (command.y * display.heightPixels).toFloat(),
+                command.scale.toFloat(),
+            )
 
             is InputCommand.Scroll -> {
                 val dy = -command.vertical * SCROLL_STEP_PX
@@ -216,14 +264,73 @@ class RemoteInputService : AccessibilityService() {
         }
     }
 
+    /**
+     * Zwei Finger, die auseinander- oder zusammengehen.
+     *
+     * <p>
+     * Beide Striche laufen in **einer** Geste: zwei nacheinander abgeschickte
+     * wären zwei einzelne Finger, und daraus wird kein Zoom, sondern zweimal
+     * Wischen. Sie liegen auf einer Diagonalen um den Mittelpunkt — welche
+     * Richtung, ist gleichgültig, es zählt der Abstand.
+     * </p>
+     */
+    private fun pinch(centerX: Float, centerY: Float, scale: Float): String? {
+        val display = resources.displayMetrics
+        val base = minOf(display.widthPixels, display.heightPixels) * PINCH_SPREAD
+
+        // Der Mittelpunkt muss so weit vom Rand weg sein, dass beide Finger auf
+        // dem Bildschirm bleiben — auch der weitere von beiden.
+        val reach = base * maxOf(1f, scale)
+        val x = centerX.coerceIn(reach, display.widthPixels - 1f - reach)
+        val y = centerY.coerceIn(reach, display.heightPixels - 1f - reach)
+
+        val from = base / 1.4142f
+        val to = from * scale
+
+        val gesture = GestureDescription.Builder()
+            .addStroke(stroke(x - from, y - from, x - to, y - to))
+            .addStroke(stroke(x + from, y + from, x + to, y + to))
+            .build()
+
+        return if (dispatchGesture(gesture, null, null)) {
+            null
+        } else {
+            "Die Zoomgeste wurde nicht angenommen — läuft der Bildschirm?"
+        }
+    }
+
+    private fun stroke(
+        fromX: Float,
+        fromY: Float,
+        toX: Float,
+        toY: Float,
+    ): GestureDescription.StrokeDescription {
+        val path = Path().apply {
+            moveTo(fromX, fromY)
+            lineTo(toX, toY)
+        }
+
+        return GestureDescription.StrokeDescription(path, 0, PINCH_MS)
+    }
+
     // ---- Tasten und Text --------------------------------------------------
 
     /**
      * Die wenigen Tasten, für die es auf Android eine Entsprechung gibt.
      *
-     * Alles andere wird abgelehnt statt still verschluckt: wer auf der
-     * Bildschirmtastatur F5 drückt, soll erfahren, dass ein Handy das nicht
-     * kennt.
+     * <p>
+     * **Ein einzelnes Zeichen ist keine Taste, sondern Text.** Der Rechner
+     * schickt es seit 31j von sich aus als Text (siehe `lib/touchTyping.ts`);
+     * hier steht der Fall trotzdem, weil eine ältere Gegenstelle es weiterhin
+     * als Anschlag schickt — und dann stand bei jedem Buchstaben „„e" gibt es
+     * auf einem Handy nicht", obwohl es die Taste offensichtlich gibt. Sie gibt
+     * es. Sie ist nur nichts, was `dispatchGesture` drücken könnte.
+     * </p>
+     *
+     * <p>
+     * Alles andere wird abgelehnt statt still verschluckt: wer F5 schickt, soll
+     * erfahren, dass ein Handy das nicht kennt.
+     * </p>
      */
     private fun pressKey(key: String): String? = when (key.lowercase()) {
         "escape", "browserback" -> global(GLOBAL_ACTION_BACK, "Zurück")
@@ -231,7 +338,10 @@ class RemoteInputService : AccessibilityService() {
         "f5" -> global(GLOBAL_ACTION_RECENTS, "Übersicht")
         "enter", "numpadenter" -> enter()
         "backspace" -> backspace()
-        else -> "„$key\" gibt es auf einem Handy nicht."
+        "space" -> type(" ")
+        "tab" -> type("\t")
+        else -> if (key.codePointCount(0, key.length) == 1) type(key) else
+            "„$key\" gibt es auf einem Handy nicht."
     }
 
     private fun global(action: Int, name: String): String? =

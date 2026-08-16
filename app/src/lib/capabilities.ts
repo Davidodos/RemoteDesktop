@@ -9,6 +9,19 @@ export type Capability =
   | 'input'
   /** Echte Tastendrücke: Strg+C, F5, Pfeiltasten. Ein Handy kann das nicht. */
   | 'keys'
+  /**
+   * Bild als H.264 über WebRTC.
+   *
+   * <p>
+   * **Warum das eine Fähigkeit sein muss:** die App versuchte es bei jedem
+   * Gerät zuerst und fiel auf JPEG zurück, wenn nichts kam. Am Handy kam nie
+   * etwas — es hat keinen WebRTC-Endpunkt —, und jede Verbindung dorthin begann
+   * mit einem Fehlversuch samt Meldung „H.264 kam nicht zustande". Das war
+   * keine Auskunft, sondern eine Entschuldigung für etwas, das gar nicht
+   * angeboten wird.
+   * </p>
+   */
+  | 'h264'
   | 'media'
   | 'power'
   | 'actions'
@@ -32,6 +45,10 @@ export const LEGACY_CAPABILITIES: readonly Capability[] = [
   'power',
   'actions',
   'wake',
+  // Ein Agent, der das Feld noch nicht kennt, ist ein Windows-Agent — und die
+  // konnten H.264 schon immer. Ihn hier wegzulassen hieße, jedem älteren
+  // Rechner den sparsamen Weg zu nehmen.
+  'h264',
 ]
 
 /**
@@ -57,4 +74,19 @@ export function can(info: AgentInfo | undefined, capability: Capability): boolea
 
 function isCapability(value: string): value is Capability {
   return (LEGACY_CAPABILITIES as readonly string[]).includes(value) || value === 'files'
+}
+
+/**
+ * Ob am anderen Ende Berührungen ankommen statt Tastendrücke — also ein Handy.
+ *
+ * <p>
+ * Gefragt wird nach {@link Capability.keys} und nicht nach der Plattform: was
+ * ein Gerät annimmt, sagt es selbst. Daran hängen die Eingaben vom Rechner aus:
+ * ein Klick wird dort ein Tippen, ein gezogener Rechtsklick eine Zoomgeste, und
+ * getippte Zeichen gehen als Text hinaus statt als Anschläge, die es dort nicht
+ * gibt.
+ * </p>
+ */
+export function isTouchTarget(abilities: readonly Capability[]): boolean {
+  return abilities.includes('input') && !abilities.includes('keys')
 }

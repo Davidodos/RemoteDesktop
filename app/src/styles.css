@@ -11,6 +11,16 @@
   /* Weder gut noch schlimm — dieselbe Farbe wie `Theme.Warn` im Fenster. */
   --warn: #ffb454;
   --radius: 12px;
+
+  /*
+    **Der Befund dahinter:** ohne diese Zeile hält die WebView des Handys die
+    Seite für hell und dunkelt sie selbst nach („algorithmic darkening"). Das
+    trifft vor allem Formularfelder: der getippte Name stand dunkel auf dunkel
+    und war schlicht nicht zu lesen. Hier zu sagen, dass diese Oberfläche schon
+    dunkel ist, ist die eine Zeile, die das abstellt — sie regelt nebenbei auch
+    Textcursor, Auswahlfarbe und Bildlaufleisten.
+  */
+  color-scheme: dark;
 }
 
 * {
@@ -55,17 +65,32 @@ button:disabled {
 }
 
 /* Auch ohne `type`: das ist der Normalfall in den Formularen dieser App, und
-   ohne diese Zeile stünden dort weiße Kästen in einem dunklen Fenster. */
+   ohne diese Zeile stünden dort weiße Kästen in einem dunklen Fenster.
+
+   `color` **und** `-webkit-text-fill-color`: die WebView des Handys hält sich
+   bei Eingabefeldern nicht immer an `color`, und dann steht der getippte Text
+   in der Farbe, die sie für richtig hält — meist dunkel auf dunkel. */
 input:not([type]),
 input[type='text'],
-input[type='password'] {
+input[type='password'],
+input[type='search'],
+input[type='number'],
+textarea {
   font: inherit;
-  color: inherit;
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+  caret-color: var(--accent);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 0.9rem 1rem;
   width: 100%;
+}
+
+input::placeholder {
+  color: var(--text-dim);
+  -webkit-text-fill-color: var(--text-dim);
+  opacity: 1;
 }
 
 /* ---- Grundgerüst ---- */
@@ -319,19 +344,42 @@ input[type='password'] {
   font-size: 1.4rem;
 }
 
+/*
+  Ein Gerät ist eine Karte, kein Knopf: der anklickbare Teil endet hinter dem
+  Namen, damit der Stift daneben stehen kann. Fläche und Rundung gehören
+  deshalb der Karte und nicht mehr dem Knopf darin.
+*/
 .device-card {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.25rem;
+  padding-right: 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .device-main {
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   text-align: left;
-  background: var(--surface);
+  background: none;
+  border: none;
+}
+
+.device-main:active:not(:disabled) {
+  background: none;
+  color: var(--accent);
+}
+
+/* Ausgegraut heißt hier „gerade nicht erreichbar" und nicht „kaputt" — der
+   Name bleibt lesbar, nur der Anschein von Anklickbarkeit geht weg. */
+.device-main:disabled {
+  opacity: 1;
+  color: var(--text-dim);
 }
 
 .status-dot {
@@ -374,15 +422,23 @@ input[type='password'] {
   color: var(--text-dim);
 }
 
+/* Rechtsbündig, egal wie lang der Name ist. */
 .device-state {
+  margin-left: auto;
+  padding-left: 0.5rem;
   font-size: 0.8rem;
   color: var(--text-dim);
+  white-space: nowrap;
 }
 
 .wake-button,
-.refresh-button,
 .pair-button {
   background: var(--surface);
+}
+
+.wake-button {
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
 }
 
 /* Ein Gerät samt aufgeklappter Verwaltung. */
@@ -392,11 +448,24 @@ input[type='password'] {
   gap: 0.5rem;
 }
 
-/* Der Stift neben dem Namen: genauso schmal wie die drei Punkte daneben. */
+/*
+  Der Stift **am Namen**: keine Fläche, kein Rahmen, gedämpfte Farbe. Er ist
+  eine Fußnote am Wort daneben und kein zweiter Knopf in der Zeile — sähe er
+  aus wie einer, stünden in jeder Zeile drei gleich laute Schaltflächen.
+*/
 .rename-button {
-  background: var(--surface);
-  padding: 0.9rem 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0.4rem;
+  background: none;
+  border: none;
   color: var(--text-dim);
+}
+
+.rename-button:active:not(:disabled) {
+  background: none;
+  color: var(--accent);
 }
 
 /* Die Zeile zum Umbenennen, aufgeklappt unter dem Gerät. */
@@ -409,15 +478,16 @@ input[type='password'] {
   border-radius: 10px;
 }
 
+/* Die Knöpfe unter dem Feld, nicht daneben — siehe `RenameRow`. */
 .device-rename-row {
   display: flex;
   gap: 0.5rem;
   align-items: center;
 }
 
-.device-rename-row input {
+.device-rename-row button {
   flex: 1;
-  min-width: 0;
+  padding: 0.7rem 0.8rem;
 }
 
 /* Die Kopplungsseite: zwei Abschnitte untereinander, wie in den Einstellungen.
@@ -438,9 +508,17 @@ input[type='password'] {
 
 /* Die drei Punkte: schmal, damit sie dem Namen keinen Platz wegnehmen. */
 .manage-button {
-  background: var(--surface);
-  padding: 0.9rem 0.8rem;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 0.5rem 0.6rem;
   line-height: 1;
+}
+
+.manage-button:active:not(:disabled) {
+  background: none;
+  color: var(--accent);
 }
 
 .device-panel {
@@ -896,7 +974,11 @@ button.danger:active:not(:disabled) {
   padding: 0.6rem;
   line-height: 1.2;
   font: inherit;
+  /* Beides, und zwar durchsichtig: der Inhalt dieses Feldes sind unsichtbare
+     Füllzeichen. Ohne die zweite Zeile setzte die allgemeine Regel weiter oben
+     die Textfarbe zurück, und die Füllzeichen wären zu sehen. */
   color: transparent;
+  -webkit-text-fill-color: transparent;
   /* Ohne Hinweistext ist der Cursor die einzige Rückmeldung, dass das Feld
      bereit ist. */
   caret-color: var(--accent);
@@ -967,6 +1049,10 @@ button.danger:active:not(:disabled) {
   position: absolute;
   inset: 0;
   touch-action: none;
+  /* Mit Maus wird auf dieser Fläche gezogen. Ohne diese Zeile hält der Browser
+     das für eine Textauswahl und malt einen blauen Balken über das Bild. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /*
@@ -1034,6 +1120,29 @@ button.danger:active:not(:disabled) {
 .device-hint code {
   color: var(--text);
   font-size: 0.75rem;
+}
+
+/*
+  Der Hinweis während der Übernahme. Oben und in Warnfarbe: unten stünde er
+  dort, wo bei jedem anderen Zustand eine Randnotiz steht, und dieser ist
+  keine — er ist der einzige Weg zurück, solange die Tastatur drüben ist.
+*/
+.screen-notice.takeover {
+  top: 0.5rem;
+  bottom: auto;
+  color: var(--warn);
+}
+
+/*
+  Im Vollbild gehört der ganze Bildschirm dem Bild. Ohne diese Zeilen behielte
+  die Bühne die Maße, die sie im Fenster hatte, und der übernommene Rechner
+  läge in einer Briefmarke mitten auf schwarzem Grund.
+*/
+.screen-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  cursor: none;
 }
 
 .screen-notice {
@@ -1202,6 +1311,32 @@ button.danger:active:not(:disabled) {
  * versehentliches Wegwischen sähe aus wie eine Zustimmung, die niemand gegeben
  * hat.
  */
+/*
+  Eine Karte über allem — dieselbe Bühne wie bei der Verbindungsanfrage, aber
+  als Karte statt als ganze Seite: hier steht eine Frage und kein Vorgang.
+*/
+.overlay-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 100%;
+  max-width: 26rem;
+  padding: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.overlay-card h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.overlay-card p {
+  margin: 0;
+  color: var(--text-dim);
+}
+
 .request-overlay {
   position: fixed;
   inset: 0;

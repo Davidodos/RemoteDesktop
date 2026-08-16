@@ -76,6 +76,20 @@ public static class AgentData
         DeviceNameFile.Write(Elevation.DataDirectory, name);
 
     /// <summary>
+    /// Das Kürzel für den Vollzugriff auf einen anderen Rechner —
+    /// <c>null</c>, solange keins vergeben wurde. Siehe
+    /// <see cref="HotkeyFile"/>.
+    /// </summary>
+    public static string? Hotkey() => HotkeyFile.Read(Elevation.DataDirectory);
+
+    /// <summary>
+    /// Das Kürzel setzen. Es wirkt sofort: die Seite liest es beim Start und
+    /// bekommt es hier bestätigt.
+    /// </summary>
+    public static void SetHotkey(string hotkey) =>
+        HotkeyFile.Write(Elevation.DataDirectory, hotkey);
+
+    /// <summary>
     /// Der Ausweis dieses Rechners als Client — angelegt, falls es ihn noch
     /// nicht gibt.
     ///

@@ -4,6 +4,7 @@
 // Leerlauf-Umsetzungen gibt, und ihre Felder wären `undefined`. Genau das war
 // der Fall, und es fiel erst auf, als jemand `platform.node` im Browser las.
 import type { HostService } from './host.ts'
+import type { HotkeySetting } from './hotkey.ts'
 import type { DeviceIdentity } from './identity.ts'
 import type { LocalNode } from './localNode.ts'
 import type { SessionKeepAlive } from './session.ts'
@@ -143,6 +144,11 @@ export interface Platform {
    * Siehe `platform/identity.ts`.
    */
   readonly identity: DeviceIdentity
+  /**
+   * Das Kürzel, mit dem dieser Rechner einen anderen vollständig übernimmt.
+   * Siehe `platform/hotkey.ts`.
+   */
+  readonly hotkey: HotkeySetting
 }
 
 export { PlatformError } from './errors.ts'
@@ -163,6 +169,7 @@ export {
   type LocalNode,
 } from './localNode.ts'
 export { noIdentity, type DeviceIdentity, type IdentityState } from './identity.ts'
+export { noHotkey, type HotkeySetting } from './hotkey.ts'
 export {
   noHost,
   type ConnectionRequest,

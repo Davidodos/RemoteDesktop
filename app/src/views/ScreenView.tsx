@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentClient } from '../lib/agentClient.ts'
+import { isTouchTarget, type Capability } from '../lib/capabilities.ts'
+import { getPlatform } from '../platform/index.ts'
 import { ScreenChannel } from '../lib/screenChannel.ts'
 import { storage } from '../lib/storage.ts'
 import { WebRtcChannel } from '../lib/webrtcChannel.ts'
@@ -35,6 +37,7 @@ import {
 } from './icons.tsx'
 import { KeyboardControls } from './keyboard/KeyboardControls.tsx'
 import { GesturePad } from './screen/GesturePad.tsx'
+import { buttonOf, PointerPad } from './screen/PointerPad.tsx'
 import { ShortcutSheet } from './screen/ShortcutSheet.tsx'
 import { TextSheet } from './screen/TextSheet.tsx'
 import { StreamSettings, type Transport } from './screen/StreamSettings.tsx'
@@ -50,15 +53,60 @@ const CENTER: Point = { x: 0.5, y: 0.5 }
 /** Was gerade unter dem Bild eingeblendet ist. */
 type Sheet = 'none' | 'keyboard' | 'text' | 'shortcuts' | 'media' | 'power'
 
+/** Ein Rasterschritt des Mausrads, wie ihn der Browser meldet. */
+const WHEEL_NOTCH_PX = 100
+
+/**
+ * Die Keyboard-Lock-Schnittstelle. Sie steht noch in keiner Typdefinition,
+ * gibt es in Chromium aber seit Jahren — und ohne sie bliebe Alt+Tab bei einer
+ * Übernahme auf diesem Rechner hängen.
+ */
+interface NavigatorWithKeyboard extends Navigator {
+  keyboard?: {
+    lock?: (codes?: string[]) => Promise<void>
+    unlock?: () => void
+  }
+}
+
+/**
+ * Die Maus einfangen. Ältere Fassungen geben nichts zurück, neuere ein
+ * Versprechen — `Promise.resolve` macht aus beidem dasselbe, damit ein
+ * Fehlschlag an einer Stelle landet und nicht an zweien.
+ */
+async function grabPointer(element: Element): Promise<void> {
+  await Promise.resolve(element.requestPointerLock())
+}
+
 interface Props {
   device: Device
   agent: AgentClient
   input: InputChannel
+  /** Was das verbundene Gerät kann — siehe `lib/capabilities.ts`. */
+  abilities: readonly Capability[]
   /**
    * Ob die Ansicht gerade sichtbar ist. Sie bleibt beim Tab-Wechsel bestehen,
    * damit der Bildstrom nicht jedes Mal neu aufgebaut werden muss.
    */
   visible: boolean
+  /**
+   * Ob dieser Rechner den anderen gerade **vollständig** übernommen hat: Maus
+   * eingefangen, Bild im Vollbild, jeder Anschlag geht hinüber. Geschaltet wird
+   * das über das Kürzel, und zwar in `App.tsx` — dort liegt die Tastatur.
+   */
+  takeover: boolean
+  /**
+   * Wie das Kürzel heißt, mit dem die Übernahme wieder endet — „Strg+Alt+K".
+   * Es steht während der Übernahme im Bild, weil es dann der einzige Weg
+   * heraus ist und niemand ihn nachschlagen kann: die Tastatur ist drüben.
+   */
+  takeoverHint?: string
+  /**
+   * Die Übernahme ist zu Ende, ohne dass jemand das Kürzel gedrückt hätte —
+   * Vollbild verlassen, Fenster den Fokus verloren, Maus wieder freigegeben.
+   * Ohne diese Meldung stünde die App auf „übernommen", während die Eingaben
+   * längst wieder hier landen.
+   */
+  onTakeoverEnd: () => void
   onError: (message: string) => void
 }
 
@@ -105,9 +153,33 @@ export function ScreenView({
   device,
   agent,
   input,
+  abilities,
   visible,
+  takeover,
+  takeoverHint,
+  onTakeoverEnd,
   onError,
 }: Props): React.JSX.Element {
+  /**
+   * Ob hier eine Maus liegt. Daran hängt die halbe Ansicht: mit Maus wird
+   * gezeigt und geklickt, ohne Maus gewischt — und die Symbolreihe unter dem
+   * Bild gibt es nur dort, wo es keine Maus gibt.
+   */
+  const withMouse = getPlatform().capabilities.pointerLock
+
+  /** Ob am anderen Ende ein Finger erwartet wird statt einer Tastatur. */
+  const touchRemote = isTouchTarget(abilities)
+
+  /**
+   * Ob dieses Gerät H.264 überhaupt anbietet.
+   *
+   * Vorher wurde es bei jedem versucht. Am Handy scheiterte das zwangsläufig —
+   * es hat keinen WebRTC-Endpunkt — und jede Verbindung dorthin begann mit
+   * „H.264 kam nicht zustande". Das war keine Auskunft, sondern eine
+   * Entschuldigung für etwas, das nie angeboten wurde.
+   */
+  const canH264 = abilities.includes('h264')
+
   const [monitors, setMonitors] = useState<Monitor[]>([])
   const [monitorCount, setMonitorCount] = useState(0)
   const [active, setActive] = useState(() => storage.getDefaultMonitor(device.id) ?? 0)
@@ -121,9 +193,19 @@ export function ScreenView({
   const [unavailable, setUnavailable] = useState<string | undefined>(undefined)
   const [viewport, setViewport] = useState<Viewport>(RESET_VIEWPORT)
   const [quality, setQuality] = useState<QualityMode>('auto')
-  const [transport, setTransport] = useState<Transport>(
+  const [chosenTransport, setTransport] = useState<Transport>(
     () => (storage.getTransport() === 'jpeg' ? 'jpeg' : 'webrtc'),
   )
+
+  /**
+   * Der wirklich benutzte Weg.
+   *
+   * Der gemerkte Wunsch gilt nur, wo es etwas zu wünschen gibt. Bei einem
+   * Gerät ohne H.264 ist JPEG kein Rückfall, sondern die einzige Form, in der
+   * es sein Bild anbietet — und dann ist auch nichts „nicht zustande
+   * gekommen".
+   */
+  const transport: Transport = canH264 ? chosenTransport : 'jpeg'
   const [fellBack, setFellBack] = useState(false)
   // Die Tastatur schaltet den Zeiger mit ein: mit offener Tastatur will man den
   // Ausschnitt verschieben und klicken können, ohne sie wieder zuzuklappen.
@@ -187,6 +269,10 @@ export function ScreenView({
 
     setDefaultMonitor(preferred)
     setActive(preferred ?? 0)
+
+    // Der Rückfall galt dem Gerät von vorhin. Ohne dieses Zurücksetzen stünde
+    // „H.264 kam nicht zustande" beim nächsten Gerät noch da.
+    setFellBack(false)
   }, [device.id])
 
   // Monitorliste einmal pro Gerät holen — daraus entsteht die Auswahl.
@@ -283,7 +369,9 @@ export function ScreenView({
   // und beim Drehen des Handys ebenso wenig — dann muss der Ausschnitt neu auf
   // den Zeiger ausgerichtet werden.
   useEffect(() => {
-    if (!pointerActive || !visible) {
+    // Auch bei der Übernahme: der Sprung ins Vollbild ändert die Bildmaße, und
+    // die Marke stünde danach an der falschen Stelle.
+    if (!(pointerActive || takeover) || !visible) {
       return
     }
 
@@ -293,7 +381,7 @@ export function ScreenView({
     window.addEventListener('resize', realign)
 
     return () => window.removeEventListener('resize', realign)
-  }, [pointerActive, visible, active, transport, sheet, alignToPointer])
+  }, [pointerActive, takeover, visible, active, transport, sheet, alignToPointer])
 
   // In der Hosentasche muss kein Bild übertragen werden.
   useEffect(() => {
@@ -309,6 +397,168 @@ export function ScreenView({
 
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [])
+
+  /**
+   * Die jeweils frische Fassung von {@link panPointer}.
+   *
+   * <p>
+   * Der Übernahme-Effekt darf nicht an ihr hängen: er würde sonst bei jedem
+   * Monitorwechsel neu aufgebaut und gäbe dabei die eingefangene Maus wieder
+   * frei. Ein Ref ist hier kein Trick, sondern die Aussage, dass die Funktion
+   * beim Aufruf gilt und nicht beim Einhängen.
+   * </p>
+   */
+  const panRef = useRef<((dx: number, dy: number) => void) | undefined>(undefined)
+
+  useEffect(() => {
+    panRef.current = panPointer
+  })
+
+  /**
+   * **Die vollständige Übernahme.**
+   *
+   * <p>
+   * Drei Dinge zusammen ergeben sie, und jedes einzelne wäre für sich zu wenig:
+   * </p>
+   *
+   * <ul>
+   * <li><b>Vollbild</b> — nicht der Optik wegen. Chromium gibt die Tastatur nur
+   *   im Vollbild frei; ohne es blieben Alt+Tab und Esc hier hängen.</li>
+   * <li><b>Keyboard Lock</b> — damit genau diese Tasten hinübergehen. Was
+   *   Windows selbst abfängt, geht trotzdem nie hinaus: Strg+Alt+Entf und
+   *   Windows+L kommen bei keiner Anwendung an, und das ist eine
+   *   Sicherheitsentscheidung des Betriebssystems, keine Lücke hier.</li>
+   * <li><b>Pointer Lock</b> — die Maus verschwindet hier und bewegt sich
+   *   drüben. Nur so bleibt der Zeiger nicht am Fensterrand stehen, und nur so
+   *   löst ein Klick hier nichts mehr aus.</li>
+   * </ul>
+   *
+   * <p>
+   * Fällt eines davon weg — jemand verlässt das Vollbild, das Fenster verliert
+   * den Fokus, der Browser gibt die Maus frei —, ist die Übernahme vorbei. Das
+   * wird gemeldet und nicht stillschweigend hingenommen: eine App, die auf
+   * „übernommen" steht, während die Tasten wieder hier landen, ist schlimmer
+   * als eine, die gar nicht übernimmt.
+   * </p>
+   */
+  useEffect(() => {
+    const stage = stageRef.current
+
+    if (!takeover || stage === null) {
+      return
+    }
+
+    let held = false
+
+    const keyboard = (navigator as NavigatorWithKeyboard).keyboard
+
+    // **Der Zeiger fängt in der Mitte an, und zwar nachweislich.** Der Strom
+    // zeigt den echten Mauszeiger nicht (`draw_mouse=0`), und mit Pointer Lock
+    // ist auch der eigene weg. Ohne einen bekannten Ausgangspunkt wüsste
+    // niemand, wo der nächste Klick landet — deshalb setzt die App ihn selbst
+    // und führt ihn von da an mit. Die Marke unten im Bild ist die einzige
+    // Rückmeldung darüber, wo er steht.
+    pointerRef.current = CENTER
+    input.moveTo(active, CENTER.x, CENTER.y)
+    updateViewport(RESET_VIEWPORT)
+
+    void (async () => {
+      // Jeder Schritt darf scheitern, ohne die anderen mitzunehmen: ohne
+      // Vollbild wird die Übernahme nur unvollständig, ohne Pointer Lock ist
+      // sie keine — und genau das meldet dann der Wächter unten.
+      await stage.requestFullscreen?.().catch(() => undefined)
+      await keyboard?.lock?.().catch(() => undefined)
+
+      try {
+        await grabPointer(stage)
+      } catch {
+        onError(
+          'Die Maus ließ sich nicht einfangen. Einmal ins Bild klicken und das '
+          + 'Kürzel noch einmal drücken.',
+        )
+      }
+    })()
+
+    /**
+     * Die Maus bewegt sich hier, der Zeiger drüben.
+     *
+     * Weitergereicht wird die **absolute** Position und nicht die Verschiebung:
+     * nur so weiß diese Seite, wo der Zeiger steht, und kann die Marke
+     * zeichnen. Nebenbei kann er damit auch nicht über den Rand des fernen
+     * Bildschirms hinauslaufen und dort verschwinden.
+     */
+    const onMove = (event: MouseEvent): void => {
+      if (document.pointerLockElement === stage) {
+        panRef.current?.(event.movementX, event.movementY)
+      }
+    }
+
+    const onDown = (event: MouseEvent): void => {
+      event.preventDefault()
+      input.buttonDown(buttonOf(event.button))
+    }
+
+    const onUp = (event: MouseEvent): void => {
+      event.preventDefault()
+      input.buttonUp(buttonOf(event.button))
+    }
+
+    const onWheel = (event: WheelEvent): void => {
+      event.preventDefault()
+
+      const notches = Math.round(-event.deltaY / WHEEL_NOTCH_PX)
+
+      input.scroll(notches === 0 ? (event.deltaY > 0 ? -1 : 1) : notches)
+    }
+
+    const onMenu = (event: Event): void => event.preventDefault()
+
+    /** Der Wächter: fehlt eine der drei Hälften, ist es keine Übernahme mehr. */
+    const watch = (): void => {
+      if (document.pointerLockElement === stage) {
+        held = true
+        return
+      }
+
+      if (held) {
+        onTakeoverEnd()
+      }
+    }
+
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mousedown', onDown, true)
+    window.addEventListener('mouseup', onUp, true)
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('contextmenu', onMenu, true)
+    window.addEventListener('blur', onTakeoverEnd)
+    document.addEventListener('pointerlockchange', watch)
+    document.addEventListener('fullscreenchange', watch)
+
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mousedown', onDown, true)
+      window.removeEventListener('mouseup', onUp, true)
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('contextmenu', onMenu, true)
+      window.removeEventListener('blur', onTakeoverEnd)
+      document.removeEventListener('pointerlockchange', watch)
+      document.removeEventListener('fullscreenchange', watch)
+
+      keyboard?.unlock?.()
+
+      if (document.pointerLockElement === stage) {
+        document.exitPointerLock()
+      }
+
+      if (document.fullscreenElement === stage) {
+        void document.exitFullscreen().catch(() => undefined)
+      }
+    }
+    // `active` steht mit Absicht nicht dabei: ein Monitorwechsel während der
+    // Übernahme baute diesen Effekt neu auf, und dabei ginge die eingefangene
+    // Maus verloren. Der Monitor beim Einschalten ist der richtige.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [takeover, input, updateViewport, onTakeoverEnd, onError])
 
   // Eine gehaltene Maustaste darf nicht überleben, wenn die Ansicht verschwindet.
   useEffect(
@@ -367,6 +617,21 @@ export function ScreenView({
     if (target !== undefined) {
       pointerRef.current = target
       input.moveTo(active, target.x, target.y)
+    }
+  }
+
+  /**
+   * Zwei Finger auf dem Handy, ausgelöst von einer Maus, die keine zwei hat.
+   *
+   * Der Mittelpunkt ist die Stelle, an der der Rechtsklick anfing — dorthin
+   * gehen die Finger auseinander. Bleibt der Punkt außerhalb des Bildes, passiert
+   * nichts: ein Zoom auf eine Stelle, die es drüben nicht gibt, wäre geraten.
+   */
+  const pinchAt = (center: Point, scale: number): void => {
+    const target = pointToMonitor(center)
+
+    if (target !== undefined) {
+      input.pinch(target.x, target.y, scale)
     }
   }
 
@@ -563,6 +828,7 @@ export function ScreenView({
       {showSettings && (
         <StreamSettings
           transport={transport}
+          canH264={canH264}
           quality={quality}
           onTransport={(mode) => {
             setFellBack(false)
@@ -601,7 +867,7 @@ export function ScreenView({
 
         {/* Der Stream zeigt den echten Mauszeiger nicht — im Overlay ist die
             Marke die einzige Rückmeldung, wo geklickt wird. */}
-        {pointerActive && (
+        {(pointerActive || takeover) && (
           <span
             className={holding ? 'pointer-marker holding' : 'pointer-marker'}
             style={{ left: `${marker.x}px`, top: `${marker.y}px` }}
@@ -609,15 +875,36 @@ export function ScreenView({
           />
         )}
 
-        <GesturePad
-          onPan={handlePan}
-          onZoom={handleZoom}
-          onScroll={(notches) => input.scroll(notches)}
-          onTap={handleTap}
-          onLongPress={handleLongPress}
-          onHoldStart={startHold}
-          onHoldEnd={releaseHold}
-        />
+        {/* Mit Maus wird gezeigt und geklickt, ohne Maus gewischt. Zwei Flächen
+            übereinander wären zwei Deutungen desselben Ereignisses — und
+            während der Übernahme gehört die Maus ohnehin nicht mehr dieser
+            Seite, sondern dem Rechner drüben. */}
+        {takeover ? null : withMouse ? (
+          <PointerPad
+            touchRemote={touchRemote}
+            onMove={moveCursorTo}
+            onDown={(button) => input.buttonDown(button)}
+            onUp={(button) => input.buttonUp(button)}
+            onScroll={(notches) => input.scroll(notches)}
+            onPinch={pinchAt}
+          />
+        ) : (
+          <GesturePad
+            onPan={handlePan}
+            onZoom={handleZoom}
+            onScroll={(notches) => input.scroll(notches)}
+            onTap={handleTap}
+            onLongPress={handleLongPress}
+            onHoldStart={startHold}
+            onHoldEnd={releaseHold}
+          />
+        )}
+
+        {takeover && takeoverHint !== undefined && (
+          <p className="screen-notice takeover" role="status">
+            Vollzugriff — {takeoverHint} gibt ihn wieder ab.
+          </p>
+        )}
 
         {transport === 'jpeg' && connection !== 'connected' && (
           <p className="screen-overlay">
@@ -654,6 +941,13 @@ export function ScreenView({
         </div>
       )}
 
+      {/* **Die Symbolreihe gibt es nur ohne Maus.** Sie ersetzte am Handy, was
+          dort fehlt: Tastatur, rechte Maustaste, Mausrad. Am Rechner liegt all
+          das unter den Händen — dort war sie eine zweite, umständlichere
+          Bedienung neben der, die ohnehin funktioniert, und nahm dem Bild eine
+          Zeile weg. Medien, Ein/Aus und Aktionen stehen weiter in der
+          Geräteliste, einen Klick auf „Trennen" entfernt. */}
+      {!withMouse && (
       <div className="icon-bar">
         <button
           type="button"
@@ -706,6 +1000,7 @@ export function ScreenView({
           <PowerIcon />
         </button>
       </div>
+      )}
 
       {/* Das Feld sitzt unter der Symbolreihe — dort, wo die Handy-Tastatur
           gleich aufgeht. */}

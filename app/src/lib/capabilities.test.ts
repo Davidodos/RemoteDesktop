@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { can, capabilitiesOf, LEGACY_CAPABILITIES } from './capabilities.ts'
+import { can, capabilitiesOf, isTouchTarget, LEGACY_CAPABILITIES } from './capabilities.ts'
 import type { AgentInfo } from './types.ts'
 
 function info(capabilities?: string[]): AgentInfo {
@@ -33,6 +33,28 @@ describe('capabilitiesOf', () => {
 
   it('eine leere Liste heißt: dieses Gerät kann nichts', () => {
     expect(capabilitiesOf(info([]))).toEqual([])
+  })
+
+  it('kennt H.264 als Altbestand — die Windows-Agents konnten es schon immer', () => {
+    expect(LEGACY_CAPABILITIES).toContain('h264')
+  })
+})
+
+/**
+ * Woran die App erkennt, dass am anderen Ende ein Finger erwartet wird und
+ * keine Tastatur. Daran hängen Klick, Zoom und Texteingabe vom Rechner aus.
+ */
+describe('isTouchTarget', () => {
+  it('ein Handy nimmt Eingaben an, aber keine Tasten', () => {
+    expect(isTouchTarget(['screen', 'input', 'files'])).toBe(true)
+  })
+
+  it('ein Rechner nicht', () => {
+    expect(isTouchTarget(LEGACY_CAPABILITIES)).toBe(false)
+  })
+
+  it('ein Gerät ohne Eingabe ist kein Berührungsziel, sondern gar keins', () => {
+    expect(isTouchTarget(['screen'])).toBe(false)
   })
 })
 

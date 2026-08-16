@@ -8,7 +8,7 @@ import { removeDevice } from '../lib/removeDevice.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
 import { lastSeen } from '../lib/lastSeen.ts'
-import { ComputerIcon, PhoneIcon } from './icons.tsx'
+import { ComputerIcon, PencilIcon, PhoneIcon } from './icons.tsx'
 import type { Device, DeviceStatus } from '../lib/types.ts'
 
 /** Nach dem Wecken dauert das Hochfahren; so lange häufiger nachfragen. */
@@ -168,6 +168,9 @@ export function DeviceListView({
         return (
           <div key={device.id} className="device-entry">
             <div className="device-card">
+              {/* Der anklickbare Teil endet hinter dem Namen — der Stift
+                  daneben ist ein eigener Knopf, und ein Knopf in einem Knopf
+                  gibt es im HTML nicht. */}
               <button
                 type="button"
                 className="device-main"
@@ -197,18 +200,33 @@ export function DeviceListView({
                     <span className="device-seen">zuletzt verbunden {zuletzt}</span>
                   )}
                 </span>
-                <span className="device-state">
-                  {device.id === current?.id
-                    ? 'verbunden'
-                    : erreichbar
-                      ? device.waker === true
-                        ? 'Waker'
-                        : 'online'
-                      : waking === device.id
-                        ? 'startet…'
-                        : 'offline'}
-                </span>
               </button>
+
+              {/* Der Stift steht am Namen und nicht am Rand der Karte: er
+                  ändert genau das Wort links von sich, und wo er dafür stehen
+                  muss, ist damit auch schon beantwortet. */}
+              <button
+                type="button"
+                className="rename-button"
+                aria-expanded={renaming === device.id}
+                aria-label={`${deviceLabel(device)} umbenennen`}
+                title="Namen ändern"
+                onClick={() => setRenaming(renaming === device.id ? undefined : device.id)}
+              >
+                <PencilIcon size={14} />
+              </button>
+
+              <span className="device-state">
+                {device.id === current?.id
+                  ? 'verbunden'
+                  : erreichbar
+                    ? device.waker === true
+                      ? 'Waker'
+                      : 'online'
+                    : waking === device.id
+                      ? 'startet…'
+                      : 'offline'}
+              </span>
 
               {!erreichbar && device.waker !== true && (
                 <button
@@ -223,20 +241,6 @@ export function DeviceListView({
                   {waking === device.id ? '…' : 'Wecken'}
                 </button>
               )}
-
-              {/* Umbenennen steht am Namen und nicht in der Verwaltung: es ist
-                  die eine Änderung, die man im Vorbeigehen macht, und sie
-                  betrifft genau das Wort daneben. */}
-              <button
-                type="button"
-                className="rename-button"
-                aria-expanded={renaming === device.id}
-                aria-label={`${deviceLabel(device)} umbenennen`}
-                title="Namen ändern"
-                onClick={() => setRenaming(renaming === device.id ? undefined : device.id)}
-              >
-                ✎
-              </button>
 
               <button
                 type="button"
@@ -274,12 +278,12 @@ export function DeviceListView({
           Gerät an und nimmt zugleich die Daten eines anderen entgegen. Zwei
           Knöpfe hätten eine Entscheidung verlangt, die vorher niemand treffen
           kann — beim Koppeln tun immer beide Seiten etwas. */}
+      {/* Kein „Aktualisieren" daneben: die Liste fragt von allein nach, im
+          Takt von {@link IDLE_POLL_INTERVAL_MS} und nach dem Wecken schneller.
+          Ein Knopf, der nur vorzieht, was ohnehin gleich passiert, sieht aus
+          wie eine Bedingung — als ginge es ohne ihn nicht. */}
       <button type="button" className="pair-button" onClick={onPair}>
         Gerät koppeln
-      </button>
-
-      <button type="button" className="refresh-button" onClick={() => void refresh()}>
-        Aktualisieren
       </button>
     </div>
   )
@@ -451,15 +455,20 @@ function RenameRow({
         Name — gilt nur hier
       </label>
 
-      <div className="device-rename-row">
-        <input
-          id={`alias-${device.id}`}
-          value={alias}
-          onChange={(event) => setAlias(event.target.value)}
-          placeholder={device.name}
-          autoFocus
-        />
+      {/* Das Feld steht allein in seiner Zeile. Neben zwei Knöpfen blieb ihm am
+          Handy so wenig Breite, dass vom getippten Namen nichts mehr zu sehen
+          war — und ein Feld, in dem man den eigenen Text nicht liest, ist
+          keines. */}
+      <input
+        id={`alias-${device.id}`}
+        type="text"
+        value={alias}
+        onChange={(event) => setAlias(event.target.value)}
+        placeholder={device.name}
+        autoFocus
+      />
 
+      <div className="device-rename-row">
         <button type="submit" className="secondary">
           Übernehmen
         </button>
