@@ -392,6 +392,50 @@ input[type='password'] {
   gap: 0.5rem;
 }
 
+/* Der Stift neben dem Namen: genauso schmal wie die drei Punkte daneben. */
+.rename-button {
+  background: var(--surface);
+  padding: 0.9rem 0.8rem;
+  color: var(--text-dim);
+}
+
+/* Die Zeile zum Umbenennen, aufgeklappt unter dem Gerät. */
+.device-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border-radius: 10px;
+}
+
+.device-rename-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.device-rename-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Die Kopplungsseite: zwei Abschnitte untereinander, wie in den Einstellungen.
+   Sie ist länger als ein Bildschirm — deshalb oben beginnen und scrollen statt
+   mittig zentrieren wie die kurzen Karten daneben. */
+.pairing-page {
+  align-items: stretch;
+  text-align: left;
+  justify-content: flex-start;
+  overflow-y: auto;
+}
+
+.pairing-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 /* Die drei Punkte: schmal, damit sie dem Namen keinen Platz wegnehmen. */
 .manage-button {
   background: var(--surface);

@@ -755,6 +755,32 @@ nichts mehr voneinander.
 zweites Feld für dieselbe Angabe — der Eintrag hat seine Kennung bereits, sie
 ist der Fingerabdruck über den Ausweis, und beide Seiten rechnen ihn gleich aus.
 
+### Nachtrag 16.08.2026 — die Seite hat zwei Ebenen statt einer
+
+Nach dem ersten Blick auf die gebaute Seite umgestellt:
+
+- **Die Liste zeigt Geräte, sonst nichts.** Umbenennen sitzt als Stift am Namen
+  und nicht mehr im Aufklapper — es ist die eine Änderung, die man im
+  Vorbeigehen macht. Darunter steht genau ein Knopf: **Neues Gerät koppeln**.
+- **Der Knopf führt auf eine eigene Seite mit beiden Richtungen**
+  (`views/PairingView.tsx`): oben *dieses Gerät anbieten* — Code, Countdown,
+  QR-Code, die eigene Adresse zum Abtippen und der Fingerabdruck der eigenen
+  Stelle —, darunter *ein anderes eintragen* (seine Adresse, sein Code), und
+  von dort weiter zur Namensvergabe für beide Seiten. Zwei Knöpfe hätten eine
+  Entscheidung verlangt, die vorher niemand treffen kann: beim Koppeln tun
+  immer beide Seiten etwas.
+- **Das Angebot ist ein eigener Baustein** (`views/PairingOffer.tsx`), und mit
+  ihm ist auch „wer dieses Gerät steuern darf" dorthin gewandert. Es ist
+  dieselbe Frage wie die darüber, nur in der Vergangenheitsform — und damit
+  gibt es für den Kopplungscode weiterhin genau eine Stelle. Die vierte Art,
+  auf der er verschwindet, ist jetzt buchstäblich das Verlassen der Seite: der
+  Baustein wird abgebaut, und mit ihm der Code.
+- **Im Fenster fehlt „Einstellungen"** in der Kopfzeile der Liste. Alles
+  dahinter — Autostart, Updates, Einrichtung, Netz — gehört dort der Leiste
+  daneben, und ein zweiter Weg zu denselben Einstellungen wäre einer zu viel.
+- `ShareView` behält, was nur Android hat (Freigabe-Schalter, Bildschirm,
+  Bedienungshilfe) und verweist für den Rest auf die Kopplungsseite.
+
 ## Phase 31 — Beide Richtungen im Fenster und in der App ✅ (16.08.2026)
 
 - Die Geräteliste zeigt Handys mit eigenem Symbol; alles Weitere folgt schon

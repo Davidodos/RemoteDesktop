@@ -1,11 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import QRCode from 'qrcode'
+import { useCallback, useEffect, useState } from 'react'
 import { readable } from '../lib/certificateTrust.ts'
 import { getPlatform } from '../platform/index.ts'
-import type { HostClient, HostPairingCode, HostStatus } from '../platform/index.ts'
-
-/** Wie oft die verbleibende Gültigkeit des Codes nachgerechnet wird. */
-const TICK_MS = 1000
+import type { HostStatus } from '../platform/index.ts'
 
 interface Props {
   onBack: () => void
@@ -26,15 +22,8 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
   const host = getPlatform().host
 
   const [status, setStatus] = useState<HostStatus | undefined>(undefined)
-  const [clients, setClients] = useState<HostClient[]>([])
-  const [pairing, setPairing] = useState<HostPairingCode | undefined>(undefined)
-  const [remaining, setRemaining] = useState(0)
-  const [qr, setQr] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
-
-  /** Wie viele Geräte beim letzten Nachsehen zugelassen waren. */
-  const bekannt = useRef(0)
 
   const refresh = useCallback((): void => {
     if (!host.available) {
@@ -42,67 +31,9 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
     }
 
     void host.status().then(setStatus, describe(setError))
-
-    void host.clients().then((fresh) => {
-      // **Ein benutzter Code verschwindet.** Steht er weiter da, sieht es aus,
-      // als ließe er sich noch einmal einlösen — er gilt aber genau einmal.
-      // Dass jemand ihn benutzt hat, sagt niemand ausdrücklich; es zeigt sich
-      // daran, dass die Liste um einen Eintrag gewachsen ist.
-      //
-      // Gezählt wird in einem Ref und nicht im Zustand: ein Vergleich in einer
-      // Zustandsfunktion müsste dort etwas anderes anstoßen, und die Funktion
-      // soll rechnen und nichts auslösen.
-      if (fresh.length > bekannt.current) {
-        setPairing(undefined)
-        setQr(undefined)
-      }
-
-      bekannt.current = fresh.length
-      setClients(fresh)
-    }, () => undefined)
   }, [host])
 
   useEffect(refresh, [refresh])
-
-  // Der Code läuft nach fünf Minuten ab. Ohne die Anzeige steht er weiter da
-  // und wird eingetippt, und die Kopplung scheitert ohne erkennbaren Grund.
-  useEffect(() => {
-    if (pairing === undefined) {
-      return
-    }
-
-    const until = Date.now() + pairing.expiresInSeconds * 1000
-
-    const tick = (): void => {
-      const left = Math.max(0, Math.round((until - Date.now()) / 1000))
-
-      setRemaining(left)
-
-      if (left === 0) {
-        setPairing(undefined)
-        setQr(undefined)
-      }
-    }
-
-    tick()
-
-    const timer = window.setInterval(tick, TICK_MS)
-
-    return () => window.clearInterval(timer)
-  }, [pairing])
-
-  // Der QR-Code wird gezeichnet, sobald es ein Ziel gibt. Ohne Adresse gibt es
-  // keins — dann bleibt der getippte Code der Weg, und der steht ohnehin da.
-  useEffect(() => {
-    const uri = pairing?.pairingUri
-
-    if (uri === undefined) {
-      setQr(undefined)
-      return
-    }
-
-    void QRCode.toDataURL(uri, { margin: 1, width: 260 }).then(setQr, () => setQr(undefined))
-  }, [pairing])
 
   if (!host.available) {
     return (
@@ -129,28 +60,13 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
       (next) => {
         setStatus(next)
         setBusy(false)
-
-        // Beim Abschalten fällt auch der offene Code weg — er gehört zum
-        // laufenden Host, und ein Code ohne Server ist eine Sackgasse.
-        if (next.running) {
-          refresh()
-        } else {
-          setPairing(undefined)
-        }
+        refresh()
       },
       (failure: unknown) => {
         describe(setError)(failure)
         setBusy(false)
       },
     )
-  }
-
-  const showCode = (): void => {
-    setError(undefined)
-
-    void host.pairingCode().then((fresh) => {
-      setPairing(fresh)
-    }, describe(setError))
   }
 
   return (
@@ -308,72 +224,14 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
         </section>
       )}
 
-      {running && (
-        <section className="settings-group">
-          <h2>Gerät koppeln</h2>
-
-          {pairing === undefined ? (
-            <>
-              <p className="settings-hint">
-                Der Code gilt fünf Minuten und lässt genau eine Kopplung zu.
-              </p>
-              <button type="button" className="settings-entry" onClick={showCode}>
-                <span>Kopplungscode anzeigen</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="pairing-code">{pairing.code}</p>
-              <p className="settings-hint">Noch {remaining} Sekunden gültig.</p>
-
-              {/* Der vierte Weg, auf dem der Code verschwindet — die anderen
-                  drei: Ablauf, Benutzung, Verlassen der Seite. Ein Code, der
-                  noch dasteht, wenn er nicht mehr gilt, wird abgetippt und
-                  scheitert ohne erkennbaren Grund. */}
-              <button
-                type="button"
-                className="settings-entry"
-                onClick={() => {
-                  setPairing(undefined)
-                  setQr(undefined)
-                }}
-              >
-                <span>Code ausblenden</span>
-              </button>
-
-              {qr === undefined ? (
-                <p className="settings-hint">
-                  Am anderen Handy „Gerät koppeln" öffnen und Adresse und Code
-                  eintippen. Am PC führt derselbe Weg über das Fenster.
-                </p>
-              ) : (
-                <img className="pairing-qr" src={qr} alt="QR-Code zur Kopplung" />
-              )}
-            </>
-          )}
-        </section>
-      )}
-
       <section className="settings-group">
-        <h2>Wer darf</h2>
-
-        {clients.length === 0 ? (
-          <p className="settings-hint">Noch niemand.</p>
-        ) : (
-          clients.map((client) => (
-            <div key={client.id} className="settings-entry">
-              <span>{client.label}</span>
-              <button
-                type="button"
-                onClick={() => {
-                  void host.revoke(client.id).then(refresh, describe(setError))
-                }}
-              >
-                Entfernen
-              </button>
-            </div>
-          ))
-        )}
+        <h2>Koppeln</h2>
+        <p className="settings-hint">
+          Der Kopplungscode und die Liste der Geräte, die dieses hier steuern
+          dürfen, stehen unter <strong>Geräte → Neues Gerät koppeln</strong>.
+          Beides gehört zusammen: wer koppelt, entscheidet damit genau darüber,
+          wer in dieser Liste steht.
+        </p>
       </section>
     </div>
   )

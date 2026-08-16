@@ -36,16 +36,6 @@ interface Props {
   onBack?: () => void
   /** Zu den Einstellungen — solange noch kein Gerät verbunden ist. */
   onSettings?: () => void
-  /**
-   * Zu „dieses Gerät freigeben" — dort steht der Kopplungscode, den ein
-   * anderes Gerät einlöst.
-   *
-   * Er steht hier und nicht nur unter den Einstellungen, weil beides zusammen
-   * die eine Frage beantwortet, wegen der man diese Seite öffnet: welche
-   * Geräte gibt es, und wie kommt eines dazu — in die eine oder die andere
-   * Richtung.
-   */
-  onShare?: () => void
 }
 
 /**
@@ -67,11 +57,13 @@ export function DeviceListView({
   onDevices,
   onBack,
   onSettings,
-  onShare,
 }: Props): React.JSX.Element {
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
 
   const [waking, setWaking] = useState<string | undefined>(undefined)
+
+  /** Welches Gerät gerade umbenannt wird — höchstens eines. */
+  const [renaming, setRenaming] = useState<string | undefined>(undefined)
   const [hinweis, setHinweis] = useState<string | undefined>(undefined)
   const [managed, setManaged] = useState<string | undefined>(undefined)
 
@@ -171,7 +163,10 @@ export function DeviceListView({
 
         <h1>Verbundene Geräte</h1>
 
-        {onSettings !== undefined && (
+        {/* Im Fenster nicht: dort steht „Einstellungen" in der Leiste
+            daneben, und alles dahinter — Autostart, Updates, Einrichtung,
+            Netz — gehört ohnehin dem Fenster und nicht dieser Seite. */}
+        {onSettings !== undefined && getPlatform().name !== 'webview2' && (
           <button type="button" className="link-button" onClick={onSettings}>
             Einstellungen ›
           </button>
@@ -251,6 +246,20 @@ export function DeviceListView({
                 </button>
               )}
 
+              {/* Umbenennen steht am Namen und nicht in der Verwaltung: es ist
+                  die eine Änderung, die man im Vorbeigehen macht, und sie
+                  betrifft genau das Wort daneben. */}
+              <button
+                type="button"
+                className="rename-button"
+                aria-expanded={renaming === device.id}
+                aria-label={`${deviceLabel(device)} umbenennen`}
+                title="Namen ändern"
+                onClick={() => setRenaming(renaming === device.id ? undefined : device.id)}
+              >
+                ✎
+              </button>
+
               <button
                 type="button"
                 className="manage-button"
@@ -261,6 +270,14 @@ export function DeviceListView({
                 ⋯
               </button>
             </div>
+
+            {renaming === device.id && (
+              <RenameRow
+                device={device}
+                onDevices={onDevices}
+                onClose={() => setRenaming(undefined)}
+              />
+            )}
 
             {managed === device.id && (
               <DevicePanel
@@ -275,18 +292,13 @@ export function DeviceListView({
         )
       })}
 
+      {/* Ein Knopf für beide Richtungen: die Seite dahinter bietet dieses
+          Gerät an und nimmt zugleich die Daten eines anderen entgegen. Zwei
+          Knöpfe hätten eine Entscheidung verlangt, die vorher niemand treffen
+          kann — beim Koppeln tun immer beide Seiten etwas. */}
       <button type="button" className="pair-button" onClick={onPair}>
-        Gerät koppeln
+        Neues Gerät koppeln
       </button>
-
-      {/* Die andere Richtung: nicht dieses Gerät koppelt sich an ein anderes,
-          sondern ein anderes an dieses. Der Knopf steht nur da, wo es
-          überhaupt geht — im Browser gibt es nichts freizugeben. */}
-      {onShare !== undefined && getPlatform().host.available && (
-        <button type="button" className="pair-button" onClick={onShare}>
-          Dieses Gerät koppeln lassen
-        </button>
-      )}
 
       <button type="button" className="refresh-button" onClick={() => void refresh()}>
         Aktualisieren
@@ -319,7 +331,6 @@ function DevicePanel({
   onDevices: (devices: Device[]) => void
   onClose: () => void
 }): React.JSX.Element {
-  const [alias, setAlias] = useState(device.alias ?? '')
   const [note, setNote] = useState<string | undefined>(undefined)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -377,16 +388,6 @@ function DevicePanel({
 
   return (
     <div className="device-panel">
-      <label className="field-label" htmlFor={`alias-${device.id}`}>
-        Name für dieses Gerät — gilt nur hier
-      </label>
-      <input
-        id={`alias-${device.id}`}
-        value={alias}
-        onChange={(event) => setAlias(event.target.value)}
-        placeholder={device.name}
-      />
-
       <p className="device-hint">
         {device.platform === 'android'
           ? 'Ein Handy.'
@@ -400,21 +401,6 @@ function DevicePanel({
       </p>
 
       <div className="device-panel-actions">
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => {
-            onDevices(renameLocalDevice(device.id, alias))
-            setNote(
-              alias.trim().length > 0
-                ? `Heißt hier jetzt „${alias.trim()}“.`
-                : `Heißt hier wieder „${device.name}“.`,
-            )
-          }}
-        >
-          Namen übernehmen
-        </button>
-
         <button
           type="button"
           className="secondary"
@@ -467,6 +453,59 @@ function DevicePanel({
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * Der Name dieses Geräts — hier und sonst nirgends.
+ *
+ * Er gehört diesem Gerät und nicht der Kopplung: drüben ändert sich davon
+ * nichts, und kein anderes Gerät erfährt davon. Ein leeres Feld ist deshalb
+ * kein Fehler, sondern die Rückkehr zu dem Namen, den die Gegenseite selbst
+ * meldet.
+ */
+function RenameRow({
+  device,
+  onDevices,
+  onClose,
+}: {
+  device: Device
+  onDevices: (devices: Device[]) => void
+  onClose: () => void
+}): React.JSX.Element {
+  const [alias, setAlias] = useState(device.alias ?? '')
+
+  return (
+    <form
+      className="device-rename"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onDevices(renameLocalDevice(device.id, alias))
+        onClose()
+      }}
+    >
+      <label className="field-label" htmlFor={`alias-${device.id}`}>
+        Name für dieses Gerät — gilt nur hier
+      </label>
+
+      <div className="device-rename-row">
+        <input
+          id={`alias-${device.id}`}
+          value={alias}
+          onChange={(event) => setAlias(event.target.value)}
+          placeholder={device.name}
+          autoFocus
+        />
+
+        <button type="submit" className="secondary">
+          Übernehmen
+        </button>
+
+        <button type="button" className="secondary" onClick={onClose}>
+          Abbrechen
+        </button>
+      </div>
+    </form>
   )
 }
 

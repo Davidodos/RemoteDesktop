@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { CertificateTrustStep } from './CertificateTrustStep.tsx'
+import { PairingOffer } from './PairingOffer.tsx'
 import {
   certificateFingerprint,
   downloadAuthority,
@@ -26,7 +27,14 @@ interface Props {
 }
 
 /**
- * Ein Gerät koppeln — in zwei Schritten, und der erste ist meist ein Scan.
+ * Neues Gerät koppeln — eine Seite mit beiden Richtungen.
+ *
+ * <p>
+ * **Oben: dieses Gerät anbieten** (Code, QR-Code, eigene Adresse). **Darunter:
+ * ein anderes eintragen** (seine Adresse, sein Code). Beides gehört auf
+ * dieselbe Seite, weil beim Koppeln immer beide Seiten etwas tun — wer nur die
+ * eine Hälfte findet, sucht die andere in den Einstellungen.
+ * </p>
  *
  * <p>
  * **Der Befund dahinter:** vorher füllte der Scan drei Eingabefelder, die
@@ -44,7 +52,6 @@ interface Props {
  */
 export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
   const [target, setTarget] = useState<PairingTarget | undefined>(undefined)
-  const [manual, setManual] = useState(false)
   const [error, setError] = useState<string | undefined>(undefined)
 
   /**
@@ -104,48 +111,45 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
     )
   }
 
-  if (manual) {
-    return (
-      <ManualStep
-        onBack={() => setManual(false)}
-        onTarget={(entered) => {
-          setError(undefined)
-          setTarget(entered)
-        }}
-      />
-    )
-  }
-
   return (
-    <div className="token-prompt">
-      <h1>Gerät koppeln</h1>
-      <p>
-        Am Rechner unter „Geräte“ auf „Code anzeigen“ klicken. Der Code gilt fünf Minuten
-        und lässt sich nur einmal verwenden.
-      </p>
+    <div className="token-prompt pairing-page">
+      <h1>Neues Gerät koppeln</h1>
 
       {error !== undefined && <p className="error-text">{error}</p>}
 
-      {platform.capabilities.camera && (
-        <button type="button" onClick={() => void scan()}>
-          QR-Code scannen
-        </button>
-      )}
+      <section className="settings-group">
+        <h2>Dieses Gerät anbieten</h2>
+        <PairingOffer />
+      </section>
 
-      <button type="button" className="secondary" onClick={() => setManual(true)}>
-        Von Hand eingeben
-      </button>
+      <section className="settings-group">
+        <h2>Ein anderes Gerät eintragen</h2>
+        <p className="settings-hint">
+          Adresse und Code stehen dort unter „Geräte → Neues Gerät koppeln“.
+          Danach werden nur noch die beiden Namen vergeben.
+        </p>
+
+        {/* Ohne Kamera gibt es den Knopf nicht: einer, der nur eine
+            Fehlermeldung erzeugt, wäre schlimmer als keiner. */}
+        {platform.capabilities.camera && (
+          <button type="button" onClick={() => void scan()}>
+            QR-Code scannen
+          </button>
+        )}
+
+        <ManualForm onTarget={setTarget} />
+      </section>
 
       <button type="button" className="secondary" onClick={onCancel}>
-        Abbrechen
+        Zurück zu den Geräten
       </button>
     </div>
   )
 }
 
 /**
- * Die einzige Seite, auf der es etwas zu entscheiden gibt: wie dieses Gerät am
- * Rechner heißt, und wie der Rechner hier heißt.
+ * Die einzige Seite, auf der es etwas zu entscheiden gibt: wie dieses Gerät
+ * drüben heißt, und wie die Gegenseite hier heißt.
  */
 function NameStep({
   target,
@@ -300,7 +304,8 @@ function NameStep({
           <code>{target.host}</code> weist sich mit einem{' '}
           <strong>selbst ausgestellten</strong> Zertifikat aus. Ohne QR-Code kam
           kein Vergleichswert mit — also vergleiche ihn selbst: auf dem anderen
-          Gerät steht derselbe Fingerabdruck unter „Dieses Gerät freigeben“.
+          Gerät steht derselbe Fingerabdruck unter „Geräte → Neues Gerät
+          koppeln“, gleich unter der Adresse.
         </p>
 
         <p className="fingerprint">
@@ -359,17 +364,17 @@ function NameStep({
     >
       <h1>Fast fertig</h1>
       <p>
-        Der Rechner unter <code>{target.host}</code> ist erkannt. Fehlen nur noch die
+        Das Gerät unter <code>{target.host}</code> ist erkannt. Fehlen nur noch die
         Namen.
       </p>
 
       {certificateFingerprint(target.caFingerprint) !== undefined && (
         <p>
-          Dieser Rechner weist sich mit einem <strong>selbst ausgestellten</strong>{' '}
-          Zertifikat aus. Beim Koppeln muss dein Handy der ausstellenden Stelle einmal
-          vertrauen; der Fingerabdruck stand im QR-Code und wird geprüft. Wenn der
-          Rechner Tailscale benutzt, ist das vermeidbar: dort unter „Netz“ das
-          Zertifikat von Tailscale holen und den Agent neu starten — dann entfällt
+          Dieses Gerät weist sich mit einem <strong>selbst ausgestellten</strong>{' '}
+          Zertifikat aus. Beim Koppeln muss dieses hier der ausstellenden Stelle einmal
+          vertrauen; der Fingerabdruck stand im QR-Code und wird geprüft. Bei einem
+          Rechner mit Tailscale ist das vermeidbar: dort unter „Einstellungen → Netz“
+          das Zertifikat von Tailscale holen und den Agent neu starten — dann entfällt
           dieser Schritt ganz.
         </p>
       )}
@@ -377,7 +382,7 @@ function NameStep({
       {error !== undefined && <p className="error-text">{error}</p>}
 
       <label className="field-label" htmlFor="pair-label">
-        Name dieses Geräts — so steht es am Rechner in der Liste
+        Name dieses Geräts — so steht es drüben in der Liste
       </label>
       <input
         id="pair-label"
@@ -387,7 +392,7 @@ function NameStep({
       />
 
       <label className="field-label" htmlFor="pair-alias">
-        Name für den Rechner — gilt nur hier und ist jederzeit änderbar
+        Name für das andere Gerät — gilt nur hier und ist jederzeit änderbar
       </label>
       <input
         id="pair-alias"
@@ -407,13 +412,17 @@ function NameStep({
   )
 }
 
-/** Adresse, Port und Code von Hand — für alles ohne Kamera. */
-function ManualStep({
+/**
+ * Adresse und Code der Gegenseite — von Hand.
+ *
+ * Kein eigener Schritt mehr, sondern ein Feld auf derselben Seite: es ist der
+ * einzige Weg ohne Kamera, und ein Knopf davor hätte ihn versteckt, wo er der
+ * Normalfall ist.
+ */
+function ManualForm({
   onTarget,
-  onBack,
 }: {
   onTarget: (target: PairingTarget) => void
-  onBack: () => void
 }): React.JSX.Element {
   const [host, setHost] = useState('')
   const [code, setCode] = useState('')
@@ -422,7 +431,7 @@ function ManualStep({
 
   return (
     <form
-      className="token-prompt"
+      className="pairing-form"
       onSubmit={(event) => {
         event.preventDefault()
 
@@ -431,22 +440,27 @@ function ManualStep({
         }
       }}
     >
-      <h1>Von Hand eingeben</h1>
-      <p>Beides steht am Rechner unter „Geräte“, neben dem QR-Code.</p>
-
+      <label className="field-label" htmlFor="pair-host">
+        Adresse des anderen Geräts
+      </label>
       <input
+        id="pair-host"
         value={host}
         onChange={(event) => setHost(event.target.value)}
-        placeholder="Adresse des Rechners"
+        placeholder="z. B. 192.168.178.31"
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}
       />
 
+      <label className="field-label" htmlFor="pair-code">
+        Sein Kopplungscode
+      </label>
       <input
+        id="pair-code"
         value={code}
         onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-        placeholder="6-stelliger Code"
+        placeholder="6 Ziffern"
         inputMode="numeric"
         autoComplete="off"
       />
@@ -454,16 +468,12 @@ function ManualStep({
       <button type="submit" disabled={!ready}>
         Weiter
       </button>
-
-      <button type="button" className="secondary" onClick={onBack}>
-        Zurück
-      </button>
     </form>
   )
 }
 
 /**
- * Unter diesem Namen taucht das Gerät in der Liste am Rechner auf. Ein
+ * Unter diesem Namen taucht das Gerät in der Liste der Gegenseite auf. Ein
  * brauchbarer Vorschlag ist wichtiger, als er aussieht: wer widerrufen will,
  * muss Monate später erkennen, welcher Eintrag welches Gerät ist.
  */
