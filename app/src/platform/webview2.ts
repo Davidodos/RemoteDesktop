@@ -159,6 +159,10 @@ const windowTrust: TrustService = {
 
     return 'dialog'
   },
+
+  forget: async (fingerprint: string): Promise<void> => {
+    await ask({ kind: 'trust-forget', fingerprint })
+  },
 }
 
 /**
@@ -197,6 +201,10 @@ const windowNode: LocalNode = {
 
   grant: async (publicKey: string, label: string): Promise<void> => {
     await ask({ kind: 'local-grant', publicKey, label })
+  },
+
+  revoke: async (clientId: string): Promise<void> => {
+    await ask({ kind: 'local-revoke', clientId })
   },
 
   /**

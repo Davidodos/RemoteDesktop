@@ -2,7 +2,7 @@ import { postJson } from '../transport/direct.ts'
 import { TransportError } from '../transport/index.ts'
 import type { PeerCredential } from './bothWays.ts'
 import { certificateFingerprint } from './certificateTrust.ts'
-import { createClientKey, type ClientKeyPair } from './clientKey.ts'
+import { clientFingerprint, createClientKey, type ClientKeyPair } from './clientKey.ts'
 import { getPlatform, type DeviceProfile } from '../platform/index.ts'
 import { storage } from './storage.ts'
 import type { Device } from './types.ts'
@@ -199,6 +199,14 @@ export async function pairBothWays(target: PairTarget): Promise<PairedBothWays> 
   }
 
   const clientKey = response.peer?.clientKey
+
+  // Unter dieser Kennung steht die Gegenseite gleich in der eigenen Liste der
+  // zugelassenen Geräte — ausgerechnet aus ihrem Ausweis, genau wie sie selbst
+  // es tut. Ohne sie wüsste später niemand, welcher Eintrag zu welchem Gerät
+  // gehört, und „Entfernen" ließe die Gegenrichtung stehen.
+  if (typeof clientKey === 'string' && clientKey.length > 0) {
+    device.peerClientId = await clientFingerprint(clientKey)
+  }
 
   // Ein Waker und ein Agent älter als Phase 31e melden das Feld gar nicht — dann
   // gibt es keine Gegenrichtung, und das ist kein Fehler.

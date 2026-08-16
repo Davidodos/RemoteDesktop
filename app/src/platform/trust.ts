@@ -54,6 +54,16 @@ export interface TrustService {
    *   steht, ist eine, die beim nächsten Umbau verschwindet.
    */
   install(certificateBase64: string, fingerprint: string): Promise<TrustOutcome>
+
+  /**
+   * Einer Stelle nicht mehr glauben — beim Entfernen eines Geräts.
+   *
+   * `undefined` heißt: diese Umgebung kann es nicht wieder zurücknehmen.
+   * Android reicht das Zertifikat an das System weiter, und was das System
+   * damit macht, gehört ihm; herausnehmen lässt es sich nur dort. Das gehört
+   * dann auf den Bildschirm, statt still zu scheitern.
+   */
+  readonly forget?: (fingerprint: string) => Promise<void>
 }
 
 /**

@@ -442,6 +442,7 @@ function localNode(plugins: CapacitorPlugins): LocalNode {
 
     forget: (ids) => plugin.forgetPeers({ ids }),
     grant: (publicKey, label) => plugin.grant({ publicKey, label }),
+    revoke: (clientId) => plugin.revoke({ id: clientId }),
 
     /**
      * Der Ausweis dieses Handys liegt bei den übrigen Schlüsseln des Hosts und

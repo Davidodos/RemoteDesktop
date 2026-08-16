@@ -114,6 +114,7 @@ function toDevice(entry: unknown): Device[] {
     siteId,
     waker,
     platform,
+    peerClientId,
     lastConnectedAt,
   } = entry as Record<string, unknown>
 
@@ -160,6 +161,9 @@ function toDevice(entry: unknown): Device[] {
       // Ein unbekannter Wert zählt als keiner: dann steht in der Liste kein
       // Symbol, und das ist besser als ein falsches.
       ...(platform === 'windows' || platform === 'android' ? { platform } : {}),
+      ...(typeof peerClientId === 'string' && peerClientId.length > 0
+        ? { peerClientId }
+        : {}),
       ...(typeof lastConnectedAt === 'number' && Number.isFinite(lastConnectedAt)
         ? { lastConnectedAt }
         : {}),

@@ -105,6 +105,18 @@ public static class AgentData
             label,
             DateTimeOffset.UtcNow);
 
+    /// <summary>
+    /// Nimmt ein Gerät aus der <c>clients.json</c>. Nur bei gestopptem
+    /// Agent — siehe <see cref="Grant"/>.
+    /// </summary>
+    public static void Revoke(string clientId)
+    {
+        var path = ClientsFile.In(Elevation.DataDirectory);
+
+        ClientsFile.Write(
+            path, ClientsFile.Read(path).Where(client => client.Id != clientId));
+    }
+
     /// <summary>Das eingetragene Netzprofil — daraus kommt die Adresse.</summary>
     private static NetworkProfile Network()
     {

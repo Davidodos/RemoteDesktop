@@ -27,8 +27,13 @@ object HostScopes {
      * Pfade, die jeder angemeldete Client aufrufen darf. `/api/info` sagt nur,
      * wie das Gerät heißt und was es kann — ohne diese Auskunft könnte die App
      * ihre Oberfläche nicht aufbauen.
+     *
+     * `/api/unpair` braucht ebenfalls keins: wer sich austrägt, gibt etwas auf,
+     * statt etwas zu bekommen. Ein Recht dafür zu verlangen hieße, dass ein
+     * Gerät mit wenigen Rechten gekoppelt bliebe, obwohl beide Seiten es
+     * loswerden wollen.
      */
-    private val WITHOUT_SCOPE = listOf("/api/info")
+    private val WITHOUT_SCOPE = listOf("/api/info", "/api/unpair")
 
     /** Endpunkte, die selbst die Berechtigung erzeugen und deshalb ohne auskommen. */
     val WITHOUT_CREDENTIAL = listOf("/health", "/api/pair", "/api/session/challenge", "/api/session")

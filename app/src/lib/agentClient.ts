@@ -26,6 +26,18 @@ export class AgentClient {
     return this.request<AgentInfo>('/api/info')
   }
 
+  /**
+   * Sich bei diesem Gerät selbst austragen.
+   *
+   * Der eine Weg, auf dem ein „Entfernen" **beide** Seiten trifft:
+   * `/api/clients/{id}` ist nur am Gerät selbst erreichbar und soll das
+   * bleiben. Hier trägt sich niemand einen anderen aus, sondern nur sich
+   * selbst — wer die Kennung nennt, ist der Sitzungstoken.
+   */
+  async unpair(): Promise<void> {
+    await this.request('/api/unpair', { method: 'DELETE' })
+  }
+
   async power(action: PowerAction): Promise<void> {
     await this.request('/api/power', { method: 'POST', body: { action } })
   }
@@ -95,7 +107,7 @@ export class AgentClient {
 
   private async request<T>(
     path: string,
-    options: { method?: 'POST'; body?: unknown } = {},
+    options: { method?: 'POST' | 'DELETE'; body?: unknown } = {},
   ): Promise<T> {
     const { method = 'GET', body } = options
 

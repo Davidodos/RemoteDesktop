@@ -111,6 +111,25 @@ public static class LocalNode
     }
 
     /// <summary>
+    /// Hebt die Gegenrichtung wieder auf: dieses Gerät darf diesen Rechner
+    /// nicht mehr steuern.
+    ///
+    /// Bei laufendem Agent über ihn — nur so werden auch die Verbindungen
+    /// getrennt, die gerade offen sind. Bei gestopptem Agent aus der Datei;
+    /// offene Verbindungen kann es dann keine geben.
+    /// </summary>
+    public static async Task RevokeAsync(
+        string clientId, CancellationToken cancellationToken = default)
+    {
+        if (await DeleteAsync($"/api/clients/{Uri.EscapeDataString(clientId)}", cancellationToken))
+        {
+            return;
+        }
+
+        AgentData.Revoke(clientId);
+    }
+
+    /// <summary>
     /// Liest beim Agent und meldet, ob er überhaupt geantwortet hat.
     /// </summary>
     /// <returns>
@@ -164,6 +183,36 @@ public static class LocalNode
         {
             using var response = await Client.PostAsync(
                 $"https://127.0.0.1:{AgentData.AgentPort}{path}", content, cancellationToken);
+
+            response.EnsureSuccessStatusCode();
+
+            return true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException { StatusCode: null }
+                                       or TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Löscht beim Agent.
+    /// </summary>
+    /// <returns>
+    /// <c>false</c>, wenn er nicht läuft — dann ist der Aufrufer dran. Ein
+    /// 404 zählt als erledigt: was nicht da ist, muss nicht weg.
+    /// </returns>
+    private static async Task<bool> DeleteAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await Client.DeleteAsync(
+                $"https://127.0.0.1:{AgentData.AgentPort}{path}", cancellationToken);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return true;
+            }
 
             response.EnsureSuccessStatusCode();
 

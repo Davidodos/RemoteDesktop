@@ -76,6 +76,34 @@ public sealed class TrustedAuthorities
     }
 
     /// <summary>
+    /// Vergisst eine Stelle wieder.
+    ///
+    /// <para>
+    /// Gebraucht beim Entfernen eines Geräts: danach soll nichts mehr davon
+    /// übrig sein, als hätten sich die beiden nie gekannt. Eine Stelle, der
+    /// dieses Fenster weiter glaubt, wäre genau so ein Rest — und der
+    /// unangenehmste, weil ihn niemand sieht.
+    /// </para>
+    /// </summary>
+    /// <returns><c>false</c>, wenn dieser Stelle ohnehin niemand glaubte.</returns>
+    public bool Remove(string fingerprint)
+    {
+        var wanted = Normalize(fingerprint);
+
+        lock (_gate)
+        {
+            if (wanted.Length == 0 || !_fingerprints.Remove(wanted))
+            {
+                return false;
+            }
+
+            Write();
+
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Ob eine Kette hier endet.
     ///
     /// Geprüft wird jedes Glied und nicht nur das erste: das Serverzertifikat

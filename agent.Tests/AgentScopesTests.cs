@@ -94,4 +94,28 @@ public class LocalOnlyReachabilityTests
 
         Assert.Contains(path, localOnly!);
     }
+
+    /// <summary>
+    /// Der Widerruf von außen liegt **nicht** unter <c>/api/pair/…</c>. Alles
+    /// darunter ist ohne Ausweis erreichbar, weil der Kopplungsaufruf die
+    /// Berechtigung erst erzeugt — ein Widerruf ohne Ausweis wäre ein Weg, die
+    /// Kopplung eines fremden Geräts über das Netz zu beenden.
+    /// </summary>
+    [Fact]
+    public void Sich_selbst_austragen_verlangt_einen_Ausweis()
+    {
+        var withoutCredential = typeof(ClientAuthMiddleware)
+            .GetField("WithoutCredential", BindingFlags.NonPublic | BindingFlags.Static)!
+            .GetValue(null) as string[];
+
+        Assert.All(
+            withoutCredential!,
+            entry => Assert.False(
+                "/api/unpair".Equals(entry, StringComparison.OrdinalIgnoreCase)
+                || "/api/unpair".StartsWith(entry + "/", StringComparison.OrdinalIgnoreCase)));
+
+        // Und ein Recht verlangt er nicht: wer sich austrägt, gibt etwas auf.
+        Assert.True(AgentScopes.TryResolve("/api/unpair", out var scope));
+        Assert.Null(scope);
+    }
 }

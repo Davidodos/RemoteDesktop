@@ -31,7 +31,12 @@ public static class AgentScopes
     /// nur, wie der Rechner heißt und welche Monitore er hat — ohne diese
     /// Auskunft könnte die App nicht einmal ihre Oberfläche aufbauen.
     /// </summary>
-    private static readonly string[] WithoutScope = ["/api/info"];
+    ///
+    /// <c>/api/unpair</c> braucht ebenfalls keins: wer sich austrägt, gibt
+    /// etwas auf, statt etwas zu bekommen. Ein Recht dafür zu verlangen hieße,
+    /// dass ein Gerät mit wenigen Rechten gekoppelt bliebe, obwohl beide Seiten
+    /// es loswerden wollen.
+    private static readonly string[] WithoutScope = ["/api/info", "/api/unpair"];
 
     private static readonly (string Prefix, string Scope)[] Mapping =
     [

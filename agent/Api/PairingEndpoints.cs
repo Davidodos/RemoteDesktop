@@ -215,6 +215,56 @@ public static class PairingEndpoints
             });
         });
 
+        // Sich bei diesem Rechner selbst austragen — der eine Weg, auf dem ein
+        // Entfernen **beide** Seiten trifft.
+        //
+        // <para>
+        // `/api/clients/{id}` geht dafür nicht: der ist nur am Rechner selbst
+        // erreichbar, und das soll er bleiben. Hier trägt sich niemand einen
+        // anderen aus, sondern nur sich selbst — wer die Kennung nennt, ist der
+        // Sitzungstoken, und der gehört genau einem Gerät.
+        // </para>
+        //
+        // <para>
+        // Der Pfad liegt ausdrücklich **nicht** unter `/api/pair/…`: alles
+        // darunter ist ohne Ausweis erreichbar, weil der Kopplungsaufruf die
+        // Berechtigung erst erzeugt. Ein Widerruf ohne Ausweis wäre ein Weg, die
+        // Kopplung eines fremden Geräts über das Netz zu beenden.
+        // </para>
+        app.MapDelete("/api/unpair", async (
+            HttpContext http,
+            PairingService pairing,
+            LiveConnections live,
+            WebRtcRegistry streams,
+            ILogger<Program> logger) =>
+        {
+            var id = ClientAuthMiddleware.ClientId(http);
+
+            if (id is null)
+            {
+                // Das alte Sammel-Token kennt kein einzelnes Gerät. Es gibt dann
+                // nichts auszutragen, und ein stiller 200 sähe aus, als wäre es
+                // erledigt.
+                return Results.BadRequest(
+                    new { error = "Dieser Zugang gehört keinem gekoppelten Gerät." });
+            }
+
+            if (!pairing.Revoke(id))
+            {
+                // Schon weg. Für den Anrufer ist das dasselbe Ergebnis, und ein
+                // Fehlschlag hier hielte ihn davon ab, bei sich aufzuräumen.
+                return Results.Ok(new { removed = id, closed = 0 });
+            }
+
+            var closed = live.Close(id) + await streams.CloseOwnedAsync(id);
+
+            logger.LogInformation(
+                "{Id} hat sich selbst ausgetragen, {Closed} laufende Verbindungen getrennt.",
+                id, closed);
+
+            return Results.Ok(new { removed = id, closed });
+        });
+
         app.MapPost("/api/session/challenge", (ChallengeRequest request, PairingService pairing) =>
         {
             var nonce = pairing.Challenge(request.ClientId ?? string.Empty);

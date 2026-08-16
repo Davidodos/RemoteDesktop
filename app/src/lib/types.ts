@@ -73,6 +73,18 @@ export interface Device {
    */
   platform?: DevicePlatform
   /**
+   * Unter welcher Kennung die Gegenseite in der **eigenen** Liste der
+   * zugelassenen Geräte steht.
+   *
+   * <p>
+   * Sie entsteht beim Koppeln aus dem Ausweis, den die Gegenseite mitschickt —
+   * derselbe Fingerabdruck, den sie selbst ausrechnet. Ohne sie wüsste später
+   * niemand, welcher Eintrag zu welchem Gerät gehört, und „Entfernen" könnte
+   * die Gegenrichtung nicht mit aufräumen.
+   * </p>
+   */
+  peerClientId?: string
+  /**
    * Wann dieses Gerät zuletzt erreichbar war, als Zeitstempel in Millisekunden.
    *
    * Rein lokal gemerkt und ausdrücklich nicht erfragt: die Gegenseite weiß

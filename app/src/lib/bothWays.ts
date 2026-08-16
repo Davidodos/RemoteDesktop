@@ -127,7 +127,7 @@ export async function collectPeers(): Promise<Device[] | undefined> {
   for (const peer of found) {
     await trust(peer)
 
-    devices = saveLocalDevice(toDevice(peer, clientId))
+    devices = saveLocalDevice(await toDevice(peer, clientId))
 
     if (peer.id !== undefined) {
       eingetragen.push(peer.id)
@@ -183,7 +183,7 @@ async function trust(peer: DeviceProfile): Promise<void> {
  * Anfrage und stünde dann vor einem 401, das wie ein Fehler der Gegenstelle
  * aussieht — und `parseDevices` wirft einen Eintrag ohne Ausweis ohnehin weg.
  */
-function toDevice(peer: DeviceProfile, clientId: string): Device {
+async function toDevice(peer: DeviceProfile, clientId: string): Promise<Device> {
   return {
     id: peer.agentFingerprint ?? peer.host,
     clientId,
@@ -193,6 +193,11 @@ function toDevice(peer: DeviceProfile, clientId: string): Device {
     ...(peer.agentFingerprint === undefined ? {} : { fingerprint: peer.agentFingerprint }),
     ...(peer.caFingerprint === undefined ? {} : { caFingerprint: peer.caFingerprint }),
     ...(peer.platform === undefined ? {} : { platform: peer.platform }),
+    // Unter dieser Kennung steht die Gegenseite in der eigenen Liste der
+    // zugelassenen Geräte — ohne sie ließe „Entfernen" die Gegenrichtung stehen.
+    ...(peer.clientKey === undefined
+      ? {}
+      : { peerClientId: await clientFingerprint(peer.clientKey) }),
     // Ein Handy weckt niemanden, und ein Rechner, den man selbst gekoppelt hat,
     // wird über seinen eigenen Eintrag geweckt — nicht über diesen.
     canWake: false,

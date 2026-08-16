@@ -188,11 +188,45 @@ class HostServer(
         request.path.startsWith("/api/clients/") && request.method == "DELETE" ->
             revoke(request.path.removePrefix("/api/clients/"))
 
+        request.path == "/api/unpair" && request.method == "DELETE" -> unpair(request)
+
         request.path == "/ws/screen" -> screenSocket(request)
 
         request.path == "/ws/input" -> inputSocket(request)
 
         else -> HttpServer.Response.error(404, "Diesen Endpunkt gibt es hier nicht.")
+    }
+
+    /**
+     * Sich bei diesem Handy selbst austragen — der eine Weg, auf dem ein
+     * Entfernen **beide** Seiten trifft.
+     *
+     * `/api/clients/{id}` geht dafür nicht: der ist nur am Gerät selbst
+     * erreichbar, und das soll er bleiben. Hier trägt sich niemand einen
+     * anderen aus, sondern nur sich selbst — wer die Kennung nennt, ist der
+     * Sitzungstoken, und der gehört genau einem Gerät.
+     *
+     * Der Pfad liegt ausdrücklich nicht unter `/api/pair/…`: alles darunter ist
+     * ohne Ausweis erreichbar, weil der Kopplungsaufruf die Berechtigung erst
+     * erzeugt.
+     */
+    private fun unpair(request: HttpServer.Request): HttpServer.Response {
+        // Die Prüfung ist gelaufen, sonst wäre dieser Aufruf nicht hier. Der
+        // Sitzungstoken wird nur noch einmal nachgeschlagen, weil die
+        // Weiterleitung keinen Platz für die Sitzung hat.
+        val id = sessions.find(credentialOf(request).orEmpty())?.clientId
+            ?: return HttpServer.Response.error(
+                401,
+                "Dieser Zugang gehört keinem gekoppelten Gerät.",
+            )
+
+        // Schon weg? Für den Anrufer ist das dasselbe Ergebnis, und ein
+        // Fehlschlag hier hielte ihn davon ab, bei sich aufzuräumen.
+        if (pairing.revoke(id)) {
+            live.close(id)
+        }
+
+        return HttpServer.Response.json(200, JSONObject().put("removed", id).toString())
     }
 
     /**

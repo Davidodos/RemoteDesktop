@@ -338,6 +338,10 @@ public sealed class RemotePage : Control
 
                 "local-key" => Ausweis(),
 
+                "local-revoke" => await Widerrufen(request),
+
+                "trust-forget" => Vergessen(request.Fingerprint),
+
                 _ => throw new InvalidOperationException(
                     $"Das Fenster kennt '{request.Kind}' nicht.")
             };
@@ -376,6 +380,36 @@ public sealed class RemotePage : Control
         await LocalNode.GrantAsync(request.PublicKey, request.Label);
 
         return new { granted = true };
+    }
+
+    /// <summary>
+    /// Die Gegenrichtung wieder aufheben: das Gerät darf diesen Rechner nicht
+    /// mehr steuern. Teil von „Entfernen", das beide Seiten trifft.
+    /// </summary>
+    private static async Task<object> Widerrufen(BridgeRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.ClientId))
+        {
+            throw new InvalidOperationException("Ohne Kennung wird niemand ausgetragen.");
+        }
+
+        await LocalNode.RevokeAsync(request.ClientId);
+
+        return new { revoked = request.ClientId };
+    }
+
+    /// <summary>
+    /// Einer Stelle nicht mehr glauben. Ohne diesen Schritt bliebe nach dem
+    /// Entfernen eines Geräts ein Rest übrig, den niemand sieht.
+    /// </summary>
+    private object Vergessen(string? fingerprint)
+    {
+        if (string.IsNullOrWhiteSpace(fingerprint))
+        {
+            throw new InvalidOperationException("Ohne Fingerabdruck wird nichts vergessen.");
+        }
+
+        return new { forgotten = _trusted.Remove(fingerprint) };
     }
 
     /// <summary>
@@ -443,7 +477,7 @@ public sealed class RemotePage : Control
     /// <summary>Was die Seite über die Brücke schickt.</summary>
     private sealed record BridgeRequest(
         string? Id, string? Kind, string? Host, string? Fingerprint, string? PublicKey,
-        string? Label, string[]? Ids);
+        string? Label, string[]? Ids, string? ClientId);
 
     /// <summary>
     /// Ein leerer schwarzer Bereich sähe aus wie ein Absturz. Steht die

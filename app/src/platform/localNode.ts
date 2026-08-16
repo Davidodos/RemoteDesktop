@@ -82,6 +82,17 @@ export interface LocalNode {
   grant(publicKey: string, label: string): Promise<void>
 
   /**
+   * Die Gegenrichtung wieder aufheben: das Gerät mit dieser Kennung darf
+   * dieses hier nicht mehr steuern.
+   *
+   * Das Gegenstück zu {@link grant}, und die eine Hälfte von „Entfernen":
+   * danach soll nichts mehr übrig sein, als hätten sich die Geräte nie
+   * gekannt. Die Kennung steht im Gerät (`peerClientId`) — sie entstand beim
+   * Koppeln aus dem Ausweis der Gegenseite.
+   */
+  revoke(clientId: string): Promise<void>
+
+  /**
    * Der Ausweis dieses Geräts — das Schlüsselpaar, mit dem sich seine
    * Oberfläche bei fremden Geräten anmeldet.
    *
@@ -165,6 +176,7 @@ export const noLocalNode: LocalNode = {
   peers: (): Promise<DeviceProfile[]> => Promise.resolve([]),
   forget: (): Promise<void> => Promise.resolve(),
   grant: (): Promise<void> => Promise.resolve(),
+  revoke: (): Promise<void> => Promise.resolve(),
   key: (): Promise<ClientKey | undefined> => Promise.resolve(undefined),
 }
 
