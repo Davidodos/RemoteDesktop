@@ -1,3 +1,7 @@
+import type { DevicePlatform } from '../platform/index.ts'
+
+export type { DevicePlatform }
+
 /**
  * Ein Gerät, das die App steuern kann — gekoppelt oder aus dem Hub.
  *
@@ -59,7 +63,26 @@ export interface Device {
   siteId?: string
   /** Ein Knoten, der nur wecken kann — die NAS, ein Pi am zweiten Standort. */
   waker?: boolean
+  /**
+   * Ob dahinter ein Rechner oder ein Handy steckt.
+   *
+   * Kommt aus der Kopplung und aus dem Steckbrief, nicht aus `/api/info`: die
+   * Liste soll das Symbol auch dann zeigen, wenn das Gerät gerade aus ist.
+   * Fehlt es, ist die Gegenstelle älter als Phase 31g — dann steht dort nichts,
+   * statt „Windows" zu raten.
+   */
+  platform?: DevicePlatform
+  /**
+   * Wann dieses Gerät zuletzt erreichbar war, als Zeitstempel in Millisekunden.
+   *
+   * Rein lokal gemerkt und ausdrücklich nicht erfragt: die Gegenseite weiß
+   * nicht, wann *dieses* Gerät sie zuletzt gesehen hat, und ihre eigene Uhr
+   * hilft hier niemandem.
+   */
+  lastConnectedAt?: number
 }
+
+
 
 /**
  * Warum ein Gerät nicht erreichbar ist. `dns` heißt: der Name ließ sich nicht
@@ -106,6 +129,11 @@ export interface AgentInfo {
    * Feld, ist der Agent älter als V4; siehe `lib/capabilities.ts`.
    */
   capabilities?: string[]
+  /**
+   * Was dieses Gerät ist. Für das Symbol in der Geräteliste — was es kann,
+   * steht in {@link AgentInfo.capabilities}.
+   */
+  platform?: DevicePlatform
 }
 
 /**

@@ -192,6 +192,7 @@ function toDevice(peer: DeviceProfile, clientId: string): Device {
     port: peer.port,
     ...(peer.agentFingerprint === undefined ? {} : { fingerprint: peer.agentFingerprint }),
     ...(peer.caFingerprint === undefined ? {} : { caFingerprint: peer.caFingerprint }),
+    ...(peer.platform === undefined ? {} : { platform: peer.platform }),
     // Ein Handy weckt niemanden, und ein Rechner, den man selbst gekoppelt hat,
     // wird über seinen eigenen Eintrag geweckt — nicht über diesen.
     canWake: false,

@@ -3,7 +3,12 @@ import { AgentClient } from './lib/agentClient.ts'
 import { collectPeers } from './lib/bothWays.ts'
 import { capabilitiesOf } from './lib/capabilities.ts'
 import { deviceLabel } from './lib/deviceNames.ts'
-import { collectDevices, localDeviceSource, saveLocalDevice } from './lib/deviceSources.ts'
+import {
+  collectDevices,
+  localDeviceSource,
+  rememberContact,
+  saveLocalDevice,
+} from './lib/deviceSources.ts'
 import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
 import { InputChannel } from './lib/inputChannel.ts'
 import { protocolMismatch } from './lib/protocol.ts'
@@ -244,8 +249,19 @@ function Shell(): React.JSX.Element {
     // Eingabe-Socket steht auf demselben Rechner und sagt es ohnehin.
     void new AgentClient(selected).getInfo().then(
       (fresh) => {
-        if (current) {
-          setInfo(fresh)
+        if (!current) {
+          return
+        }
+
+        setInfo(fresh)
+
+        // Aus derselben Antwort kommt beides: dass dieses Gerät gerade
+        // erreichbar war, und was es ist. Ein Gerät, das vor Phase 31g
+        // gekoppelt wurde, erfährt seine Plattform erst hier.
+        const updated = rememberContact(selected.id, fresh.platform)
+
+        if (updated !== undefined) {
+          applyDevices(updated)
         }
       },
       () => undefined,
@@ -254,7 +270,7 @@ function Shell(): React.JSX.Element {
     return () => {
       current = false
     }
-  }, [selected])
+  }, [selected, applyDevices])
 
   /**
    * Den Steckbrief für Widget, Tile und App-Kürzel nachführen.

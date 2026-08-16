@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using RemoteDesktopSetup;
 
 namespace RemoteDesktopAgent.Auth;
 
@@ -37,6 +38,12 @@ namespace RemoteDesktopAgent.Auth;
 /// später anmeldet. Er gehört in die <c>clients.json</c> der Gegenseite — das
 /// ist die ganze Gegenrichtung, in einem Feld.
 /// </param>
+/// <param name="Platform">
+/// Ob dahinter ein Rechner oder ein Handy steckt — siehe
+/// <see cref="DevicePlatform"/>. <c>null</c> bei einer Gegenstelle, die älter
+/// ist als Phase 31g; dann steht in der Liste kein Symbol, statt eines zu
+/// raten.
+/// </param>
 public sealed record DeviceProfile(
     string Host,
     int Port,
@@ -44,7 +51,9 @@ public sealed record DeviceProfile(
     string? CaFingerprint,
     string? AgentFingerprint,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? ClientKey)
+    string? ClientKey,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? Platform = null)
 {
     /// <summary>Länger nennt sich kein Gerät; alles darüber ist ein Versehen.</summary>
     private const int MaxNameLength = 64;
@@ -61,7 +70,8 @@ public sealed record DeviceProfile(
         string? name,
         string? caFingerprint,
         string? agentFingerprint,
-        string? clientKey)
+        string? clientKey,
+        string? platform = null)
     {
         var address = (host ?? string.Empty).Trim();
 
@@ -88,7 +98,11 @@ public sealed record DeviceProfile(
             // landete sonst als Karteileiche in der clients.json — und die Liste
             // der zugelassenen Geräte ist der letzte Ort, an dem etwas stehen
             // soll, das niemand mehr zuordnen kann.
-            PairingService.IsUsablePublicKey(clientKey ?? string.Empty) ? clientKey : null);
+            PairingService.IsUsablePublicKey(clientKey ?? string.Empty) ? clientKey : null,
+
+            // Ein unbekannter Wert zählt als keiner. Die Liste zeigt dann kein
+            // Symbol — besser als ein falsches.
+            platform is DevicePlatform.Windows or DevicePlatform.Android ? platform : null);
     }
 
     private static string? Hex(string? value, int length)

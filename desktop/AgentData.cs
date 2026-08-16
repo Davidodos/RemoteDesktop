@@ -59,7 +59,8 @@ public static class AgentData
             name = Environment.MachineName,
             caFingerprint = AuthorityFingerprint(),
             agentFingerprint = AgentFingerprint(),
-            clientKey = ClientKey()?.PublicKey
+            clientKey = ClientKey()?.PublicKey,
+            platform = DevicePlatform.Windows
         };
     }
 

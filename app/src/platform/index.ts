@@ -152,6 +152,7 @@ export {
   noLocalNode,
   usableProfile,
   type ClientKey,
+  type DevicePlatform,
   type DeviceProfile,
   type LocalNode,
 } from './localNode.ts'

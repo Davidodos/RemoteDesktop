@@ -1,5 +1,5 @@
 import { storage } from './storage.ts'
-import type { Device } from './types.ts'
+import type { Device, DevicePlatform } from './types.ts'
 
 /**
  * Woher die Geräteliste kommt.
@@ -113,6 +113,8 @@ function toDevice(entry: unknown): Device[] {
     mac,
     siteId,
     waker,
+    platform,
+    lastConnectedAt,
   } = entry as Record<string, unknown>
 
   if (typeof id !== 'string' || id.length === 0 || typeof host !== 'string' || host.length === 0) {
@@ -155,6 +157,12 @@ function toDevice(entry: unknown): Device[] {
       ...(typeof mac === 'string' && mac.length > 0 ? { mac } : {}),
       ...(typeof siteId === 'string' && siteId.length > 0 ? { siteId } : {}),
       ...(waker === true ? { waker: true } : {}),
+      // Ein unbekannter Wert zählt als keiner: dann steht in der Liste kein
+      // Symbol, und das ist besser als ein falsches.
+      ...(platform === 'windows' || platform === 'android' ? { platform } : {}),
+      ...(typeof lastConnectedAt === 'number' && Number.isFinite(lastConnectedAt)
+        ? { lastConnectedAt }
+        : {}),
     },
   ]
 }
@@ -170,12 +178,16 @@ export function saveLocalDevice(device: Device): Device[] {
   const existing = parseDevices(storage.getDevices())
   const previous = existing.find((entry) => entry.id === device.id)
 
-  // Der selbst vergebene Name gehört diesem Gerät und nicht der Kopplung: wer
-  // denselben Rechner erneut koppelt, soll seinen Namen nicht verlieren.
-  const entry =
-    device.alias === undefined && previous?.alias !== undefined
-      ? { ...device, alias: previous.alias }
-      : device
+  // Was diesem Gerät gehört und nicht der Kopplung, überlebt sie: der selbst
+  // vergebene Name und der Zeitpunkt der letzten Verbindung. Wer denselben
+  // Rechner erneut koppelt, soll beides nicht verlieren.
+  const entry: Device = {
+    ...(previous?.alias === undefined ? {} : { alias: previous.alias }),
+    ...(previous?.lastConnectedAt === undefined
+      ? {}
+      : { lastConnectedAt: previous.lastConnectedAt }),
+    ...device,
+  }
 
   const devices = [...existing.filter((item) => item.id !== device.id), entry]
 
@@ -208,6 +220,72 @@ export function renameLocalDevice(id: string, alias: string): Device[] {
 
   return devices
 }
+
+/**
+ * Hält fest, dass dieses Gerät gerade erreichbar war — und was es ist.
+ *
+ * <p>
+ * Beides kommt aus derselben Antwort: wer `/api/info` beantwortet, war
+ * erreichbar und sagt dabei, ob er ein Rechner oder ein Handy ist. Die Angabe
+ * wird übernommen, weil ein Gerät, das vor Phase 31g gekoppelt wurde, sie noch
+ * nicht mitbekommen hat.
+ * </p>
+ *
+ * <p>
+ * „Zuletzt verbunden" ist rein lokal: die Gegenseite weiß nicht, wann *dieses*
+ * Gerät sie zuletzt gesehen hat, und ihre eigene Uhr hilft hier niemandem.
+ * Geschrieben wird höchstens einmal je Minute — sonst schriebe die App im
+ * Sekundentakt in den Speicher, und die Angabe wäre trotzdem keine andere.
+ * </p>
+ *
+ * @returns Die neue Liste, oder `undefined`, wenn es nichts zu schreiben gab.
+ */
+export function rememberContact(
+  id: string,
+  platform?: DevicePlatform,
+  now = Date.now(),
+): Device[] | undefined {
+  const devices = parseDevices(storage.getDevices())
+  const previous = devices.find((entry) => entry.id === id)
+
+  if (previous === undefined) {
+    return undefined
+  }
+
+  // Geprüft und nicht geglaubt: die Angabe kommt aus einer JSON-Antwort, und
+  // was dort steht, hat niemand vorher angesehen.
+  const gemeldet =
+    platform === 'windows' || platform === 'android' ? platform : undefined
+
+  const neueZeit =
+    previous.lastConnectedAt === undefined ||
+    now - previous.lastConnectedAt >= TOUCH_INTERVAL_MS
+  const neuePlattform = gemeldet !== undefined && previous.platform !== gemeldet
+
+  if (!neueZeit && !neuePlattform) {
+    return undefined
+  }
+
+  const updated = devices.map((entry) =>
+    entry.id === id
+      ? {
+          ...entry,
+          lastConnectedAt: neueZeit ? now : entry.lastConnectedAt,
+          ...(gemeldet === undefined ? {} : { platform: gemeldet }),
+        }
+      : entry,
+  )
+
+  storage.setDevices(JSON.stringify(updated))
+
+  return updated
+}
+
+/**
+ * Wie grob „zuletzt verbunden" mitgeschrieben wird. Eine Minute ist genauer,
+ * als es je jemanden interessiert — und selten genug, dass es nicht auffällt.
+ */
+const TOUCH_INTERVAL_MS = 60_000
 
 /** Entfernt ein selbst gekoppeltes Gerät aus der lokalen Liste. */
 export function forgetLocalDevice(id: string): Device[] {

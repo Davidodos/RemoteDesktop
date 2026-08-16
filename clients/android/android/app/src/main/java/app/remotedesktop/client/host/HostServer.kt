@@ -314,6 +314,9 @@ class HostServer(
             .put("version", version)
             .put("protocol", PROTOCOL)
             .put("capabilities", JSONArray(HostScopes.CAPABILITIES))
+            // Was dieses Gerät ist. Es entscheidet nur über das Symbol in der
+            // Liste — was es kann, steht darüber.
+            .put("platform", DeviceProfile.PLATFORM_ANDROID)
             // Ein Handy weckt niemanden und lässt sich nicht wecken: es hört im
             // Schlaf auf kein Magic Packet. Beides steht hier trotzdem, damit
             // die App nicht raten muss.
@@ -388,6 +391,9 @@ class HostServer(
             .put("hostname", deviceName)
             .put("agentPublicKey", identity.publicKey)
             .put("agentFingerprint", identity.fingerprint)
+            // Was dieses Gerät ist — für das Symbol in der Geräteliste der
+            // Gegenseite, auch wenn dieses Handy gerade aus ist.
+            .put("platform", DeviceProfile.PLATFORM_ANDROID)
             .put("caFingerprint", material.fingerprint)
             // Dasselbe zurück: der Ausweis der App dieses Handys. Damit trägt
             // die Gegenseite die andere Richtung bei sich ein, ohne noch einmal

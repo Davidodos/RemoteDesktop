@@ -37,6 +37,13 @@ interface PairResponse {
    * siehe {@link fingerprintOf}.
    */
   caFingerprint?: string | null
+  /**
+   * Was die Gegenstelle ist — Rechner oder Handy. Sie sagt es hier und nicht
+   * erst in `/api/info`, damit die Liste das Symbol auch dann zeigen kann, wenn
+   * das Gerät gerade aus ist. Ein Agent älter als Phase 31g meldet es nicht;
+   * dann steht dort nichts, statt „Windows" zu raten.
+   */
+  platform?: string
   /** `waker` bei einem Knoten, der nur wecken kann. */
   role?: string
   siteId?: string
@@ -183,6 +190,9 @@ export async function pairBothWays(target: PairTarget): Promise<PairedBothWays> 
     ...(caFingerprint === undefined ? {} : { caFingerprint }),
     ...(waker ? { waker: true } : {}),
     ...(response.siteId === undefined ? {} : { siteId: response.siteId }),
+    ...(response.platform === 'windows' || response.platform === 'android'
+      ? { platform: response.platform }
+      : {}),
     // Jeder Agent kann seit Phase 14 Nachbarn wecken, ein Waker kann sonst
     // nichts. Ältere Agents melden das Feld nicht — dann eben nicht.
     canWake: response.canWake ?? false,

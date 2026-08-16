@@ -276,6 +276,10 @@ app.MapGet("/api/info", (InputExecutor executor) =>
         // die Liste von damals an.
         capabilities = AgentCapabilities.Windows,
 
+        // Was dieses Gerät ist. Es entscheidet nur über das Symbol in der
+        // Liste — was es kann, steht darüber.
+        platform = DevicePlatform.Windows,
+
         // Womit dieser Rechner sich ausweist. Steht hier ein Fingerabdruck, hat
         // er sich selbst beglaubigt — der Client weiß dann, dass er die CA
         // einmal bestätigen muss, und woran er die richtige erkennt.

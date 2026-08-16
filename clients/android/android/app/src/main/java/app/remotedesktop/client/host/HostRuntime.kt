@@ -259,6 +259,7 @@ class HostRuntime private constructor(
             caFingerprint = material.fingerprint,
             agentFingerprint = agentFingerprint,
             clientKey = local.publicKey,
+            platform = DeviceProfile.PLATFORM_ANDROID,
         )
     }
 

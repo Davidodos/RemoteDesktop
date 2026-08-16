@@ -116,6 +116,9 @@ export interface ClientKey {
   privateKey: string
 }
 
+/** Was ein Gerät ist. Gegenstück zu `setup/DevicePlatform.cs`. */
+export type DevicePlatform = 'windows' | 'android'
+
 /**
  * Der Steckbrief eines Geräts: alles, was die Gegenseite braucht, um es später
  * von sich aus zu erreichen. Schwesterfassungen: `agent/Auth/DeviceProfile.cs`
@@ -147,6 +150,12 @@ export interface DeviceProfile {
    * ganze Gegenrichtung, in einem Feld.
    */
   clientKey?: string
+  /**
+   * Ob dahinter ein Rechner oder ein Handy steckt — für das Symbol in der
+   * Geräteliste. Er steht im Steckbrief und nicht nur in `/api/info`, damit
+   * die Liste ihn auch dann zeigt, wenn das Gerät gerade aus ist.
+   */
+  platform?: DevicePlatform
 }
 
 /** Für Umgebungen, die selbst keine Gegenstelle sind — der Browser vor allem. */
@@ -172,10 +181,8 @@ export function usableProfile(value: unknown): DeviceProfile | undefined {
     return undefined
   }
 
-  const { id, host, port, name, caFingerprint, agentFingerprint, clientKey } = value as Record<
-    string,
-    unknown
-  >
+  const { id, host, port, name, caFingerprint, agentFingerprint, clientKey, platform } =
+    value as Record<string, unknown>
 
   if (typeof host !== 'string' || host.trim().length === 0 || host.length > 255) {
     return undefined
@@ -198,6 +205,9 @@ export function usableProfile(value: unknown): DeviceProfile | undefined {
     ...(typeof clientKey === 'string' && clientKey.trim().length > 0
       ? { clientKey: clientKey.trim() }
       : {}),
+    // Ein unbekannter Wert zählt als keiner: die Liste zeigt dann kein Symbol,
+    // und das ist besser als ein falsches.
+    ...(platform === 'windows' || platform === 'android' ? { platform } : {}),
   }
 }
 

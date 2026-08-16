@@ -38,6 +38,13 @@ data class DeviceProfile(
      * ganze Gegenrichtung, in einem Feld.
      */
     val clientKey: String?,
+    /**
+     * Ob dahinter ein Rechner oder ein Handy steckt. Die Angabe steht auch im
+     * Steckbrief und nicht nur in `/api/info`: die Liste soll das Symbol auch
+     * dann zeigen, wenn das Gerät gerade aus ist. `null` bei einer Gegenstelle,
+     * die älter ist als Phase 31g — dann steht dort nichts, statt zu raten.
+     */
+    val platform: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("host", host)
@@ -46,11 +53,16 @@ data class DeviceProfile(
         .put("caFingerprint", caFingerprint)
         .put("agentFingerprint", agentFingerprint)
         .put("clientKey", clientKey)
+        .put("platform", platform)
 
     companion object {
 
         /** Länger nennt sich kein Gerät; alles darüber ist ein Versehen. */
         private const val MAX_NAME = 64
+
+        /** Die beiden Werte von `platform` — Gegenstück zu `setup/DevicePlatform.cs`. */
+        const val PLATFORM_WINDOWS = "windows"
+        const val PLATFORM_ANDROID = "android"
 
         /**
          * Prüft einen hereingereichten Steckbrief. Unbrauchbares wird verworfen
@@ -83,6 +95,11 @@ data class DeviceProfile(
                 // Ein Schlüssel, den dieser Host nicht prüfen kann, ist keiner.
                 // Er landete sonst als Karteileiche in der clients.json.
                 clientKey = key.takeIf { PairingService.isUsablePublicKey(it) },
+
+                // Ein unbekannter Wert zählt als keiner: die Liste zeigt dann
+                // kein Symbol, und das ist besser als ein falsches.
+                platform = json.optString("platform").trim()
+                    .takeIf { it == PLATFORM_WINDOWS || it == PLATFORM_ANDROID },
             )
         }
 

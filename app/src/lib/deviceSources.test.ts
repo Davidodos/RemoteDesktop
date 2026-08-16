@@ -3,6 +3,7 @@ import {
   collectDevices,
   forgetLocalDevice,
   parseDevices,
+  rememberContact,
   renameLocalDevice,
   saveLocalDevice,
   type DeviceSource,
@@ -176,6 +177,60 @@ describe('der eigene Name eines Geräts', () => {
     // Assert — ein entferntes Gerät ist weg, samt allem, was daranhing.
     expect(parseDevices(localStorage.getItem('remotedesktop.devices') ?? undefined)[0]?.alias)
       .toBeUndefined()
+  })
+})
+
+describe('zuletzt verbunden und was das Gerät ist', () => {
+  test('beides kommt aus derselben Antwort', () => {
+    // Arrange
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+
+    // Act
+    const devices = rememberContact('abc', 'android', 10_000)
+
+    // Assert
+    expect(devices?.[0]).toMatchObject({ platform: 'android', lastConnectedAt: 10_000 })
+  })
+
+  test('was kein bekannter Wert ist, wird nicht übernommen', () => {
+    // Arrange
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+
+    // Act — die Angabe kommt aus einer JSON-Antwort; was dort steht, hat
+    // niemand vorher angesehen.
+    const devices = rememberContact('abc', 'linux' as never, 10_000)
+
+    // Assert
+    expect(devices?.[0]?.platform).toBeUndefined()
+  })
+
+  test('nicht bei jedem Erreichbarkeitstest', () => {
+    // Arrange
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+    rememberContact('abc', 'windows', 100_000)
+
+    // Act — eine Sekunde später hat sich die Angabe nicht geändert.
+    const nochmal = rememberContact('abc', 'windows', 101_000)
+
+    // Assert — sonst schriebe die App im Sekundentakt in den Speicher.
+    expect(nochmal).toBeUndefined()
+  })
+
+  test('überlebt eine erneute Kopplung', () => {
+    // Arrange
+    saveLocalDevice(device('abc', { clientId: 'h1' }))
+    rememberContact('abc', 'windows', 100_000)
+
+    // Act
+    const devices = saveLocalDevice(device('abc', { clientId: 'h2' }))
+
+    // Assert — wann man ein Gerät zuletzt gesehen hat, gehört dem Gerät und
+    // nicht der Kopplung.
+    expect(devices[0]).toMatchObject({ clientId: 'h2', lastConnectedAt: 100_000 })
+  })
+
+  test('ein unbekanntes Gerät wird nicht angelegt', () => {
+    expect(rememberContact('fremd', 'windows')).toBeUndefined()
   })
 })
 

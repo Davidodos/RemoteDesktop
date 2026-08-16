@@ -1,5 +1,6 @@
 using RemoteDesktopAgent.Auth;
 using RemoteDesktopAgent.Capture.H264;
+using RemoteDesktopSetup;
 
 namespace RemoteDesktopAgent.Api;
 
@@ -84,7 +85,8 @@ public static class PairingEndpoints
                         name = Environment.MachineName,
                         caFingerprint,
                         agentFingerprint = identity.Fingerprint,
-                        clientKey = local.PublicKey
+                        clientKey = local.PublicKey,
+                        platform = DevicePlatform.Windows
                     }
             }));
 
@@ -104,7 +106,8 @@ public static class PairingEndpoints
                 port = peer.Port,
                 name = peer.Name,
                 caFingerprint = peer.CaFingerprint,
-                agentFingerprint = peer.AgentFingerprint
+                agentFingerprint = peer.AgentFingerprint,
+                platform = peer.Platform
             })
         }));
 
@@ -165,7 +168,8 @@ public static class PairingEndpoints
                     request.Self.Name,
                     request.Self.CaFingerprint,
                     request.Self.AgentFingerprint,
-                    request.Self.ClientKey);
+                    request.Self.ClientKey,
+                    request.Self.Platform);
 
             if (peer is not null)
             {
@@ -188,6 +192,12 @@ public static class PairingEndpoints
                 hostname = Environment.MachineName,
                 agentPublicKey = identity.PublicKey,
                 agentFingerprint = identity.Fingerprint,
+
+                // Was dieses Gerät ist — für das Symbol in der Geräteliste der
+                // Gegenseite. Sie bekommt es hier und nicht erst aus
+                // /api/info, weil sie sonst nichts anzeigen könnte, solange
+                // dieser Rechner aus ist.
+                platform = DevicePlatform.Windows,
 
                 // Womit sich der Rechner beim Verbinden ausweist. Ohne diesen
                 // Wert kann ein Client ein selbst ausgestelltes Zertifikat nicht
@@ -309,7 +319,8 @@ internal sealed record ProfileRequest(
     string? Name,
     string? CaFingerprint,
     string? AgentFingerprint,
-    string? ClientKey);
+    string? ClientKey,
+    string? Platform);
 
 internal sealed record GrantRequest(string? PublicKey, string? Label);
 
