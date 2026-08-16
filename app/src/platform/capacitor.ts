@@ -479,6 +479,9 @@ function hostService(plugins: CapacitorPlugins): HostService {
 
   return {
     available: true,
+    // Am Handy lebt der Server mit der App, und die Einstellung entscheidet
+    // darüber. Deshalb ist die Freigabe hier ein Schalter und keine Auskunft.
+    toggleable: true,
     status: () => plugin.status(),
     start: () => plugin.start(),
     stop: () => plugin.stop(),

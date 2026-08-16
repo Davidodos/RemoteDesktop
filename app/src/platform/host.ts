@@ -15,6 +15,19 @@
 export interface HostService {
   readonly available: boolean
 
+  /**
+   * Ob sich die Freigabe hier überhaupt schalten lässt.
+   *
+   * <p>
+   * Am Handy ja: der Server lebt mit der App, und die Einstellung entscheidet
+   * darüber. Am Rechner nein — dort heißt „dieses Gerät ist freigegeben"
+   * schlicht „der Agent läuft", und das ist eine Auskunft. Wer ihn starten oder
+   * beenden will, tut das im Fenster unter „Einstellungen"; ein Schalter in der
+   * App meinte etwas, das ihr nicht gehört.
+   * </p>
+   */
+  readonly toggleable: boolean
+
   /** Wie es gerade steht. Ohne Nebenwirkung — auch, wenn nichts läuft. */
   status(): Promise<HostStatus>
 
@@ -132,6 +145,7 @@ export interface HostClient {
 /** Für Umgebungen, die kein Ziel sein können. */
 export const noHost: HostService = {
   available: false,
+  toggleable: false,
   status: (): Promise<HostStatus> =>
     Promise.resolve({ running: false, deviceName: '', port: 0, addresses: [] }),
   start: () => unavailable(),

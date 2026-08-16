@@ -130,6 +130,62 @@ public static class LocalNode
     }
 
     /// <summary>
+    /// Ob der Agent gerade läuft.
+    ///
+    /// Am Rechner ist „dieses Gerät freigeben" keine Einstellung der
+    /// Oberfläche, sondern eine Auskunft: freigegeben ist er, solange der Agent
+    /// läuft. Ein Schalter dafür stünde in der App und meinte etwas, das ihr
+    /// nicht gehört.
+    /// </summary>
+    public static async Task<bool> RunningAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await Client.GetAsync(
+                $"https://127.0.0.1:{AgentData.AgentPort}/health", cancellationToken);
+
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Ein frischer Kopplungscode.
+    ///
+    /// <para>
+    /// Der eine Weg, der einen laufenden Agent wirklich voraussetzt: der Code
+    /// lebt in seinem Speicher, und einlösen muss ihn ebenfalls er. Einen Code
+    /// anzuzeigen, den niemand einlösen kann, wäre eine Einladung ins Leere —
+    /// deshalb fliegt hier ein Fehler statt eines leeren Feldes.
+    /// </para>
+    /// </summary>
+    public static async Task<JsonElement> CodeAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await Client.PostAsync(
+            $"https://127.0.0.1:{AgentData.AgentPort}/api/pair/code",
+            content: null,
+            cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+    }
+
+    /// <summary>
+    /// Wer diesen Rechner steuern darf. Bei gestopptem Agent aus der Datei — die
+    /// Liste gilt auch dann, sie wirkt nur gerade nicht.
+    /// </summary>
+    public static async Task<object?> ClientsAsync(CancellationToken cancellationToken = default)
+    {
+        var running = await ReadAsync("/api/clients", "clients", cancellationToken);
+
+        return running is { } answered ? answered : AgentData.Clients();
+    }
+
+    /// <summary>
     /// Liest beim Agent und meldet, ob er überhaupt geantwortet hat.
     /// </summary>
     /// <returns>

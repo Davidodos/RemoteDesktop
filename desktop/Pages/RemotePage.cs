@@ -340,6 +340,14 @@ public sealed class RemotePage : Control
 
                 "local-revoke" => await Widerrufen(request),
 
+                // „Dieses Gerät freigeben" heißt am Rechner „der Agent läuft" —
+                // eine Auskunft und kein Schalter.
+                "local-status" => await ZustandAsync(),
+
+                "local-code" => await LocalNode.CodeAsync(),
+
+                "local-clients" => new { clients = await LocalNode.ClientsAsync() },
+
                 "trust-forget" => Vergessen(request.Fingerprint),
 
                 _ => throw new InvalidOperationException(
@@ -380,6 +388,27 @@ public sealed class RemotePage : Control
         await LocalNode.GrantAsync(request.PublicKey, request.Label);
 
         return new { granted = true };
+    }
+
+    /// <summary>
+    /// Wie dieser Rechner als Ziel dasteht: ob der Agent läuft, wie er heißt,
+    /// unter welcher Adresse er erreichbar wäre und womit er sich ausweist.
+    ///
+    /// Die Adresse kommt auch dann, wenn der Agent gerade nicht läuft: sie
+    /// beschreibt, wie dieser Rechner erreichbar <em>wäre</em>.
+    /// </summary>
+    private static async Task<object> ZustandAsync()
+    {
+        var profile = AgentData.Profile();
+
+        return new
+        {
+            running = await LocalNode.RunningAsync(),
+            deviceName = Environment.MachineName,
+            port = AgentData.AgentPort,
+            addresses = profile is null ? Array.Empty<string>() : [profile.Host],
+            caFingerprint = profile?.CaFingerprint
+        };
     }
 
     /// <summary>
@@ -471,8 +500,16 @@ public sealed class RemotePage : Control
         core.PostWebMessageAsString(
             JsonSerializer.Serialize(new { id, payload }, JsonOptions));
 
-    private static readonly JsonSerializerOptions JsonOptions =
-        new() { PropertyNameCaseInsensitive = true };
+    /// <summary>
+    /// Kleingeschrieben hinaus, egal wie es hier heißt: die Seite liest
+    /// dieselben Felder, die auch über HTTP vom Agent kämen. Ein
+    /// großgeschriebenes <c>Host</c> wäre für sie ein leeres Feld.
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     /// <summary>Was die Seite über die Brücke schickt.</summary>
     private sealed record BridgeRequest(

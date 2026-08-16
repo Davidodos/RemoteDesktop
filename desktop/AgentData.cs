@@ -43,25 +43,20 @@ public static class AgentData
     /// Rechner kein mögliches Ziel — ein Steckbrief ohne Adresse beschreibt
     /// nichts.
     /// </returns>
-    public static object? Profile()
+    public static LocalProfile? Profile()
     {
         var address = Network().AdvertisedAddress?.ToLowerInvariant();
 
-        if (address is null)
-        {
-            return null;
-        }
-
-        return new
-        {
-            host = address,
-            port = AgentPort,
-            name = Environment.MachineName,
-            caFingerprint = AuthorityFingerprint(),
-            agentFingerprint = AgentFingerprint(),
-            clientKey = ClientKey()?.PublicKey,
-            platform = DevicePlatform.Windows
-        };
+        return address is null
+            ? null
+            : new LocalProfile(
+                address,
+                AgentPort,
+                Environment.MachineName,
+                AuthorityFingerprint(),
+                AgentFingerprint(),
+                ClientKey()?.PublicKey,
+                DevicePlatform.Windows);
     }
 
     /// <summary>
@@ -115,6 +110,37 @@ public static class AgentData
 
         ClientsFile.Write(
             path, ClientsFile.Read(path).Where(client => client.Id != clientId));
+    }
+
+    /// <summary>
+    /// Wer diesen Rechner steuern darf, aus der Datei gelesen.
+    ///
+    /// Dieselben Felder, die der Agent unter <c>/api/clients</c> liefert: die
+    /// Oberfläche soll nicht wissen müssen, woher die Liste gerade kommt.
+    /// </summary>
+    public static object[] Clients()
+    {
+        try
+        {
+            return
+            [
+                .. ClientsFile.Read(ClientsFile.In(Elevation.DataDirectory)).Select(client => new
+                {
+                    id = client.Id,
+                    label = client.Label,
+                    scopes = client.Scopes,
+                    createdAt = client.CreatedAt,
+                    lastSeenAt = client.LastSeenAt
+                })
+            ];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or InvalidOperationException)
+        {
+            // Eine unlesbare Liste ist keine leere — aber hier ist der falsche
+            // Ort, das zu klären. Sie steht dann nicht da, und das fällt auf.
+            return [];
+        }
     }
 
     /// <summary>Das eingetragene Netzprofil — daraus kommt die Adresse.</summary>
@@ -201,3 +227,17 @@ public static class AgentData
         }
     }
 }
+
+/// <summary>
+/// Der Steckbrief dieses Rechners, wie ihn die Seite bekommt. Dieselben Felder,
+/// die der Agent unter <c>/api/pair/self</c> liefert — die Oberfläche soll
+/// nicht wissen müssen, woher er gerade kommt.
+/// </summary>
+public sealed record LocalProfile(
+    string Host,
+    int Port,
+    string Name,
+    string? CaFingerprint,
+    string? AgentFingerprint,
+    string? ClientKey,
+    string Platform);

@@ -1,13 +1,16 @@
 import { PlatformError } from './errors.ts'
 import { noSessionKeepAlive } from './session.ts'
 // Werte direkt aus den definierenden Modulen — siehe web.ts.
-import { noHost } from './host.ts'
 import { usableProfile } from './localNode.ts'
 import { noSurfaces } from './surfaces.ts'
 import type {
   Capabilities,
   ClientKey,
   ClipboardAccess,
+  HostClient,
+  HostPairingCode,
+  HostService,
+  HostStatus,
   KeyValueStore,
   Platform,
   QrScanner,
@@ -224,6 +227,114 @@ const windowNode: LocalNode = {
   },
 }
 
+/**
+ * Dieser Rechner als Ziel — über die Brücke, nicht über HTTP.
+ *
+ * <p>
+ * **Bis 31g gab es das hier nicht** (`noHost`), und der Preis dafür war eine
+ * zweite Geräteseite im Fenster: die native „Geräte"-Seite konnte, was diese
+ * Schnittstelle kann, nur eben in einer eigenen Liste. Wer ein Handy koppelte,
+ * sah es an einer Stelle und steuerte es an einer anderen.
+ * </p>
+ *
+ * <p>
+ * **Was hier anders ist als am Handy:** die Freigabe ist keine Einstellung,
+ * sondern eine Auskunft — freigegeben ist dieser Rechner, solange sein Agent
+ * läuft. Deshalb `toggleable: false`, und deshalb weisen `start`, `stop` und
+ * die beiden Bildschirmwege hier ab, statt so zu tun, als gäbe es sie.
+ * </p>
+ */
+const windowHost: HostService = {
+  available: true,
+  toggleable: false,
+
+  status: async (): Promise<HostStatus> => {
+    const answer = await ask<Partial<HostStatus>>({ kind: 'local-status' })
+
+    return {
+      running: answer.running === true,
+      deviceName: answer.deviceName ?? '',
+      port: answer.port ?? 0,
+      addresses: Array.isArray(answer.addresses) ? answer.addresses : [],
+      ...(typeof answer.caFingerprint === 'string'
+        ? { caFingerprint: answer.caFingerprint }
+        : {}),
+    }
+  },
+
+  start: () => beimAgent(),
+  stop: () => beimAgent(),
+
+  pairingCode: () => ask<HostPairingCode>({ kind: 'local-code' }),
+
+  // Bild und Eingabe gehören am Rechner dem Agent und brauchen keine
+  // Zustimmung je Sitzung: wer hier gekoppelt ist, darf, was in seinen Rechten
+  // steht. Am Handy ist das anders, und diese Schnittstelle bedient beide.
+  enableScreen: () => beimAgent(),
+  disableScreen: () => beimAgent(),
+  openInputSettings: () => beimAgent(),
+  onRequests: (): (() => void) => () => undefined,
+  answer: () => beimAgent(),
+
+  clients: async (): Promise<HostClient[]> => {
+    const { clients } = await ask<{ clients?: unknown }>({ kind: 'local-clients' })
+
+    return Array.isArray(clients) ? clients.flatMap(toHostClient) : []
+  },
+
+  revoke: async (id: string): Promise<void> => {
+    await ask({ kind: 'local-revoke', clientId: id })
+  },
+}
+
+/**
+ * Ein Eintrag aus der Liste der zugelassenen Geräte. Geprüft und nicht
+ * geglaubt: die Liste kommt bei gestopptem Agent aus einer Datei, die auch
+ * eine ältere Fassung geschrieben haben kann.
+ */
+function toHostClient(entry: unknown): HostClient[] {
+  if (typeof entry !== 'object' || entry === null) {
+    return []
+  }
+
+  const { id, label, scopes, lastSeenAt } = entry as Record<string, unknown>
+
+  if (typeof id !== 'string' || id.length === 0) {
+    return []
+  }
+
+  return [
+    {
+      id,
+      label: typeof label === 'string' && label.length > 0 ? label : id,
+      scopes: Array.isArray(scopes) ? scopes.filter((s): s is string => typeof s === 'string') : [],
+      // Der Agent schreibt einen Zeitpunkt nach ISO 8601, das Handy
+      // Millisekunden. Umgerechnet wird hier und nicht in der Ansicht: dort
+      // wüsste niemand mehr, warum es zwei Formate gibt.
+      lastSeenAt: zeitpunkt(lastSeenAt),
+    },
+  ]
+}
+
+function zeitpunkt(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  const parsed = typeof value === 'string' ? Date.parse(value) : Number.NaN
+
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function beimAgent(): Promise<never> {
+  return Promise.reject(
+    new PlatformError(
+      'Das entscheidet am Rechner der Agent. Ob er läuft, steht im Fenster unter ' +
+        '„Einstellungen" — dort lässt er sich auch starten und beenden.',
+    ),
+  )
+}
+
 /** Ob die App gerade im Windows-Fenster läuft. */
 export function isWebView2(): boolean {
   return typeof window !== 'undefined' && window.remoteDesktopHost !== undefined
@@ -347,9 +458,10 @@ export function webview2Platform(host: WebView2Host): Platform {
     // dieser Phase, und niemand hat danach gefragt.
     surfaces: noSurfaces,
     trust: windowTrust,
-    // Das Fenster ist die Fernbedienung; steuerbar macht diesen Rechner der
-    // Agent daneben, nicht die Oberfläche.
-    host: noHost,
+    // Steuerbar macht diesen Rechner der Agent daneben. Die Oberfläche kann
+    // ihn nicht schalten — sie kann aber sagen, wie er dasteht, und die Liste
+    // führen, die er dabei benutzt.
+    host: windowHost,
     node: windowNode,
   }
 }

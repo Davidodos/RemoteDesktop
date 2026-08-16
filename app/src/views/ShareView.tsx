@@ -39,7 +39,21 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
     }
 
     void host.status().then(setStatus, describe(setError))
-    void host.clients().then(setClients, () => undefined)
+
+    void host.clients().then((fresh) => {
+      // **Ein benutzter Code verschwindet.** Steht er weiter da, sieht es aus,
+      // als ließe er sich noch einmal einlösen — er gilt aber genau einmal.
+      // Dass jemand ihn benutzt hat, sagt niemand ausdrücklich; es zeigt sich
+      // daran, dass die Liste um einen Eintrag gewachsen ist.
+      setClients((vorher) => {
+        if (fresh.length > vorher.length) {
+          setPairing(undefined)
+          setQr(undefined)
+        }
+
+        return fresh
+      })
+    }, () => undefined)
   }, [host])
 
   useEffect(refresh, [refresh])
@@ -141,28 +155,47 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
 
       <section className="settings-group">
         <h2>Dieses Gerät darf ferngesteuert werden</h2>
+
+        {/* Am Handy ist das ein Schalter: der Server lebt mit der App. Am
+            Rechner ist es eine Auskunft — freigegeben ist er, solange sein
+            Agent läuft, und den startet nicht die Oberfläche. Ein Schalter
+            hier meinte etwas, das ihr nicht gehört. */}
         <p className="settings-hint">
-          {running
-            ? 'Eingeschaltet. Der Server läuft, solange diese App offen ist — ' +
-              'und endet mit ihr. Er überlebt, dass die App im Hintergrund ist ' +
-              'oder der Bildschirm ausgeht; daran erinnert die Benachrichtigung.'
-            : 'Ausgeschaltet. Solange das so bleibt, ist dieses Handy von außen ' +
-              'nicht erreichbar — auch nicht von einem Gerät, das schon ' +
-              'gekoppelt ist.'}
-        </p>
-        <p className="settings-hint">
-          Jede Verbindung wird hier außerdem einzeln bestätigt: es erscheint eine
-          Karte, und ohne Antwort gilt die Anfrage nach einer halben Minute als
-          abgelehnt. Eine Kopplung sagt, <em>wer</em> fragen darf — dass jetzt
-          gerade jemand zusehen darf, sagt nur ein Mensch.
+          {host.toggleable
+            ? running
+              ? 'Eingeschaltet. Der Server läuft, solange diese App offen ist — ' +
+                'und endet mit ihr. Er überlebt, dass die App im Hintergrund ist ' +
+                'oder der Bildschirm ausgeht; daran erinnert die Benachrichtigung.'
+              : 'Ausgeschaltet. Solange das so bleibt, ist dieses Handy von außen ' +
+                'nicht erreichbar — auch nicht von einem Gerät, das schon ' +
+                'gekoppelt ist.'
+            : running
+              ? 'Der Agent läuft — dieser Rechner ist für gekoppelte Geräte ' +
+                'erreichbar. Beenden lässt er sich im Fenster unter ' +
+                '„Einstellungen".'
+              : 'Der Agent läuft nicht. Dieser Rechner ist damit von außen nicht ' +
+                'erreichbar — koppeln geht trotzdem, gesteuert werden kann er ' +
+                'erst wieder, wenn er läuft. Starten im Fenster unter ' +
+                '„Einstellungen".'}
         </p>
 
-        <button type="button" className="settings-entry" onClick={toggle} disabled={busy}>
-          <span>{running ? 'Ausschalten' : 'Einschalten'}</span>
-        </button>
+        {host.toggleable && (
+          <>
+            <p className="settings-hint">
+              Jede Verbindung wird hier außerdem einzeln bestätigt: es erscheint eine
+              Karte, und ohne Antwort gilt die Anfrage nach einer halben Minute als
+              abgelehnt. Eine Kopplung sagt, <em>wer</em> fragen darf — dass jetzt
+              gerade jemand zusehen darf, sagt nur ein Mensch.
+            </p>
+
+            <button type="button" className="settings-entry" onClick={toggle} disabled={busy}>
+              <span>{running ? 'Ausschalten' : 'Einschalten'}</span>
+            </button>
+          </>
+        )}
       </section>
 
-      {running && (
+      {(running || !host.toggleable) && (
         <section className="settings-group">
           <h2>Erreichbar als</h2>
           <p className="settings-hint">{status?.deviceName ?? 'Dieses Gerät'}</p>
@@ -207,7 +240,7 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
         </section>
       )}
 
-      {running && (
+      {running && host.toggleable && (
         <section className="settings-group">
           <h2>Bildschirm</h2>
           <p className="settings-hint">
@@ -235,7 +268,7 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
         </section>
       )}
 
-      {running && (
+      {running && host.toggleable && (
         <section className="settings-group">
           <h2>Fernsteuerung</h2>
           <p className="settings-hint">
@@ -286,6 +319,21 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
             <>
               <p className="pairing-code">{pairing.code}</p>
               <p className="settings-hint">Noch {remaining} Sekunden gültig.</p>
+
+              {/* Der vierte Weg, auf dem der Code verschwindet — die anderen
+                  drei: Ablauf, Benutzung, Verlassen der Seite. Ein Code, der
+                  noch dasteht, wenn er nicht mehr gilt, wird abgetippt und
+                  scheitert ohne erkennbaren Grund. */}
+              <button
+                type="button"
+                className="settings-entry"
+                onClick={() => {
+                  setPairing(undefined)
+                  setQr(undefined)
+                }}
+              >
+                <span>Code ausblenden</span>
+              </button>
 
               {qr === undefined ? (
                 <p className="settings-hint">
