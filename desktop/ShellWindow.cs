@@ -80,10 +80,14 @@ public sealed class ShellWindow : Form
 
         Register(Page.Overview, new OverviewPage(probe, appDirectory, PerformAsync));
         Register(Page.Remote, _remote);
-        Register(Page.Devices, new DevicesPage(agent));
         Register(Page.Network, new NetworkPage(probe));
         Register(Page.Setup, _setup);
-        Register(Page.Settings, new SettingsPage(autostart, () => _ = ShowPageAsync(Page.Setup)));
+        Register(
+            Page.Settings,
+            new SettingsPage(
+                autostart,
+                () => _ = ShowPageAsync(Page.Setup),
+                () => _ = ShowPageAsync(Page.Network)));
 
         _rail.Picked += page => _ = ShowPageAsync(page);
 

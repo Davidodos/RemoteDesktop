@@ -346,9 +346,32 @@ input[type='password'] {
   background: var(--online);
 }
 
-.device-name {
+/* Das Symbol sagt, was ein Gerät ist — Rechner oder Handy. Gedämpft: es steht
+   neben dem Namen und soll ihn nicht überstimmen. Fehlt die Angabe, steht dort
+   nichts, statt zu raten. */
+.device-platform {
+  color: var(--text-dim);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* Name und darunter, wann dieses Gerät zuletzt erreichbar war. */
+.device-title {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.device-name {
   font-weight: 600;
+}
+
+.device-seen {
+  font-size: 0.75rem;
+  color: var(--text-dim);
 }
 
 .device-state {

@@ -38,10 +38,9 @@ public sealed class ClientTrayContext : ApplicationContext
         var menu = new ContextMenuStrip();
 
         menu.Items.Add("RemoteDesktop öffnen", image: null, async (_, _) => await OpenAsync());
-        menu.Items.Add("Fernsteuerung", image: null, async (_, _) => await OpenAsync(Page.Remote));
-
-        menu.Items.Add(
-            "Geräte koppeln…", image: null, async (_, _) => await OpenAsync(Page.Devices));
+        // Ein Eintrag statt zweier: „Fernsteuerung" und „Geräte koppeln" führen
+        // seit 31g auf dieselbe Seite.
+        menu.Items.Add("Geräte", image: null, async (_, _) => await OpenAsync(Page.Remote));
 
         menu.Items.Add(new ToolStripSeparator());
 

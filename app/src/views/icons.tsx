@@ -52,6 +52,32 @@ export function DevicesIcon(props: IconProps): React.JSX.Element {
   )
 }
 
+/**
+ * Ein Bildschirm auf einem Fuß — ein Rechner in der Geräteliste.
+ *
+ * Das Symbol sagt, was ein Gerät *ist*, und nicht, was es kann. Es steht auch
+ * dann da, wenn das Gerät gerade aus ist: die Angabe kommt aus der Kopplung
+ * und nicht aus einer Anfrage.
+ */
+export function ComputerIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4" width="18" height="12" rx="1.5" />
+      <path d="M9 20h6M12 16v4" />
+    </Icon>
+  )
+}
+
+/** Ein Handy — hochkant, mit dem Strich für den Lautsprecher. */
+export function PhoneIcon(props: IconProps): React.JSX.Element {
+  return (
+    <Icon {...props}>
+      <rect x="7" y="2.5" width="10" height="19" rx="2" />
+      <path d="M10.5 5.5h3" />
+    </Icon>
+  )
+}
+
 /** Zahnrad — die Einstellungen der App. */
 export function SettingsIcon(props: IconProps): React.JSX.Element {
   return (

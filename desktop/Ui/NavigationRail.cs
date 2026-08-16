@@ -7,7 +7,6 @@ public enum Page
 {
     Overview,
     Remote,
-    Devices,
     Network,
     Setup,
     Settings
@@ -34,9 +33,18 @@ public sealed class NavigationRail : Control
     private static readonly (Page Page, string Label)[] Items =
     [
         (Page.Overview, "Übersicht"),
-        (Page.Remote, "Fernsteuerung"),
-        (Page.Devices, "Geräte"),
-        (Page.Network, "Netz"),
+
+        // **Ein Eintrag statt dreier.** „Fernsteuerung" und „Geräte" redeten
+        // über dasselbe: die eine zeigte die Geräteliste der App, die andere
+        // die des Agents — wer ein Handy koppelte, sah es an einer Stelle und
+        // steuerte es an einer anderen, und musste selbst wissen, dass das zwei
+        // Listen desselben Paares sind. Jetzt ist es eine Seite, und die
+        // native Zweitliste gibt es nicht mehr.
+        (Page.Remote, "Geräte"),
+
+        // „Netz" steht unter „Einstellungen". Ein Netzmodus wird einmal
+        // eingestellt und danach nie wieder angefasst; er gehört nicht neben
+        // etwas, das man täglich benutzt.
 
         // Die Einrichtung steht hier bewusst **nicht**. Sie ist kein Ort, an dem
         // man sich aufhält, sondern ein Weg, den man einmal geht: beim ersten

@@ -52,12 +52,14 @@ public sealed class SettingsPage : PageView
     private ReleaseOffer? _offer;
 
     private readonly Action _openSetup;
+    private readonly Action _openNetwork;
 
-    public SettingsPage(IAutostartHost autostart, Action openSetup)
+    public SettingsPage(IAutostartHost autostart, Action openSetup, Action openNetwork)
         : base("Einstellungen", "Start, Aktualisierung und was sonst selten gebraucht wird.")
     {
         _autostart = autostart;
         _openSetup = openSetup;
+        _openNetwork = openNetwork;
 
         _updateState = new TextBlock($"Fassung {ClientUpdate.InstalledVersion()}");
 
@@ -88,6 +90,7 @@ public sealed class SettingsPage : PageView
         _updateAct.Click += async (_, _) => await UpdateStepAsync();
 
         Body.Add(AutostartCard());
+        Body.Add(NetworkCard());
         Body.Add(SetupCard());
         Body.Add(UpdateCard());
         Body.Add(AboutCard());
@@ -140,6 +143,30 @@ public sealed class SettingsPage : PageView
     /// Agent später nachzurüsten oder den Netzmodus zu wechseln ist derselbe
     /// Ablauf wie beim ersten Mal.
     /// </summary>
+    /// <summary>
+    /// Der Weg zum Netz — seit 31g von hier aus und nicht mehr aus der Leiste.
+    ///
+    /// Ein Netzmodus wird einmal eingestellt und danach nie wieder angefasst.
+    /// Neben etwas zu stehen, das man täglich benutzt, macht ihn nicht
+    /// zugänglicher, sondern nur auffälliger, als er sein sollte.
+    /// </summary>
+    private Card NetworkCard()
+    {
+        var card = new Card("Netz");
+        var open = new ThemedButton("Netz öffnen");
+
+        open.Click += (_, _) => _openNetwork();
+
+        card.Body.Add(new TextBlock(
+            "Unter welcher Adresse dieser Rechner erreichbar ist und über welches "
+            + "Netz — Heimnetz, Tailscale, Headscale oder ein anderer VPN-Anbieter. "
+            + "Dort steht auch, ob die Verbindung gerade steht."));
+
+        card.Body.Add(Row.Buttons(open));
+
+        return card;
+    }
+
     private Card SetupCard()
     {
         var card = new Card("Einrichtung");

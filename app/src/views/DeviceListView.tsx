@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { AgentClient } from '../lib/agentClient.ts'
 import { deviceLabel } from '../lib/deviceNames.ts'
 import { collectPeers } from '../lib/bothWays.ts'
-import { forgetLocalDevice, renameLocalDevice } from '../lib/deviceSources.ts'
+import { renameLocalDevice } from '../lib/deviceSources.ts'
+import { testConnection, type ConnectionReport } from '../lib/connectionTest.ts'
+import { removeDevice } from '../lib/removeDevice.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
+import { lastSeen } from '../lib/lastSeen.ts'
+import { ComputerIcon, PhoneIcon } from './icons.tsx'
 import type { Device, DeviceStatus } from '../lib/types.ts'
 
 /** Nach dem Wecken dauert das Hochfahren; so lange häufiger nachfragen. */
@@ -172,6 +176,10 @@ export function DeviceListView({
         const erreichbar = isOnline(device.id)
         const kandidat = findWakeCandidate(device, devices, online)
 
+        // Nur, solange das Gerät nicht erreichbar ist. Steht daneben „online",
+        // ist „zuletzt verbunden: gerade eben" keine Auskunft, sondern Lärm.
+        const zuletzt = lastSeen(device.lastConnectedAt)
+
         return (
           <div key={device.id} className="device-entry">
             <div className="device-card">
@@ -183,7 +191,27 @@ export function DeviceListView({
                 onClick={() => onSelect(device)}
               >
                 <span className={erreichbar ? 'status-dot online' : 'status-dot'} />
-                <span className="device-name">{deviceLabel(device)}</span>
+
+                {/* Was das Gerät ist — aus der Kopplung, nicht aus einer
+                    Anfrage: das Symbol steht auch dann da, wenn das Gerät
+                    gerade aus ist. Fehlt die Angabe, ist die Gegenstelle älter
+                    als Phase 31g; dann steht dort nichts, statt zu raten. */}
+                {device.platform !== undefined && (
+                  <span className="device-platform">
+                    {device.platform === 'android' ? (
+                      <PhoneIcon size={16} />
+                    ) : (
+                      <ComputerIcon size={16} />
+                    )}
+                  </span>
+                )}
+
+                <span className="device-title">
+                  <span className="device-name">{deviceLabel(device)}</span>
+                  {!erreichbar && zuletzt !== undefined && (
+                    <span className="device-seen">zuletzt verbunden {zuletzt}</span>
+                  )}
+                </span>
                 <span className="device-state">
                   {device.id === current?.id
                     ? 'verbunden'
@@ -225,6 +253,8 @@ export function DeviceListView({
             {managed === device.id && (
               <DevicePanel
                 device={device}
+                reachable={erreichbar}
+                onSelect={onSelect}
                 onDevices={onDevices}
                 onClose={() => setManaged(undefined)}
               />
@@ -257,39 +287,77 @@ export function DeviceListView({
  */
 function DevicePanel({
   device,
+  reachable,
+  onSelect,
   onDevices,
   onClose,
 }: {
   device: Device
+  reachable: boolean
+  onSelect: (device: Device) => void
   onDevices: (devices: Device[]) => void
   onClose: () => void
 }): React.JSX.Element {
   const [alias, setAlias] = useState(device.alias ?? '')
   const [note, setNote] = useState<string | undefined>(undefined)
   const [confirming, setConfirming] = useState(false)
-  const [testing, setTesting] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [report, setReport] = useState<ConnectionReport | undefined>(undefined)
 
   const test = async (): Promise<void> => {
-    setTesting(true)
+    setBusy(true)
     setNote(undefined)
 
     try {
-      const info = await new AgentClient(device).getInfo()
+      const fresh = await testConnection(device)
 
-      setNote(
-        `Erreichbar: ${info.hostname}${info.version === undefined ? '' : ` (Fassung ${info.version})`}.`,
-      )
-    } catch (failure) {
-      setNote(failure instanceof Error ? failure.message : String(failure))
+      setReport(fresh)
+      setNote(describeReport(device, fresh))
     } finally {
-      setTesting(false)
+      setBusy(false)
     }
   }
+
+  const remove = async (): Promise<void> => {
+    setBusy(true)
+
+    try {
+      const { devices, rest } = await removeDevice(device)
+
+      onDevices(devices)
+
+      if (rest === undefined) {
+        onClose()
+        return
+      }
+
+      // Nicht schließen: der Satz über den Rest drüben wäre sonst weg, bevor
+      // ihn jemand gelesen hat.
+      setNote(rest)
+      setConfirming(false)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Ausgegraut, solange es nichts zu verbinden gibt. Ein Knopf, der nur eine
+  // Fehlermeldung erzeugt, ist schlimmer als keiner.
+  //
+  // Was der Test herausgefunden hat, schlägt die bloße Erreichbarkeit: ein
+  // Handy ohne Bedienungshilfe antwortet, lässt sich aber nicht steuern, und
+  // ein Rechner ohne laufenden Agent antwortet gar nicht erst.
+  const steuerbar =
+    report === undefined
+      ? reachable
+      : report.reachable &&
+        (report.capabilities.length === 0 ||
+          report.capabilities.includes('screen') ||
+          report.capabilities.includes('input'))
 
   return (
     <div className="device-panel">
       <label className="field-label" htmlFor={`alias-${device.id}`}>
-        Name für diesen Rechner — gilt nur hier
+        Name für dieses Gerät — gilt nur hier
       </label>
       <input
         id={`alias-${device.id}`}
@@ -297,6 +365,18 @@ function DevicePanel({
         onChange={(event) => setAlias(event.target.value)}
         placeholder={device.name}
       />
+
+      <p className="device-hint">
+        {device.platform === 'android'
+          ? 'Ein Handy.'
+          : device.platform === 'windows'
+            ? 'Ein Rechner mit Windows.'
+            : 'Was für ein Gerät das ist, hat es beim Koppeln nicht gesagt — ' +
+              'dort läuft eine ältere Fassung.'}{' '}
+        {lastSeen(device.lastConnectedAt) === undefined
+          ? 'Verbunden war dieses Gerät hier noch nie.'
+          : `Zuletzt verbunden ${lastSeen(device.lastConnectedAt)}.`}
+      </p>
 
       <div className="device-panel-actions">
         <button
@@ -314,21 +394,37 @@ function DevicePanel({
           Namen übernehmen
         </button>
 
-        <button type="button" className="secondary" disabled={testing} onClick={() => void test()}>
-          {testing ? 'Teste…' : 'Verbindung testen'}
+        <button
+          type="button"
+          className="secondary"
+          disabled={!steuerbar || device.waker === true}
+          title={
+            device.waker === true
+              ? 'Ein Waker kann wecken und sonst nichts.'
+              : steuerbar
+                ? undefined
+                : 'Dieses Gerät antwortet gerade nicht oder gibt weder Bild noch Eingabe frei.'
+          }
+          onClick={() => onSelect(device)}
+        >
+          Verbinden
+        </button>
+
+        <button type="button" className="secondary" disabled={busy} onClick={() => void test()}>
+          {busy ? 'Teste…' : 'Verbindung testen'}
         </button>
 
         <button
           type="button"
           className="danger"
+          disabled={busy}
           onClick={() => {
             if (!confirming) {
               setConfirming(true)
               return
             }
 
-            onDevices(forgetLocalDevice(device.id))
-            onClose()
+            void remove()
           }}
         >
           {confirming ? 'Wirklich entfernen' : 'Entfernen'}
@@ -337,8 +433,10 @@ function DevicePanel({
 
       {confirming && (
         <p className="device-hint">
-          Damit ist dieser Rechner nur hier weg. Am Rechner selbst bleibt die Kopplung
-          bestehen, bis du sie dort unter „Geräte“ widerrufst.
+          Damit ist die Kopplung <strong>auf beiden Seiten</strong> weg: dieses Gerät
+          verschwindet hier aus der Liste, und drüben verliert es das Recht, diesen
+          Rechner zu steuern. Ist das andere Gerät gerade aus, wird hier trotzdem
+          entfernt — dann bleibt drüben ein Eintrag stehen, und das steht danach hier.
         </p>
       )}
 
@@ -349,4 +447,32 @@ function DevicePanel({
       )}
     </div>
   )
+}
+
+/**
+ * Aus dem Bericht wird ein Satz, der weiterhilft.
+ *
+ * „Antwortet nicht" verschweigt, ob es am Netz, am Vertrauen oder an einer
+ * fehlenden Freigabe liegt — und genau danach sucht man dann an der falschen
+ * Stelle.
+ */
+function describeReport(device: Device, report: ConnectionReport): string {
+  const hin = !report.reachable
+    ? `Nicht erreichbar: ${report.failure ?? 'kein Grund genannt'}`
+    : report.scopesThere === undefined
+      ? `${report.hostname ?? device.name} antwortet, kennt dieses Gerät aber nicht mehr — ` +
+        'dort ist die Kopplung weg. Neu koppeln.'
+      : `${report.hostname ?? device.name} antwortet. Dieses Gerät darf dort: ` +
+        `${report.scopesThere.join(', ') || 'nichts'}.`
+
+  const her =
+    device.peerClientId === undefined
+      ? 'Umgekehrt gibt es nichts: beim Koppeln hat die Gegenseite keinen Ausweis ' +
+        'mitgeschickt, dieses Gerät lässt sich von dort also nicht steuern.'
+      : report.scopesHere === undefined
+        ? 'Umgekehrt steht dieses Gerät nicht bereit: die Gegenseite steht hier nicht ' +
+          'in der Liste der zugelassenen Geräte. Noch einmal koppeln hilft.'
+        : `Umgekehrt darf sie hier: ${report.scopesHere.join(', ') || 'nichts'}.`
+
+  return `${hin} ${her}`
 }
