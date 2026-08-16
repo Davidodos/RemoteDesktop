@@ -126,7 +126,11 @@ async function setup(): Promise<{
   }
 
   return {
-    credentials: pairedCredentials('handy-1', key.privateKey, exchange as unknown as SessionExchange),
+    credentials: pairedCredentials(
+      'handy-1',
+      () => Promise.resolve(key.privateKey),
+      exchange as unknown as SessionExchange,
+    ),
     exchange,
   }
 }

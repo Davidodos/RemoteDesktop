@@ -47,7 +47,17 @@ export interface SessionExchange {
  */
 export function pairedCredentials(
   clientId: string,
-  privateKey: string,
+  /**
+   * Der private Schlüssel — als Frage und nicht als Wert.
+   *
+   * **Der Befund dahinter (16.08.2026):** er wurde vorher **synchron** aus dem
+   * Speicher der App gelesen, bevor überhaupt feststand, ob dort einer liegt.
+   * Seit 31h liegt er dort in aller Regel nicht: er gehört der Gegenstelle
+   * dieses Geräts (`clientkey.txt` bzw. `clientkey.json`), und die antwortet
+   * nur asynchron. Der Aufrufer fiel deshalb auf ein leeres Token zurück, und
+   * jede Anfrage ging ohne Berechtigung hinaus.
+   */
+  privateKey: () => Promise<string>,
   exchange: SessionExchange,
 ): Credentials {
   let token: string | undefined
@@ -65,7 +75,11 @@ export function pairedCredentials(
       // beim Start drei Anmeldungen gleichzeitig auslösen.
       pending ??= (async (): Promise<string> => {
         const nonce = await exchange.challenge(clientId)
-        const fresh = await exchange.open(clientId, nonce, await signChallenge(privateKey, nonce))
+        const fresh = await exchange.open(
+          clientId,
+          nonce,
+          await signChallenge(await privateKey(), nonce),
+        )
 
         token = fresh
         return fresh

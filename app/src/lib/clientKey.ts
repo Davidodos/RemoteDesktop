@@ -10,6 +10,9 @@
  * Abhängigkeit auf beiden Seiten.
  */
 
+import { getPlatform } from '../platform/index.ts'
+import { storage } from './storage.ts'
+
 const ALGORITHM: EcKeyGenParams = { name: 'ECDSA', namedCurve: 'P-256' }
 const SIGNATURE: EcdsaParams = { name: 'ECDSA', hash: 'SHA-256' }
 
@@ -88,4 +91,92 @@ function fromBase64(value: string): Uint8Array<ArrayBuffer> {
   }
 
   return bytes
+}
+
+/**
+ * Das eigene Schlüsselpaar.
+ *
+ * <p>
+ * Ein Paar für alle Rechner: die Identität dieses Geräts ist überall dieselbe,
+ * freigeschaltet wird sie bei jedem Agent einzeln.
+ * </p>
+ *
+ * <p>
+ * **Führt die Gegenstelle dieses Geräts eines, gilt ihres.** Am Rechner liegt
+ * es in `{app}\data\clientkey.json`, am Handy bei den übrigen Schlüsseln des
+ * Hosts — an beiden Stellen liest es außer dieser App auch der Server nebenan,
+ * und der braucht es: beim Koppeln schickt er den öffentlichen Teil mit, damit
+ * die Gegenseite dieses Gerät ohne einen zweiten Aufruf steuern darf.
+ * </p>
+ *
+ * <p>
+ * **Der Befund dahinter (16.08.2026):** vorher lag das Paar nur hier, und die
+ * App hinterlegte den öffentlichen Teil beim Start beim eigenen Server. Wer im
+ * Fenster nie die Fernsteuerung anzeigte, hinterlegte nie etwas — die
+ * Gegenseite bekam ein leeres `clientKey` und konnte diesen Rechner danach
+ * nicht steuern, ohne dass irgendwo stand, warum.
+ * </p>
+ *
+ * <p>
+ * Im Browser gibt es keine Gegenstelle. Dort bleibt es beim eigenen Speicher,
+ * und das ist richtig so: was niemand steuern kann, muss auch niemand kennen.
+ * </p>
+ */
+export async function ensureClientKey(): Promise<ClientKeyPair> {
+  const provided = await getPlatform()
+    .node.key()
+    .catch(() => undefined)
+
+  if (provided !== undefined) {
+    return provided
+  }
+
+  const existing = parseClientKey(storage.getClientKey())
+
+  if (existing !== undefined) {
+    return existing
+  }
+
+  const created = await createClientKey()
+  storage.setClientKey(JSON.stringify(created))
+
+  return created
+}
+
+function parseClientKey(raw: string | undefined): ClientKeyPair | undefined {
+  if (raw === undefined) {
+    return undefined
+  }
+
+  try {
+    const { publicKey, privateKey } = JSON.parse(raw) as Record<string, unknown>
+
+    // Ein halb geschriebener Eintrag wäre schlimmer als keiner: die Kopplung
+    // liefe durch und die Anmeldung scheiterte danach bei jedem Versuch.
+    if (typeof publicKey !== 'string' || typeof privateKey !== 'string') {
+      return undefined
+    }
+
+    return publicKey.length > 0 && privateKey.length > 0 ? { publicKey, privateKey } : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Nur der private Teil — für die Anmeldung bei einem Agent.
+ *
+ * <p>
+ * **Der Befund dahinter (16.08.2026):** der Transport las den Schlüssel
+ * **synchron** aus dem Speicher der App und fiel auf ein leeres Token zurück,
+ * wenn dort nichts stand. Seit 31h steht dort aber nichts mehr: der Ausweis
+ * liegt nativ, am Handy in `clientkey.txt`, am Rechner in
+ * `{app}\data\clientkey.json`. Solange noch ein Rest aus der Zeit davor im
+ * Speicher lag, fiel das nicht auf — nach einer wirklich sauberen
+ * Neuinstallation schickte die App jede Anfrage ohne Berechtigung los, und der
+ * Agent notierte „Abgelehnt (Nicht angemeldet.)" für jede einzelne.
+ * </p>
+ */
+export async function clientPrivateKey(): Promise<string> {
+  return (await ensureClientKey()).privateKey
 }

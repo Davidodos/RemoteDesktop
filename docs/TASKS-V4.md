@@ -932,6 +932,54 @@ Weg. Sie standen überall, erklärten in drei Absätzen, was ein Schalter selbst
 sagt, und haben jede Seite doppelt so lang gemacht wie nötig. Was an
 Erklärung bleibt, steht in einem Satz oder gar nicht.
 
+### Nachtrag — „Abgelehnt (Nicht angemeldet.)" nach der ersten sauberen Neuinstallation
+
+Am Gerät geprüft, und es ging nicht: nach der Kopplung wurde **jede** Anfrage
+abgewiesen, in beide Richtungen. Das Agent-Protokoll war eindeutig:
+
+```
+INFO  Kopplung in beide Richtungen mit Handy David (100.114.10.121:8443).
+WARN  Abgelehnt (Nicht angemeldet.): GET /api/info von ::ffff:100.114.10.121
+WARN  Abgelehnt (Nicht angemeldet.): GET /ws/screen von ::ffff:100.114.10.121
+```
+
+**„Nicht angemeldet"** und nicht „unbekannter Ausweis" — die App legte gar
+keine Berechtigung vor. Die Kopplung selbst war einwandfrei.
+
+Die Ursache lag in `transport/direct.ts`:
+
+```ts
+const key = readClientKey()                       // synchron, nur aus dem App-Speicher
+
+if (device.clientId !== undefined && key !== undefined) {
+  return pairedCredentials(device.clientId, key, sessionExchange(device))
+}
+
+return staticCredentials(device.token ?? '')      // -> Authorization: "Bearer "
+```
+
+Seit **31h** liegt der Ausweis nicht mehr im Speicher der Weboberfläche,
+sondern bei der Gegenstelle des Geräts — `clientkey.txt` am Handy,
+`{app}\data\clientkey.json` am Rechner —, und die antwortet nur asynchron.
+`readClientKey()` fand also nichts, und der Rückfall auf ein **leeres**
+Bearer-Token sah an jeder Aufrufstelle aus wie ein gültiger Ausweis.
+
+**Warum es monatelang nicht auffiel:** in jedem bisher benutzten Gerät lag noch
+ein Schlüssel aus der Zeit vor 31h im App-Speicher. Erst das Aufräumen bei der
+Deinstallation (siehe oben) hat einen wirklich leeren Zustand hergestellt — und
+damit den Fehler.
+
+Behoben: `credentialsFor` entscheidet nur noch an `clientId`, also daran, dass
+das Gerät gekoppelt *ist*, und `pairedCredentials` bekommt den privaten
+Schlüssel als **Frage** (`() => Promise<string>`) statt als Wert. Dahinter
+steht `clientPrivateKey()` → `ensureClientKey()`, das die native Quelle kennt.
+`ensureClientKey` ist dafür von `lib/pairing.ts` nach `lib/clientKey.ts`
+gewandert: `pairing.ts` holt sich `postJson` aus dem Transport, ein Zugriff in
+die Gegenrichtung wäre ein Kreis.
+
+Festgehalten in `transport/credentialsFor.test.ts` — insbesondere „ein
+gekoppeltes Gerät fällt nie auf ein leeres Token zurück".
+
 **Abnahme:** am echten Gerät noch zu prüfen — Erststart am Handy, Erststart am
 PC, Koppeln in beide Richtungen ohne Namensfelder, Umbenennen im laufenden
 Betrieb, und eine Deinstallation gefolgt von einer Neuinstallation.

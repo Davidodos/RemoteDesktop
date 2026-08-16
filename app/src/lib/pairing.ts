@@ -2,10 +2,14 @@ import { postJson } from '../transport/direct.ts'
 import { TransportError } from '../transport/index.ts'
 import type { PeerCredential } from './bothWays.ts'
 import { certificateFingerprint } from './certificateTrust.ts'
-import { clientFingerprint, createClientKey, type ClientKeyPair } from './clientKey.ts'
-import { getPlatform, type DeviceProfile } from '../platform/index.ts'
-import { storage } from './storage.ts'
+import { clientFingerprint, ensureClientKey } from './clientKey.ts'
+import { type DeviceProfile } from '../platform/index.ts'
 import type { Device } from './types.ts'
+
+// Weitergereicht, weil `bothWays.ts` ihn von hier holt — er wohnt seit dem
+// 16.08.2026 bei den übrigen Schlüsselsachen, damit auch der Transport an ihn
+// herankommt, ohne einen Kreis zu schließen.
+export { ensureClientKey }
 
 /**
  * Die Kopplung: einmal pro Rechner den angezeigten Code eintippen, danach nie
@@ -83,56 +87,6 @@ export interface PairedBothWays {
    * Gegenrichtung. Siehe `grantPeer`.
    */
   peer?: PeerCredential
-}
-
-/**
- * Das eigene Schlüsselpaar.
- *
- * <p>
- * Ein Paar für alle Rechner: die Identität dieses Geräts ist überall dieselbe,
- * freigeschaltet wird sie bei jedem Agent einzeln.
- * </p>
- *
- * <p>
- * **Führt die Gegenstelle dieses Geräts eines, gilt ihres.** Am Rechner liegt
- * es in `{app}\data\clientkey.json`, am Handy bei den übrigen Schlüsseln des
- * Hosts — an beiden Stellen liest es außer dieser App auch der Server nebenan,
- * und der braucht es: beim Koppeln schickt er den öffentlichen Teil mit, damit
- * die Gegenseite dieses Gerät ohne einen zweiten Aufruf steuern darf.
- * </p>
- *
- * <p>
- * **Der Befund dahinter (16.08.2026):** vorher lag das Paar nur hier, und die
- * App hinterlegte den öffentlichen Teil beim Start beim eigenen Server. Wer im
- * Fenster nie die Fernsteuerung anzeigte, hinterlegte nie etwas — die
- * Gegenseite bekam ein leeres `clientKey` und konnte diesen Rechner danach
- * nicht steuern, ohne dass irgendwo stand, warum.
- * </p>
- *
- * <p>
- * Im Browser gibt es keine Gegenstelle. Dort bleibt es beim eigenen Speicher,
- * und das ist richtig so: was niemand steuern kann, muss auch niemand kennen.
- * </p>
- */
-export async function ensureClientKey(): Promise<ClientKeyPair> {
-  const provided = await getPlatform()
-    .node.key()
-    .catch(() => undefined)
-
-  if (provided !== undefined) {
-    return provided
-  }
-
-  const existing = parseClientKey(storage.getClientKey())
-
-  if (existing !== undefined) {
-    return existing
-  }
-
-  const created = await createClientKey()
-  storage.setClientKey(JSON.stringify(created))
-
-  return created
 }
 
 /**
@@ -255,24 +209,4 @@ function describeFailure(cause: unknown, host: string): string {
   }
 
   return cause.serverMessage ?? `${host} antwortete mit HTTP ${cause.status}.`
-}
-
-function parseClientKey(raw: string | undefined): ClientKeyPair | undefined {
-  if (raw === undefined) {
-    return undefined
-  }
-
-  try {
-    const { publicKey, privateKey } = JSON.parse(raw) as Record<string, unknown>
-
-    // Ein halb geschriebener Eintrag wäre schlimmer als keiner: die Kopplung
-    // liefe durch und die Anmeldung scheiterte danach bei jedem Versuch.
-    if (typeof publicKey !== 'string' || typeof privateKey !== 'string') {
-      return undefined
-    }
-
-    return publicKey.length > 0 && privateKey.length > 0 ? { publicKey, privateKey } : undefined
-  } catch {
-    return undefined
-  }
 }

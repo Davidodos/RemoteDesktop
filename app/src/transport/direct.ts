@@ -1,4 +1,4 @@
-import { storage } from '../lib/storage.ts'
+import { clientPrivateKey } from '../lib/clientKey.ts'
 import type { Device } from '../lib/types.ts'
 import {
   pairedCredentials,
@@ -28,12 +28,23 @@ export function directTransport(device: Device, credentials = credentialsFor(dev
  * Wählt den Ausweis anhand dessen, was am Gerät hinterlegt ist. Gekoppelt
  * gewinnt: steht beides da, ist das Token nur ein Überbleibsel aus der Zeit
  * vor der Kopplung.
+ *
+ * <p>
+ * **Entschieden wird allein an `clientId`** — daran, dass dieses Gerät
+ * gekoppelt *ist*. Vorher hing die Entscheidung zusätzlich daran, ob im
+ * Speicher der App ein privater Schlüssel liegt, und das war seit 31h die
+ * falsche Frage: der Ausweis gehört seither der Gegenstelle dieses Geräts
+ * (`clientkey.txt` am Handy, `{app}\data\clientkey.json` am Rechner), und die
+ * antwortet nur asynchron. Solange noch ein Rest aus der Zeit davor im
+ * Speicher lag, fiel es nicht auf. Nach einer wirklich sauberen
+ * Neuinstallation fiel jede Anfrage auf `staticCredentials('')` zurück — ein
+ * leeres Bearer-Token —, und der Agent notierte für jede einzelne „Abgelehnt
+ * (Nicht angemeldet.)".
+ * </p>
  */
 export function credentialsFor(device: Device): Credentials {
-  const key = readClientKey()
-
-  if (device.clientId !== undefined && key !== undefined) {
-    return pairedCredentials(device.clientId, key, sessionExchange(device))
+  if (device.clientId !== undefined) {
+    return pairedCredentials(device.clientId, clientPrivateKey, sessionExchange(device))
   }
 
   return staticCredentials(device.token ?? '')
@@ -206,23 +217,6 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
   }
 
   return (await readBody(response)) as T
-}
-
-/** Das gespeicherte Schlüsselpaar, sofern es eins gibt. */
-function readClientKey(): string | undefined {
-  const raw = storage.getClientKey()
-
-  if (raw === undefined) {
-    return undefined
-  }
-
-  try {
-    const { privateKey } = JSON.parse(raw) as { privateKey?: unknown }
-
-    return typeof privateKey === 'string' && privateKey.length > 0 ? privateKey : undefined
-  } catch {
-    return undefined
-  }
 }
 
 /**
