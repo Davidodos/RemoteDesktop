@@ -173,15 +173,23 @@ begin
          SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
-{ Die Zwischenspeicher aller Benutzerprofile wegräumen.
-
-  [UninstallDelete] trifft nur {localappdata} des Kontos, unter dem die
-  Deinstallation läuft — und das ist bei einer erhöhten Deinstallation nicht
-  zwangsläufig das Konto, das RemoteDesktop benutzt hat. Deshalb hier noch
-  einmal über alle Profile: derselbe Ordner, überall.
-
-  Fehlschläge bleiben still. Ein Profil, an das der Uninstaller nicht
-  herankommt, ist kein Grund, eine Deinstallation abzubrechen. }
+// Die Zwischenspeicher aller Benutzerprofile wegräumen.
+//
+// Der Eintrag in UninstallDelete trifft nur das Profil des Kontos, unter dem
+// die Deinstallation läuft — und das ist bei einer erhöhten Deinstallation
+// nicht zwangsläufig das Konto, das RemoteDesktop benutzt hat. Deshalb hier
+// noch einmal über alle Profile: derselbe Ordner, überall.
+//
+// Fehlschläge bleiben still. Ein Profil, an das der Uninstaller nicht
+// herankommt, ist kein Grund, eine Deinstallation abzubrechen.
+//
+// Zwei Fallen stecken in diesem Kommentar, und beide haben zugeschlagen:
+// Inno prüft **jede** Zeile auf ein Abschnitts-Tag und trimmt dabei die
+// Einrückung — eine eingerückte Zeile, die mit einer eckigen Klammer beginnt,
+// ist ein „Invalid section tag". Und ein Kommentar in geschweiften Klammern
+// endet an der ersten schließenden Klammer, also mitten in einer Konstanten
+// wie der für das lokale Anwendungsdatenverzeichnis. Deshalb hier // statt
+// geschweifter Klammern.
 procedure RemoveUserCaches;
 var
   Profiles: String;
