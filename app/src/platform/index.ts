@@ -4,6 +4,7 @@
 // Leerlauf-Umsetzungen gibt, und ihre Felder wären `undefined`. Genau das war
 // der Fall, und es fiel erst auf, als jemand `platform.node` im Browser las.
 import type { HostService } from './host.ts'
+import type { DeviceIdentity } from './identity.ts'
 import type { LocalNode } from './localNode.ts'
 import type { SessionKeepAlive } from './session.ts'
 import type { TrustService } from './trust.ts'
@@ -137,6 +138,11 @@ export interface Platform {
    * Siehe `platform/localNode.ts`.
    */
   readonly node: LocalNode
+  /**
+   * Wie dieses Gerät heißt — einmal gewählt, bei jeder Kopplung benutzt.
+   * Siehe `platform/identity.ts`.
+   */
+  readonly identity: DeviceIdentity
 }
 
 export { PlatformError } from './errors.ts'
@@ -156,6 +162,7 @@ export {
   type DeviceProfile,
   type LocalNode,
 } from './localNode.ts'
+export { noIdentity, type DeviceIdentity, type IdentityState } from './identity.ts'
 export {
   noHost,
   type ConnectionRequest,

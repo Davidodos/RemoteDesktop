@@ -26,8 +26,15 @@ class HostRuntime private constructor(
     private val version: String,
     /** Die offenen Rückfragen „darf dieses Gerät jetzt verbinden?". */
     val connections: ConnectionRequests,
-    val deviceName: String,
 ) {
+
+    /**
+     * Wie dieses Handy heißt — bei jedem Zugriff frisch gelesen. Wer sich in
+     * den Einstellungen umbenennt, soll dafür weder den Host stoppen noch die
+     * App neu starten müssen.
+     */
+    val deviceName: String get() = deviceNameOf(context)
+
 
     private val agentFingerprint: String = identity.fingerprint
 
@@ -82,7 +89,6 @@ class HostRuntime private constructor(
 
         private fun create(context: Context): HostRuntime {
             val folder = File(context.filesDir, FOLDER).apply { mkdirs() }
-            val name = deviceNameOf(context)
 
             val clients = ClientStore(File(folder, "clients.json"))
             val codes = PairingCodes()
@@ -102,18 +108,20 @@ class HostRuntime private constructor(
                 version = versionOf(context),
                 // Jede Verbindung wird am Gerät einzeln bestätigt.
                 connections = ConnectionRequests(),
-                deviceName = name,
             )
         }
 
         /**
          * Wie das Handy heißt.
          *
-         * Zuerst der Name, den der Nutzer in den Einstellungen vergeben hat —
-         * „Davids Pixel" sagt mehr als „Pixel 8". Gibt es ihn nicht, bleibt das
-         * Modell.
+         * Zuerst der Name, der beim Erststart in dieser App vergeben wurde — er
+         * steht in fremden Gerätelisten, und dort ist „Handy" brauchbarer als
+         * „Pixel 8". Danach der Gerätename aus den Android-Einstellungen, zuletzt
+         * das Modell.
          */
-        private fun deviceNameOf(context: Context): String {
+        fun deviceNameOf(context: Context): String {
+            HostPreference.deviceName(context)?.let { return it }
+
             val chosen = runCatching {
                 Settings.Global.getString(context.contentResolver, "device_name")
             }.getOrNull()
@@ -183,7 +191,7 @@ class HostRuntime private constructor(
             pairing = pairing,
             codes = codes,
             material = material,
-            deviceName = deviceName,
+            deviceName = { deviceName },
             version = version,
             sessions = sessions,
             peers = peers,

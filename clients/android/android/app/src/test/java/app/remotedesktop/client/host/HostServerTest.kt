@@ -72,7 +72,7 @@ class HostServerTest {
             pairing = PairingService(clients, codes, ChallengeStore(), sessions),
             codes = codes,
             material = material,
-            deviceName = "Pixel",
+            deviceName = { "Pixel" },
             version = "1.9.0",
             port = 0,
             trustPort = 0,

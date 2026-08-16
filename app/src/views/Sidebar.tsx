@@ -3,6 +3,7 @@ import type { Capability } from '../lib/capabilities.ts'
 import { probeAll } from '../lib/reachability.ts'
 import type { Device, DeviceStatus } from '../lib/types.ts'
 import { deviceLabel } from '../lib/deviceNames.ts'
+import { getPlatform } from '../platform/index.ts'
 import {
   type IconComponent,
   KeyboardIcon,
@@ -77,7 +78,8 @@ export function pageAvailable(page: Page, abilities: readonly Capability[]): boo
 
 interface Props {
   devices: Device[]
-  current: Device
+  /** Das verbundene Gerät — `undefined`, solange keines verbunden ist. */
+  current?: Device
   page: Page
   /** Was das verbundene Gerät kann — siehe `lib/capabilities.ts`. */
   abilities: readonly Capability[]
@@ -87,11 +89,19 @@ interface Props {
 }
 
 /**
- * Die Seitenleiste hinter dem Burger-Menü: verbundenes Gerät, alle bekannten
- * Geräte und die eigenständigen Seiten.
+ * Die Seitenleiste hinter dem Burger-Menü: die gekoppelten Geräte und der Weg
+ * in die Einstellungen. Ist ein Gerät verbunden, kommen dessen Ansichten dazu.
  *
+ * <p>
+ * **Sie gibt es immer** — vorher erst, sobald etwas verbunden war. Damit war
+ * der eine Weg, den die App durchgehend anbietet, genau dann verschwunden, wenn
+ * man ihn braucht: bevor überhaupt etwas gekoppelt ist.
+ * </p>
+ *
+ * <p>
  * Der Online-Zustand wird hier selbst abgefragt statt in der App gehalten — die
  * Leiste ist meist zu, und dann muss auch nichts nachgesehen werden.
+ * </p>
  */
 export function Sidebar({
   devices,
@@ -129,18 +139,24 @@ export function Sidebar({
         onClick={(event) => event.stopPropagation()}
         aria-label="Hauptmenü"
       >
-        <div className="sidebar-device">
-          <span className="status-dot online" />
-          <span className="device-name">{deviceLabel(current)}</span>
-        </div>
+        {current !== undefined && (
+          <div className="sidebar-device">
+            <span className="status-dot online" />
+            <span className="device-name">{deviceLabel(current)}</span>
+          </div>
+        )}
 
         <span className="sidebar-label">Geräte</span>
+
+        {devices.length === 0 && (
+          <span className="sidebar-label">Noch keins gekoppelt</span>
+        )}
 
         {devices.map((device) => (
           <button
             key={device.id}
             type="button"
-            className={device.id === current.id ? 'sidebar-entry active' : 'sidebar-entry'}
+            className={device.id === current?.id ? 'sidebar-entry active' : 'sidebar-entry'}
             onClick={() => {
               onDevice(device)
               onClose()
@@ -151,25 +167,33 @@ export function Sidebar({
           </button>
         ))}
 
-        <span className="sidebar-label">App</span>
+        {/* Im Fenster nicht: dort steht „Einstellungen" in der nativen Leiste
+            daneben, und alles dahinter — Autostart, Updates, Einrichtung,
+            Netz — gehört ihr und nicht dieser Seite. Zwei Wege zu zwei
+            verschiedenen Einstellungsseiten wären einer zu viel. */}
+        {getPlatform().name !== 'webview2' && (
+          <>
+            <span className="sidebar-label">App</span>
 
-        <button
-          type="button"
-          className={
-            page === 'settings' || page === 'devices' || page === 'share'
-              ? 'sidebar-entry active'
-              : 'sidebar-entry'
-          }
-          onClick={() => {
-            onPage('settings')
-            onClose()
-          }}
-        >
-          <SettingsIcon />
-          <span className="device-name">Einstellungen</span>
-        </button>
+            <button
+              type="button"
+              className={
+                page === 'settings' || page === 'share'
+                  ? 'sidebar-entry active'
+                  : 'sidebar-entry'
+              }
+              onClick={() => {
+                onPage('settings')
+                onClose()
+              }}
+            >
+              <SettingsIcon />
+              <span className="device-name">Einstellungen</span>
+            </button>
+          </>
+        )}
 
-        <span className="sidebar-label">Ansichten</span>
+        {current !== undefined && <span className="sidebar-label">Ansichten</span>}
         {PAGES.filter(({ needs }) => abilities.includes(needs)).map(({ id, label, icon: Glyph }) => (
           <button
             key={id}

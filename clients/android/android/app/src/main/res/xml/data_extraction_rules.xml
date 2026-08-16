@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nichts verlässt dieses Gerät, und nichts kommt zurück.
+
+  `allowBackup="false"` schaltet seit Android 12 nur noch das Cloud-Backup ab.
+  Die Übertragung auf ein neues Gerät (device-to-device) ist ein zweiter Weg mit
+  eigenen Regeln — und über ihn wären der private Host-Schlüssel, der Ausweis
+  dieses Geräts und die Liste der zugelassenen Geräte auf ein anderes Handy
+  gewandert, das sich damit als dieses hier ausgeben könnte.
+
+  Beides ist deshalb hier ausdrücklich leer: was in `<cloud-backup>` und
+  `<device-transfer>` nicht drinsteht, wird nicht mitgenommen.
+
+  Der Nebeneffekt ist der gewünschte: nach einer Deinstallation ist wirklich
+  nichts mehr da. Android löscht `/data/data/app.remotedesktop.client` selbst;
+  ohne diese Datei hätte eine Neuinstallation den alten Stand aus der Sicherung
+  zurückgeholt.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

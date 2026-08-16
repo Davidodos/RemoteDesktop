@@ -52,12 +52,28 @@ public static class AgentData
             : new LocalProfile(
                 address,
                 AgentPort,
-                Environment.MachineName,
+                DeviceName(),
                 AuthorityFingerprint(),
                 AgentFingerprint(),
                 ClientKey()?.PublicKey,
                 DevicePlatform.Windows);
     }
+
+    /// <summary>
+    /// Wie dieser Rechner heißt: der gewählte Name, sonst der von Windows.
+    /// Dieselbe Datei, die auch der Agent für <c>/api/info</c> liest.
+    /// </summary>
+    public static string DeviceName() => DeviceNameFile.Read(Elevation.DataDirectory);
+
+    /// <summary>Ob schon jemand einen Namen vergeben hat.</summary>
+    public static bool DeviceNameSet() => DeviceNameFile.IsSet(Elevation.DataDirectory);
+
+    /// <summary>
+    /// Den Namen setzen. Er wirkt sofort — auch bei laufendem Agent, weil der
+    /// die Datei bei jedem Aufruf frisch liest.
+    /// </summary>
+    public static void SetDeviceName(string name) =>
+        DeviceNameFile.Write(Elevation.DataDirectory, name);
 
     /// <summary>
     /// Der Ausweis dieses Rechners als Client — angelegt, falls es ihn noch

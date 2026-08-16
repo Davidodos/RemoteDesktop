@@ -219,6 +219,9 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapPairingEndpoints(
     profile.AdvertisedAddress ?? CertificateLoader.DnsName(certificate),
     settings.Port,
+    // Bei jedem Aufruf frisch gelesen und nicht einmal beim Start: wer sich
+    // im Fenster umbenennt, soll dafür nicht den Agent neu starten müssen.
+    () => DeviceNameFile.Read(settings.DataDirectory),
     authority?.Fingerprint);
 app.MapActionEndpoints();
 app.MapWakeEndpoints();
@@ -252,7 +255,7 @@ app.MapGet("/api/info", (InputExecutor executor) =>
 
     return Results.Ok(new
     {
-        hostname = Environment.MachineName,
+        hostname = DeviceNameFile.Read(settings.DataDirectory),
 
         // Getrennt aktualisierbar heißt: die App trifft irgendwann auf einen
         // älteren Agent. Bei ungleichem `protocol` sagt sie klar, welche Seite

@@ -11,6 +11,7 @@ import type {
   HostPairingCode,
   HostService,
   HostStatus,
+  IdentityState,
   KeyValueStore,
   Platform,
   QrScanner,
@@ -288,6 +289,31 @@ const windowHost: HostService = {
 }
 
 /**
+ * Der Name dieses Rechners — aus `{app}\data\devicename.txt`, derselben
+ * Datei, die der Agent für `/api/info` liest.
+ *
+ * Gesetzt wird er hier nicht: am Rechner gehört das dem Fenster (Einrichtung
+ * und Einstellungen), nicht der Seite darin. Ein zweiter Weg zu derselben
+ * Einstellung wäre einer zu viel.
+ */
+const windowIdentity = {
+  read: async (): Promise<IdentityState> => {
+    const answer = await ask<Partial<IdentityState>>({ kind: 'local-identity' })
+
+    return {
+      name: answer.name ?? '',
+      chosen: answer.chosen === true,
+      firstRunDone: true,
+    }
+  },
+  rename: (): Promise<void> =>
+    Promise.reject(
+      new PlatformError('Der Name dieses Rechners steht im Fenster unter „Einstellungen".'),
+    ),
+  finishFirstRun: (): Promise<void> => Promise.resolve(),
+}
+
+/**
  * Ein Eintrag aus der Liste der zugelassenen Geräte. Geprüft und nicht
  * geglaubt: die Liste kommt bei gestopptem Agent aus einer Datei, die auch
  * eine ältere Fassung geschrieben haben kann.
@@ -463,5 +489,6 @@ export function webview2Platform(host: WebView2Host): Platform {
     // führen, die er dabei benutzt.
     host: windowHost,
     node: windowNode,
+    identity: windowIdentity,
   }
 }

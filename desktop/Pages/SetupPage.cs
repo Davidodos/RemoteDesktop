@@ -41,6 +41,9 @@ public sealed class SetupPage : PageView
 {
     private enum Step
     {
+        /// <summary>Wie dieser Rechner heißt — der Name, den fremde Listen zeigen.</summary>
+        Name,
+
         /// <summary>Was dieser Rechner können soll.</summary>
         Parts,
 
@@ -64,7 +67,8 @@ public sealed class SetupPage : PageView
     private readonly IAutostartHost _autostartHost;
     private readonly Func<Task> _finished;
 
-    private Step _step = Step.Parts;
+    private Step _step = Step.Name;
+    private string _deviceName = string.Empty;
     private bool _withAgent = true;
     private NetworkKind _kind = NetworkKind.Lan;
     private string _address = string.Empty;
@@ -81,6 +85,7 @@ public sealed class SetupPage : PageView
     /// </summary>
     private ThemedTextBox? _addressBox;
     private ThemedTextBox? _coordinatorBox;
+    private ThemedTextBox? _nameBox;
 
     /// <summary>
     /// Der „Weiter"-Knopf des Detailschritts und die Zeile darüber, die sagt,
@@ -119,8 +124,10 @@ public sealed class SetupPage : PageView
     /// </summary>
     public override Task RefreshAsync()
     {
-        if (_step == Step.Parts)
+        if (_step == Step.Name)
         {
+            _deviceName = AgentData.DeviceName();
+
             var profile = NetworkStore.Read();
             var autostart = Autostart.Read(_autostartHost);
 
@@ -146,7 +153,7 @@ public sealed class SetupPage : PageView
     /// <summary>Von vorn — der Weg, über den man die Einrichtung erneut startet.</summary>
     public void Restart()
     {
-        _step = Step.Parts;
+        _step = Step.Name;
         Forget();
     }
 
@@ -157,7 +164,10 @@ public sealed class SetupPage : PageView
     /// </summary>
     private List<Step> Steps()
     {
-        var steps = new List<Step> { Step.Parts, Step.Kind, Step.Details, Step.Windows };
+        var steps = new List<Step>
+        {
+            Step.Name, Step.Parts, Step.Kind, Step.Details, Step.Windows
+        };
 
         if (_withWindows && _withAgent)
         {
@@ -182,6 +192,7 @@ public sealed class SetupPage : PageView
 
         Body.Add(_step switch
         {
+            Step.Name => NameCard(),
             Step.Parts => PartsCard(),
             Step.Kind => KindCard(),
             Step.Details => DetailsCard(),
@@ -194,6 +205,11 @@ public sealed class SetupPage : PageView
     /// <summary>Was jemand getippt hat, bevor die Felder verschwinden.</summary>
     private void Remember()
     {
+        if (_nameBox is { IsDisposed: false })
+        {
+            _deviceName = _nameBox.Value;
+        }
+
         if (_addressBox is { IsDisposed: false })
         {
             _address = _addressBox.Value;
@@ -210,6 +226,7 @@ public sealed class SetupPage : PageView
     {
         _addressBox = null;
         _coordinatorBox = null;
+        _nameBox = null;
         _forward = null;
         _blocker = null;
     }
@@ -221,12 +238,56 @@ public sealed class SetupPage : PageView
 
         card.Body.Add(new TextBlock(_step switch
         {
+            Step.Name => "Wie dieser Rechner heißt.",
             Step.Parts => "Was dieser Rechner können soll.",
             Step.Kind => "Auf welchem Weg dein Handy ihn findet.",
             Step.Details => $"Was für „{Profile().Name()}“ nötig ist.",
             Step.Windows => "Ob RemoteDesktop mit Windows startet.",
             Step.AgentStart => "Ob der Agent dabei mitkommt.",
             _ => "Nachsehen und abschließen."
+        }));
+
+        return card;
+    }
+
+    /// <summary>
+    /// Der Name dieses Rechners — der erste Schritt, weil er der einzige ist,
+    /// den andere Geräte je zu sehen bekommen.
+    ///
+    /// <para>
+    /// **Der Befund dahinter:** es gab ihn nicht. Wer koppelte, tippte jedes Mal
+    /// neu ein, wie dieser Rechner drüben heißen soll; wer nur seinen Code
+    /// vorzeigte, hieß drüben <c>DESKTOP-4F2K9L1</c>. Jetzt steht er einmal in
+    /// <c>{app}\data\devicename.txt</c> und geht bei jeder Kopplung von allein
+    /// mit — siehe <see cref="DeviceNameFile"/>.
+    /// </para>
+    /// </summary>
+    private Card NameCard()
+    {
+        var card = new Card("Wie heißt dieser Rechner?");
+
+        card.Body.Add(new TextBlock(
+            "So steht er in den Listen der Geräte, mit denen du ihn koppelst."));
+
+        _nameBox = new ThemedTextBox
+        {
+            Value = _deviceName,
+            MaxLength = DeviceNameFile.MaxLength
+        };
+
+        card.Body.Add(_nameBox);
+        card.Body.Add(Navigation(back: false, next: () =>
+        {
+            Remember();
+
+            if (DeviceNameFile.Sanitize(_deviceName) is null)
+            {
+                Report("Ohne Namen geht es nicht.", Tone.Bad);
+
+                return;
+            }
+
+            Forward();
         }));
 
         return card;
@@ -710,6 +771,7 @@ public sealed class SetupPage : PageView
 
         var lines = new List<string>
         {
+            $"Name: {DeviceNameFile.Sanitize(_deviceName) ?? Environment.MachineName}",
             $"Dieser Rechner: {(_withAgent ? "steuert und wird gesteuert" : "steuert nur")}",
             $"Verbindung: {profile.Name()}",
             $"Adresse: {profile.AdvertisedAddress ?? "—"}"
@@ -787,6 +849,21 @@ public sealed class SetupPage : PageView
     private void Forward()
     {
         Remember();
+
+        // Der Name wird hier geschrieben und nicht erst beim Abschließen: er
+        // hängt an nichts, was Rechte verlangt, und wer den Assistenten in der
+        // Mitte verlässt, soll ihn trotzdem vergeben haben.
+        if (_step == Step.Name && DeviceNameFile.Sanitize(_deviceName) is { } chosen)
+        {
+            try
+            {
+                AgentData.SetDeviceName(chosen);
+            }
+            catch (Exception failure)
+            {
+                Report($"Der Name ließ sich nicht speichern: {failure.Message}", Tone.Bad);
+            }
+        }
 
         var steps = Steps();
         var index = steps.IndexOf(_step);

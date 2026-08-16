@@ -26,7 +26,7 @@ public sealed class OverviewPage : PageView
     private readonly Func<PartAction, Task> _perform;
 
     public OverviewPage(WindowsProbe probe, string? appDirectory, Func<PartAction, Task> perform)
-        : base("Übersicht", $"Dieser Rechner heißt {Environment.MachineName}.")
+        : base("Übersicht", "Was auf diesem Rechner steht.")
     {
         _probe = probe;
         _appDirectory = appDirectory;
@@ -50,9 +50,9 @@ public sealed class OverviewPage : PageView
     {
         var profile = NetworkStore.Read();
         var machine = await _probe.SnapshotAsync(_appDirectory);
-        var fingerprint = OwnFingerprint();
+        var name = AgentData.DeviceName();
 
-        var state = $"{machine}|{profile}|{fingerprint}";
+        var state = $"{machine}|{profile}|{name}";
 
         if (state == _shown)
         {
@@ -70,8 +70,6 @@ public sealed class OverviewPage : PageView
         {
             Body.Add(PartCard(part));
         }
-
-        Body.Add(FingerprintCard(fingerprint));
 
         // Erst jetzt gemerkt, nicht vorher: geht auf dem Weg hierher etwas
         // schief, muss der nächste Versuch es noch einmal probieren. Sonst
@@ -154,79 +152,6 @@ public sealed class OverviewPage : PageView
         button.Click += async (_, _) => await _perform(action);
 
         return button;
-    }
-
-    /// <summary>
-    /// Der Fingerabdruck der eigenen Zertifizierungsstelle. Er steht hier, weil
-    /// ihn jemand ablesen muss: am Handy und am anderen Rechner wird genau
-    /// dieser Wert zum Vergleich angezeigt, bevor dort etwas bestätigt wird.
-    /// Ohne den Vergleich wäre das Bestätigen wertlos.
-    /// </summary>
-    private Card FingerprintCard(string? value)
-    {
-        var card = new Card("Fingerabdruck dieses Rechners");
-
-        card.Body.Add(new TextBlock(
-            "Diesen Wert zeigt das Handy an, bevor es diesem Rechner vertraut. "
-            + "Stimmen beide überein, ist die Verbindung echt."));
-
-        if (value is null)
-        {
-            card.Body.Add(new TextBlock(
-                "Dieser Rechner weist sich (noch) nicht mit einer eigenen Stelle aus."));
-
-            return card;
-        }
-
-        var field = new ThemedTextBox { Value = value, ReadOnly = true };
-        field.UseMonospace();
-
-        var copy = new ThemedButton("Kopieren");
-
-        copy.Click += (_, _) =>
-        {
-            try
-            {
-                Clipboard.SetText(value);
-                Report("Der Fingerabdruck liegt in der Zwischenablage.", Tone.Good);
-            }
-            catch (Exception failure)
-            {
-                // Die Zwischenablage gehört dem ganzen System, und ein anderes
-                // Programm kann sie gerade halten. Daran darf das Fenster nicht
-                // sterben — der Wert steht ja im Feld daneben und lässt sich
-                // von Hand markieren.
-                Report($"Nicht in die Zwischenablage gekommen: {failure.Message}", Tone.Bad);
-            }
-        };
-
-        card.Body.Add(Row.Fill(field, copy));
-
-        return card;
-    }
-
-    private static string? OwnFingerprint()
-    {
-        var file = Path.Combine(Elevation.DataDirectory, "agentca.crt");
-
-        if (!File.Exists(file))
-        {
-            return null;
-        }
-
-        try
-        {
-            var hex = Convert.ToHexString(
-                System.Security.Cryptography.SHA256.HashData(
-                    File.ReadAllBytes(file))).ToLowerInvariant();
-
-            return string.Join(':', Enumerable.Range(0, hex.Length / 2)
-                .Select(index => hex.Substring(index * 2, 2)));
-        }
-        catch (IOException)
-        {
-            return null;
-        }
     }
 
     /// <summary>Der Weg nach draußen für die Tailscale-Seite.</summary>

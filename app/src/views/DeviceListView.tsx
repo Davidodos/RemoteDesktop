@@ -7,7 +7,6 @@ import { testConnection, type ConnectionReport } from '../lib/connectionTest.ts'
 import { removeDevice } from '../lib/removeDevice.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
-import { getPlatform } from '../platform/index.ts'
 import { lastSeen } from '../lib/lastSeen.ts'
 import { ComputerIcon, PhoneIcon } from './icons.tsx'
 import type { Device, DeviceStatus } from '../lib/types.ts'
@@ -28,14 +27,6 @@ interface Props {
   onError: (message: string) => void
   /** Nach Umbenennen oder Entfernen: die Liste, wie sie jetzt aussieht. */
   onDevices: (devices: Device[]) => void
-  /**
-   * Zurück zu den Einstellungen — gesetzt, wenn die Liste von dort aus
-   * aufgerufen wurde. Ohne diesen Weg wäre sie eine Sackgasse: in der
-   * Seitenleiste steht sie nicht mehr.
-   */
-  onBack?: () => void
-  /** Zu den Einstellungen — solange noch kein Gerät verbunden ist. */
-  onSettings?: () => void
 }
 
 /**
@@ -55,8 +46,6 @@ export function DeviceListView({
   onPair,
   onError,
   onDevices,
-  onBack,
-  onSettings,
 }: Props): React.JSX.Element {
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
 
@@ -155,23 +144,12 @@ export function DeviceListView({
   return (
     <div className="device-list">
       <div className="device-list-head">
-        {onBack !== undefined && (
-          <button type="button" className="link-button" onClick={onBack}>
-            ‹ Einstellungen
-          </button>
-        )}
-
-        <h1>Verbundene Geräte</h1>
-
-        {/* Im Fenster nicht: dort steht „Einstellungen" in der Leiste
-            daneben, und alles dahinter — Autostart, Updates, Einrichtung,
-            Netz — gehört ohnehin dem Fenster und nicht dieser Seite. */}
-        {onSettings !== undefined && getPlatform().name !== 'webview2' && (
-          <button type="button" className="link-button" onClick={onSettings}>
-            Einstellungen ›
-          </button>
-        )}
+        <h1>Geräte</h1>
       </div>
+
+      {devices.length === 0 && (
+        <p className="device-hint">Noch kein Gerät gekoppelt.</p>
+      )}
 
       {hinweis !== undefined && (
         <p className="device-hint" role="status">
@@ -297,7 +275,7 @@ export function DeviceListView({
           Knöpfe hätten eine Entscheidung verlangt, die vorher niemand treffen
           kann — beim Koppeln tun immer beide Seiten etwas. */}
       <button type="button" className="pair-button" onClick={onPair}>
-        Neues Gerät koppeln
+        Gerät koppeln
       </button>
 
       <button type="button" className="refresh-button" onClick={() => void refresh()}>
@@ -388,18 +366,6 @@ function DevicePanel({
 
   return (
     <div className="device-panel">
-      <p className="device-hint">
-        {device.platform === 'android'
-          ? 'Ein Handy.'
-          : device.platform === 'windows'
-            ? 'Ein Rechner mit Windows.'
-            : 'Was für ein Gerät das ist, hat es beim Koppeln nicht gesagt — ' +
-              'dort läuft eine ältere Fassung.'}{' '}
-        {lastSeen(device.lastConnectedAt) === undefined
-          ? 'Verbunden war dieses Gerät hier noch nie.'
-          : `Zuletzt verbunden ${lastSeen(device.lastConnectedAt)}.`}
-      </p>
-
       <div className="device-panel-actions">
         <button
           type="button"
@@ -407,10 +373,10 @@ function DevicePanel({
           disabled={!steuerbar || device.waker === true}
           title={
             device.waker === true
-              ? 'Ein Waker kann wecken und sonst nichts.'
+              ? 'Ein Waker kann nur wecken.'
               : steuerbar
                 ? undefined
-                : 'Dieses Gerät antwortet gerade nicht oder gibt weder Bild noch Eingabe frei.'
+                : 'Antwortet nicht oder gibt weder Bild noch Eingabe frei.'
           }
           onClick={() => onSelect(device)}
         >
@@ -440,10 +406,7 @@ function DevicePanel({
 
       {confirming && (
         <p className="device-hint">
-          Damit ist die Kopplung <strong>auf beiden Seiten</strong> weg: dieses Gerät
-          verschwindet hier aus der Liste, und drüben verliert es das Recht, diesen
-          Rechner zu steuern. Ist das andere Gerät gerade aus, wird hier trotzdem
-          entfernt — dann bleibt drüben ein Eintrag stehen, und das steht danach hier.
+          Die Kopplung geht auf beiden Seiten weg.
         </p>
       )}
 
@@ -485,7 +448,7 @@ function RenameRow({
       }}
     >
       <label className="field-label" htmlFor={`alias-${device.id}`}>
-        Name für dieses Gerät — gilt nur hier
+        Name — gilt nur hier
       </label>
 
       <div className="device-rename-row">
@@ -517,22 +480,18 @@ function RenameRow({
  * Stelle.
  */
 function describeReport(device: Device, report: ConnectionReport): string {
+  const name = report.hostname ?? device.name
+
   const hin = !report.reachable
     ? `Nicht erreichbar: ${report.failure ?? 'kein Grund genannt'}`
     : report.scopesThere === undefined
-      ? `${report.hostname ?? device.name} antwortet, kennt dieses Gerät aber nicht mehr — ` +
-        'dort ist die Kopplung weg. Neu koppeln.'
-      : `${report.hostname ?? device.name} antwortet. Dieses Gerät darf dort: ` +
-        `${report.scopesThere.join(', ') || 'nichts'}.`
+      ? `${name} antwortet, kennt dieses Gerät aber nicht mehr. Neu koppeln.`
+      : `${name}: ${report.scopesThere.join(', ') || 'nichts erlaubt'}.`
 
   const her =
-    device.peerClientId === undefined
-      ? 'Umgekehrt gibt es nichts: beim Koppeln hat die Gegenseite keinen Ausweis ' +
-        'mitgeschickt, dieses Gerät lässt sich von dort also nicht steuern.'
-      : report.scopesHere === undefined
-        ? 'Umgekehrt steht dieses Gerät nicht bereit: die Gegenseite steht hier nicht ' +
-          'in der Liste der zugelassenen Geräte. Noch einmal koppeln hilft.'
-        : `Umgekehrt darf sie hier: ${report.scopesHere.join(', ') || 'nichts'}.`
+    device.peerClientId === undefined || report.scopesHere === undefined
+      ? 'Zurück steht nichts bereit — neu koppeln.'
+      : `Zurück: ${report.scopesHere.join(', ') || 'nichts erlaubt'}.`
 
   return `${hin} ${her}`
 }

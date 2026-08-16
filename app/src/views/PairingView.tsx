@@ -5,12 +5,11 @@ import {
   certificateFingerprint,
   downloadAuthority,
   fetchAgentCertificate,
-  readable,
   TRUST_PORT,
 } from '../lib/certificateTrust.ts'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
-import { suggestAlias } from '../lib/deviceNames.ts'
 import { grantPeer } from '../lib/bothWays.ts'
+import { ownName } from '../lib/ownName.ts'
 import { pairBothWays } from '../lib/pairing.ts'
 import { DEFAULT_AGENT_PORT, parsePairingUri, type PairingTarget } from '../lib/pairingUri.ts'
 import { getPlatform } from '../platform/index.ts'
@@ -27,38 +26,32 @@ interface Props {
 }
 
 /**
- * Neues Gerät koppeln — eine Seite mit beiden Richtungen.
+ * Koppeln — eine Seite, beide Richtungen.
  *
  * <p>
- * **Oben: dieses Gerät anbieten** (Code, QR-Code, eigene Adresse). **Darunter:
- * ein anderes eintragen** (seine Adresse, sein Code). Beides gehört auf
- * dieselbe Seite, weil beim Koppeln immer beide Seiten etwas tun — wer nur die
- * eine Hälfte findet, sucht die andere in den Einstellungen.
+ * **Oben: dieses Gerät anbieten** (Code und QR-Code). **Darunter: ein anderes
+ * eintragen** — am Handy per Kamera oder von Hand, am Rechner nur von Hand.
+ * Beides gehört auf dieselbe Seite, weil beim Koppeln immer beide Seiten etwas
+ * tun.
  * </p>
  *
  * <p>
- * **Der Befund dahinter:** vorher füllte der Scan drei Eingabefelder, die
- * danach ausgefüllt dastanden und trotzdem angeschaut werden wollten. Adresse,
- * Port und Code sind aber nichts, worüber jemand entscheidet — sie stehen im
- * QR-Code und sind entweder richtig oder unbrauchbar. Entschieden wird nur über
- * die beiden Namen, und genau die stehen jetzt auf der zweiten Seite.
- * </p>
- *
- * <p>
- * Das Abtippen bleibt für alles ohne Kamera — im Browser und im Windows-Fenster
- * gibt es keinen Scanner, und ein Knopf, der nur eine Fehlermeldung erzeugt,
- * wäre schlimmer als keiner.
+ * **Es gibt nichts mehr einzutippen außer Adresse und Code.** Bis zum
+ * 16.08.2026 folgte darauf eine zweite Seite mit zwei Namensfeldern und
+ * mitunter eine dritte mit einem Fingerabdruck zum Vergleichen. Der eigene Name
+ * steht jetzt in den Einstellungen und geht von allein mit; die Gegenseite
+ * erscheint unter dem Namen, den sie sich selbst gegeben hat.
  * </p>
  */
 export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
-  const [target, setTarget] = useState<PairingTarget | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
 
   /**
-   * Gekoppelt, aber noch nicht fertig: ein Rechner ohne Tailscale weist sich
-   * mit einem selbst ausgestellten Zertifikat aus, und dem muss dieses Gerät
-   * erst vertrauen. Ohne diesen Zwischenschritt stünde er in der Liste und
-   * ließe sich nicht verbinden — ohne dass irgendwo steht, warum.
+   * Gekoppelt, aber noch nicht fertig: ein Gerät ohne Tailscale weist sich mit
+   * einem selbst ausgestellten Zertifikat aus, und dem muss dieses hier erst
+   * vertrauen. Ohne den Zwischenschritt stünde es in der Liste und ließe sich
+   * nicht verbinden.
    */
   const [awaitingTrust, setAwaitingTrust] = useState<
     { device: Device; devices: Device[]; warnung?: string } | undefined
@@ -66,14 +59,46 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
 
   const platform = getPlatform()
 
-  const scan = async (): Promise<void> => {
+  const pair = async (target: PairingTarget): Promise<void> => {
+    setBusy(true)
     setError(undefined)
 
     try {
-      setTarget(parsePairingUri(await platform.qr.scan()))
+      const { device, devices, trusted, warnung } = await pairWith(target)
+
+      // Nichts zu bestätigen — oder schon bestätigt, bevor gekoppelt wurde.
+      //
+      // Geprüft wird der Fingerabdruck und nicht bloß, ob das Feld gesetzt ist:
+      // ein `null` vom Agent bedeutet „nichts zu bestätigen", sah aber aus wie
+      // ein Wert. Siehe `certificateFingerprint`.
+      if (certificateFingerprint(device.caFingerprint) === undefined || trusted) {
+        onPaired(devices, device, warnung)
+
+        return
+      }
+
+      setAwaitingTrust({ device, devices, ...(warnung === undefined ? {} : { warnung }) })
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))
+    } finally {
+      setBusy(false)
     }
+  }
+
+  const scan = async (): Promise<void> => {
+    setError(undefined)
+
+    let target: PairingTarget
+
+    try {
+      target = parsePairingUri(await platform.qr.scan())
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure))
+
+      return
+    }
+
+    await pair(target)
   }
 
   if (awaitingTrust !== undefined) {
@@ -87,33 +112,9 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
     )
   }
 
-  if (target !== undefined) {
-    return (
-      <NameStep
-        target={target}
-        onBack={() => setTarget(undefined)}
-        onPaired={(devices, device, trusted, warnung) => {
-          // Nichts zu bestätigen — oder eben schon bestätigt, bevor gekoppelt
-          // wurde. Ein zweites Mal danach zu fragen wäre nur Weg.
-          //
-          // Geprüft wird der Fingerabdruck und nicht bloß, ob das Feld gesetzt
-          // ist: ein `null` vom Agent bedeutet „nichts zu bestätigen", sah aber
-          // aus wie ein Wert. Siehe `certificateFingerprint`.
-          if (certificateFingerprint(device.caFingerprint) === undefined || trusted) {
-            onPaired(devices, device, warnung)
-
-            return
-          }
-
-          setAwaitingTrust({ device, devices, ...(warnung === undefined ? {} : { warnung }) })
-        }}
-      />
-    )
-  }
-
   return (
     <div className="token-prompt pairing-page">
-      <h1>Neues Gerät koppeln</h1>
+      <h1>Gerät koppeln</h1>
 
       {error !== undefined && <p className="error-text">{error}</p>}
 
@@ -123,305 +124,38 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
       </section>
 
       <section className="settings-group">
-        <h2>Ein anderes Gerät eintragen</h2>
-        <p className="settings-hint">
-          Adresse und Code stehen dort unter „Geräte → Neues Gerät koppeln“.
-          Danach werden nur noch die beiden Namen vergeben.
-        </p>
+        <h2>Anderes Gerät eintragen</h2>
 
         {/* Ohne Kamera gibt es den Knopf nicht: einer, der nur eine
-            Fehlermeldung erzeugt, wäre schlimmer als keiner. */}
+            Fehlermeldung erzeugt, wäre schlimmer als keiner. Im Fenster und im
+            Browser bleibt das Formular darunter der Weg. */}
         {platform.capabilities.camera && (
-          <button type="button" onClick={() => void scan()}>
-            QR-Code scannen
+          <button type="button" disabled={busy} onClick={() => void scan()}>
+            {busy ? 'Koppeln…' : 'QR-Code scannen'}
           </button>
         )}
 
-        <ManualForm onTarget={setTarget} />
+        <ManualForm busy={busy} onTarget={(target) => void pair(target)} />
       </section>
 
-      <button type="button" className="secondary" onClick={onCancel}>
-        Zurück zu den Geräten
+      <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
+        Zurück
       </button>
     </div>
   )
 }
 
 /**
- * Die einzige Seite, auf der es etwas zu entscheiden gibt: wie dieses Gerät
- * drüben heißt, und wie die Gegenseite hier heißt.
- */
-function NameStep({
-  target,
-  onPaired,
-  onBack,
-}: {
-  target: PairingTarget
-  onPaired: (
-    devices: Device[],
-    paired: Device,
-    trusted: boolean,
-    warnung?: string,
-  ) => void
-  onBack: () => void
-}): React.JSX.Element {
-  const [label, setLabel] = useState(defaultLabel())
-
-  /**
-   * Die Stelle, die geholt wurde und noch niemand bestätigt hat. Solange sie
-   * hier steht, wird nicht gekoppelt.
-   */
-  const [offered, setOffered] = useState<
-    { base64: string; fingerprint: string } | undefined
-  >(undefined)
-
-  /** Ob die gezeigte Stelle bestätigt wurde — dann wird nicht erneut gefragt. */
-  const [confirmed, setConfirmed] = useState(false)
-  const [alias, setAlias] = useState(suggestAlias(target.host))
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | undefined>(undefined)
-
-  const platform = getPlatform()
-
-  /**
-   * Erst vertrauen, dann koppeln.
-   *
-   * <p>
-   * **Der Befund dahinter:** die Kopplung geht über `https`. Weist sich der
-   * Rechner mit einem selbst ausgestellten Zertifikat aus, scheitert schon
-   * dieser erste Aufruf — und die App meldete „der Rechner antwortet nicht",
-   * obwohl er antwortete. Bestätigt wurde die Stelle erst *nach* der Kopplung,
-   * also nie. Der Fingerabdruck aus dem QR-Code dreht die Reihenfolge um.
-   * </p>
-   */
-  const trust = async (): Promise<boolean> => {
-    const fingerprint = certificateFingerprint(target.caFingerprint)
-
-    if (fingerprint === undefined || !platform.trust.available) {
-      return false
-    }
-
-    // Nativ holen, wo die Umgebung das kann: die Seite läuft unter `https` und
-    // darf die Datei unter `http://…:8442` gar nicht erst anfragen.
-    const certificate =
-      platform.trust.fetchAuthority === undefined
-        ? await fetchAgentCertificate(target.host, fingerprint)
-        : verify(await platform.trust.fetchAuthority(target.host, TRUST_PORT), fingerprint)
-
-    await platform.trust.install(certificate.base64, certificate.fingerprint)
-
-    return true
-  }
-
-  const submit = async (): Promise<void> => {
-    setBusy(true)
-    setError(undefined)
-
-    /**
-     * Warum die Stelle nicht geholt werden konnte. Ein Fehlschlag dort ist für
-     * sich genommen keiner — bei einem Zertifikat von Tailscale gibt es nichts
-     * zu holen. Scheitert danach aber die Kopplung, ist er meist der Grund, und
-     * dann gehört er in die Meldung.
-     */
-    let hindernis: string | undefined
-
-    try {
-      // Ohne QR-Code kam kein Fingerabdruck mit. Dann wird die Stelle geholt
-      // und **gezeigt**: verglichen wird mit dem, was auf dem Bildschirm der
-      // Gegenstelle steht. Derselbe Anker wie beim Scannen, nur mit dem Auge
-      // statt der Kamera.
-      if (certificateFingerprint(target.caFingerprint) === undefined && !confirmed) {
-        const found = await discover(platform, target.host)
-
-        if (found.certificate !== undefined) {
-          setOffered(found.certificate)
-          setBusy(false)
-
-          return
-        }
-
-        hindernis = found.failure
-      }
-
-      const trusted = await trust()
-
-      // Der eigene Steckbrief geht mit. Ist dieses Gerät kein mögliches Ziel,
-      // gibt es keinen — dann bleibt es bei der einen Richtung, und das ist
-      // kein Fehler. Ob der eigene Host gerade läuft, spielt keine Rolle: der
-      // Steckbrief beschreibt, wie dieses Gerät erreichbar wäre.
-      const self = await platform.node.profile().catch(() => undefined)
-
-      // **Der eingetippte Name gilt, nicht der, den dieses Gerät von sich
-      // angibt.** Genau danach wird auf dieser Seite gefragt: „wie soll dieses
-      // Gerät am anderen heißen?". Er ging bisher nur in die `clients.json` der
-      // Gegenseite — in ihre Geräteliste kam der Selbstname aus dem Steckbrief,
-      // bei einem Handy also das, was unter „Gerätename" in den
-      // Android-Einstellungen steht. Wer „Handy" eintippte, fand drüben „David"
-      // wieder und konnte nicht wissen, woher das kam.
-      const steckbrief =
-        self === undefined ? undefined : { ...self, name: label.trim() }
-
-      const { device: paired, peer } = await pairBothWays({
-        host: target.host,
-        port: target.port,
-        code: target.code,
-        label: label.trim(),
-        ...(steckbrief === undefined ? {} : { self: steckbrief }),
-      })
-
-      // Und die andere Hälfte, ohne einen zweiten Aufruf über das Netz: die
-      // Gegenseite darf dieses Gerät steuern.
-      const warnung = await grantPeer(peer)
-
-      // Der eigene Name geht nirgendwo hin — er steht neben den Zugangsdaten
-      // dieses Geräts und sonst nirgends.
-      const device =
-        alias.trim().length > 0 ? { ...paired, alias: alias.trim() } : paired
-
-      onPaired(saveLocalDevice(device), device, trusted, warnung)
-    } catch (failure) {
-      const message = failure instanceof Error ? failure.message : String(failure)
-
-      setError(
-        hindernis === undefined
-          ? message
-          : `${message}\n\nDas Zertifikat dieses Geräts ließ sich vorher nicht ` +
-            `holen: ${hindernis}. Ohne bestätigte Stelle kann die Verbindung ` +
-            'nicht zustande kommen — das ist vermutlich der eigentliche Grund.',
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const ready = label.trim().length > 0
-
-  if (offered !== undefined) {
-    return (
-      <div className="token-prompt">
-        <h1>Ist das die richtige Stelle?</h1>
-        <p>
-          <code>{target.host}</code> weist sich mit einem{' '}
-          <strong>selbst ausgestellten</strong> Zertifikat aus. Ohne QR-Code kam
-          kein Vergleichswert mit — also vergleiche ihn selbst: auf dem anderen
-          Gerät steht derselbe Fingerabdruck unter „Geräte → Neues Gerät
-          koppeln“, gleich unter der Adresse.
-        </p>
-
-        <p className="fingerprint">
-          <small>{readable(offered.fingerprint)}</small>
-        </p>
-
-        <p>
-          Stimmen die beiden nicht überein, brich ab: dann sitzt jemand im Netz
-          dazwischen, oder es ist das falsche Gerät.
-        </p>
-
-        {error !== undefined && <p className="error-text">{error}</p>}
-
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            setBusy(true)
-            setError(undefined)
-
-            void platform.trust
-              .install(offered.base64, offered.fingerprint)
-              .then(
-                () => {
-                  setConfirmed(true)
-                  setOffered(undefined)
-                  setBusy(false)
-                },
-                (failure: unknown) => {
-                  setError(failure instanceof Error ? failure.message : String(failure))
-                  setBusy(false)
-                },
-              )
-          }}
-        >
-          Stimmt überein — weiter
-        </button>
-
-        <button type="button" className="secondary" onClick={onBack}>
-          Abbrechen
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <form
-      className="token-prompt"
-      onSubmit={(event) => {
-        event.preventDefault()
-
-        if (ready && !busy) {
-          void submit()
-        }
-      }}
-    >
-      <h1>Fast fertig</h1>
-      <p>
-        Das Gerät unter <code>{target.host}</code> ist erkannt. Fehlen nur noch die
-        Namen.
-      </p>
-
-      {certificateFingerprint(target.caFingerprint) !== undefined && (
-        <p>
-          Dieses Gerät weist sich mit einem <strong>selbst ausgestellten</strong>{' '}
-          Zertifikat aus. Beim Koppeln muss dieses hier der ausstellenden Stelle einmal
-          vertrauen; der Fingerabdruck stand im QR-Code und wird geprüft. Bei einem
-          Rechner mit Tailscale ist das vermeidbar: dort unter „Einstellungen → Netz“
-          das Zertifikat von Tailscale holen und den Agent neu starten — dann entfällt
-          dieser Schritt ganz.
-        </p>
-      )}
-
-      {error !== undefined && <p className="error-text">{error}</p>}
-
-      <label className="field-label" htmlFor="pair-label">
-        Name dieses Geräts — so steht es drüben in der Liste
-      </label>
-      <input
-        id="pair-label"
-        value={label}
-        onChange={(event) => setLabel(event.target.value)}
-        placeholder="z. B. Handy"
-      />
-
-      <label className="field-label" htmlFor="pair-alias">
-        Name für das andere Gerät — gilt nur hier und ist jederzeit änderbar
-      </label>
-      <input
-        id="pair-alias"
-        value={alias}
-        onChange={(event) => setAlias(event.target.value)}
-        placeholder="z. B. Arbeitsrechner"
-      />
-
-      <button type="submit" disabled={!ready || busy}>
-        {busy ? 'Koppeln…' : 'Koppeln'}
-      </button>
-
-      <button type="button" className="secondary" onClick={onBack} disabled={busy}>
-        Zurück
-      </button>
-    </form>
-  )
-}
-
-/**
  * Adresse und Code der Gegenseite — von Hand.
  *
- * Kein eigener Schritt mehr, sondern ein Feld auf derselben Seite: es ist der
- * einzige Weg ohne Kamera, und ein Knopf davor hätte ihn versteckt, wo er der
- * Normalfall ist.
+ * Der einzige Weg ohne Kamera und damit der Normalfall am Rechner. Ein Knopf
+ * davor hätte ihn versteckt.
  */
 function ManualForm({
+  busy,
   onTarget,
 }: {
+  busy: boolean
   onTarget: (target: PairingTarget) => void
 }): React.JSX.Element {
   const [host, setHost] = useState('')
@@ -435,13 +169,13 @@ function ManualForm({
       onSubmit={(event) => {
         event.preventDefault()
 
-        if (ready) {
+        if (ready && !busy) {
           onTarget({ host: host.trim(), port: DEFAULT_AGENT_PORT, code: code.trim() })
         }
       }}
     >
       <label className="field-label" htmlFor="pair-host">
-        Adresse des anderen Geräts
+        Adresse
       </label>
       <input
         id="pair-host"
@@ -454,7 +188,7 @@ function ManualForm({
       />
 
       <label className="field-label" htmlFor="pair-code">
-        Sein Kopplungscode
+        Code
       </label>
       <input
         id="pair-code"
@@ -465,83 +199,160 @@ function ManualForm({
         autoComplete="off"
       />
 
-      <button type="submit" disabled={!ready}>
-        Weiter
+      <button type="submit" disabled={!ready || busy}>
+        {busy ? 'Koppeln…' : 'Koppeln'}
       </button>
     </form>
   )
 }
 
-/**
- * Unter diesem Namen taucht das Gerät in der Liste der Gegenseite auf. Ein
- * brauchbarer Vorschlag ist wichtiger, als er aussieht: wer widerrufen will,
- * muss Monate später erkennen, welcher Eintrag welches Gerät ist.
- */
-function defaultLabel(): string {
-  return getPlatform().name === 'web' ? 'Browser' : 'Handy'
+/** Was nach einer Kopplung feststeht. */
+interface Paired {
+  device: Device
+  devices: Device[]
+  /** Ob der ausstellenden Stelle schon vertraut wurde. */
+  trusted: boolean
+  /** Warum die Gegenrichtung nicht zustande kam — meist gibt es keinen. */
+  warnung?: string
 }
 
 /**
- * Die Stelle der Gegenseite holen, ohne Vergleichswert.
+ * Die Kopplung selbst — erst vertrauen, dann koppeln.
  *
- * `undefined` heißt: es gibt keine — die Gegenstelle hat ein Zertifikat, dem
- * ohnehin jeder glaubt (Tailscale), oder der Port ist zu. Dann gibt es nichts
- * zu bestätigen, und die Kopplung läuft ohne diesen Schritt weiter.
+ * <p>
+ * **Die Reihenfolge ist der Punkt:** die Kopplung geht über `https`. Weist sich
+ * die Gegenseite mit einem selbst ausgestellten Zertifikat aus, scheitert schon
+ * der erste Aufruf, und die App meldete „antwortet nicht", obwohl geantwortet
+ * wurde.
+ * </p>
  */
-async function discover(
-  platform: ReturnType<typeof getPlatform>,
-  host: string,
-): Promise<Discovered> {
-  if (!platform.trust.available) {
-    return {}
-  }
+async function pairWith(target: PairingTarget): Promise<Paired> {
+  const platform = getPlatform()
+
+  /**
+   * Warum die ausstellende Stelle nicht geholt werden konnte. Für sich genommen
+   * kein Fehler — bei einem Zertifikat von Tailscale gibt es nichts zu holen.
+   * Scheitert danach die Kopplung, ist er meist der Grund.
+   */
+  let hindernis: string | undefined
 
   try {
-    const certificate =
-      platform.trust.fetchAuthority === undefined
-        ? await downloadAuthority(host)
-        : await platform.trust.fetchAuthority(host, TRUST_PORT)
+    const trusted = await trust(target)
 
-    return { certificate }
+    if (!trusted.ok) {
+      hindernis = trusted.failure
+    }
+
+    // Der eigene Steckbrief geht mit. Ist dieses Gerät kein mögliches Ziel,
+    // gibt es keinen — dann bleibt es bei der einen Richtung, und das ist kein
+    // Fehler. Ob der eigene Host gerade läuft, spielt keine Rolle: der
+    // Steckbrief beschreibt, wie dieses Gerät erreichbar wäre.
+    const self = await platform.node.profile().catch(() => undefined)
+
+    // **Der eingestellte Name gilt, nicht der, den das System vergibt.** Er
+    // steht sowohl in der `clients.json` der Gegenseite als auch in ihrer
+    // Geräteliste — vorher konnten die beiden auseinanderlaufen.
+    const name = await ownName()
+    const steckbrief = self === undefined ? undefined : { ...self, name }
+
+    const { device: paired, peer } = await pairBothWays({
+      host: target.host,
+      port: target.port,
+      code: target.code,
+      label: name,
+      ...(steckbrief === undefined ? {} : { self: steckbrief }),
+    })
+
+    // Und die andere Hälfte, ohne einen zweiten Aufruf über das Netz: die
+    // Gegenseite darf dieses Gerät steuern.
+    const warnung = await grantPeer(peer)
+
+    return {
+      device: paired,
+      devices: saveLocalDevice(paired),
+      trusted: trusted.ok,
+      ...(warnung === undefined ? {} : { warnung }),
+    }
   } catch (failure) {
-    // **Der Grund geht mit.** Vorher endete er hier, und der Ablauf lief weiter
-    // in die verschlüsselte Verbindung — die ohne bestätigte Stelle scheitern
-    // *muss*. Am Bildschirm stand danach „antwortet nicht", während die
-    // Gegenstelle nachweislich antwortete: erreichbar auf beiden Ports, das
-    // Zertifikat abholbar. Ein verschluckter Fehler an dieser Stelle kostet
-    // jeden, der ihn sucht, den Blick auf die eine Auskunft, die weiterhilft.
-    return { failure: failure instanceof Error ? failure.message : String(failure) }
+    const message = failure instanceof Error ? failure.message : String(failure)
+
+    throw new Error(
+      hindernis === undefined
+        ? message
+        : `${message} Das Zertifikat der Gegenseite ließ sich vorher nicht holen: ` +
+          `${hindernis}`,
+    )
   }
 }
 
-/**
- * Was beim Holen der Stelle herauskam.
- *
- * Beides fehlt, wo es nichts zu holen gibt — eine Umgebung ohne Vertrauensweg.
- * Das ist kein Fehler und bleibt still.
- */
-interface Discovered {
-  certificate?: { base64: string; fingerprint: string }
-  /** Warum es nicht ging. Steht später in der Meldung, falls die Kopplung scheitert. */
+/** Ob der ausstellenden Stelle der Gegenseite vertraut wurde. */
+interface Trusted {
+  ok: boolean
+  /** Warum nicht. Steht in der Meldung, falls danach die Kopplung scheitert. */
   failure?: string
 }
 
 /**
- * Was nativ geholt wurde, gegen den Fingerabdruck aus der Kopplung halten.
+ * Der ausstellenden Stelle der Gegenseite vertrauen.
  *
- * Die Prüfung steht hier ein zweites Mal, obwohl die Umgebung sie ebenfalls
- * machen könnte: sie ist der einzige Grund, warum das Zertifikat unverschlüsselt
- * kommen darf, und eine Prüfung, die nur an einer Stelle steht, ist eine, die
- * beim nächsten Umbau verschwindet.
+ * <p>
+ * **Mit Fingerabdruck aus dem QR-Code wird verglichen, ohne ihn nicht.** Das
+ * ist eine Abwägung und keine Nachlässigkeit: die Alternative wäre der
+ * Bildschirm, auf dem der Wert zum Ablesen stand — und der wurde nie abgelesen.
+ * Was bleibt, sichert der Kopplungscode: sechs Ziffern, fünf Minuten, genau
+ * eine Kopplung. Wer in genau diesem Fenster im Netz dazwischensitzt, kommt
+ * durch; wer es nicht tut, kommt nie wieder heran.
+ * </p>
+ */
+async function trust(target: PairingTarget): Promise<Trusted> {
+  const platform = getPlatform()
+  const expected = certificateFingerprint(target.caFingerprint)
+
+  if (!platform.trust.available) {
+    return { ok: false }
+  }
+
+  try {
+    // Nativ holen, wo die Umgebung das kann: die Seite läuft unter `https` und
+    // darf die Datei unter `http://…:8442` gar nicht erst anfragen.
+    const certificate =
+      platform.trust.fetchAuthority === undefined
+        ? expected === undefined
+          ? await downloadAuthority(target.host)
+          : await fetchAgentCertificate(target.host, expected)
+        : verify(await platform.trust.fetchAuthority(target.host, TRUST_PORT), expected)
+
+    await platform.trust.install(certificate.base64, certificate.fingerprint)
+
+    return { ok: true }
+  } catch (failure) {
+    // **Der Grund geht mit.** Verschluckt endete er hier, und der Ablauf lief
+    // weiter in die verschlüsselte Verbindung — die ohne bestätigte Stelle
+    // scheitern *muss*. Am Bildschirm stand danach „antwortet nicht", während
+    // die Gegenstelle nachweislich antwortete.
+    return { ok: false, failure: failure instanceof Error ? failure.message : String(failure) }
+  }
+}
+
+/**
+ * Was nativ geholt wurde, gegen den Fingerabdruck aus dem QR-Code halten.
+ *
+ * Ohne Vergleichswert gibt es nichts zu prüfen — dann gilt, was der Code
+ * absichert. Mit ihm wird geprüft, und zwar hier ein zweites Mal, obwohl die
+ * Umgebung es ebenfalls könnte: eine Prüfung, die nur an einer Stelle steht,
+ * verschwindet beim nächsten Umbau.
  */
 function verify(
   found: { base64: string; fingerprint: string },
-  expected: string,
+  expected: string | undefined,
 ): { base64: string; fingerprint: string } {
-  if (found.fingerprint.trim().toLowerCase() !== expected.trim().toLowerCase()) {
+  if (
+    expected !== undefined &&
+    found.fingerprint.trim().toLowerCase() !== expected.trim().toLowerCase()
+  ) {
     throw new Error(
-      'Das Zertifikat gehört nicht zu diesem Gerät. Nicht bestätigen — ' +
-        'im Netz sitzt jemand dazwischen, oder es ist das falsche Gerät.',
+      'Das Zertifikat gehört nicht zu diesem Gerät. Im Netz sitzt jemand ' +
+        'dazwischen, oder es ist das falsche Gerät.',
     )
   }
 

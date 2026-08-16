@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { readable } from '../lib/certificateTrust.ts'
 import { getPlatform } from '../platform/index.ts'
-import type { HostClient, HostPairingCode, HostStatus } from '../platform/index.ts'
+import type { HostPairingCode, HostStatus } from '../platform/index.ts'
 
 /** Wie oft die verbleibende Gültigkeit des Codes nachgerechnet wird. */
 const TICK_MS = 1000
@@ -12,37 +11,32 @@ const TICK_MS = 1000
  *
  * <p>
  * Ein Code, ein QR-Code und die eigene Adresse — mehr braucht die Gegenseite
- * nicht. Die Adresse steht ausdrücklich neben dem QR-Code und nicht statt
- * seiner: wer von einem Rechner aus koppelt, hat keine Kamera und tippt beides
- * ab.
+ * nicht. Die Adresse steht neben dem QR-Code und nicht statt seiner: wer von
+ * einem Rechner aus koppelt, hat keine Kamera und tippt beides ab.
  * </p>
  *
  * <p>
  * **Der Code verschwindet auf vier Wegen** — Ablauf (der Countdown steht
  * dabei), Benutzung, ein Knopf daneben und das Verlassen der Seite. Ein Code,
  * der noch dasteht, wenn er nicht mehr gilt, wird abgetippt und scheitert ohne
- * erkennbaren Grund; einer, der nach dem Einlösen stehen bleibt, sieht aus, als
- * ließe er sich noch einmal benutzen.
+ * erkennbaren Grund.
  * </p>
  *
  * <p>
- * Darunter steht, wer dieses Gerät steuern darf. Das gehört hierher und nicht
- * unter die Einstellungen: es ist dieselbe Frage wie die darüber, nur in der
- * Vergangenheitsform.
+ * **Was hier nicht mehr steht:** die Liste „wer dieses Gerät steuern darf" und
+ * der Fingerabdruck der eigenen Stelle. Die Liste sagte dasselbe wie die
+ * Geräteliste, nur an zweiter Stelle und mit einem zweiten Knopf zum Entfernen;
+ * der Fingerabdruck stand zum Vergleichen da und wurde nie verglichen.
  * </p>
  */
 export function PairingOffer(): React.JSX.Element {
   const host = getPlatform().host
 
   const [status, setStatus] = useState<HostStatus | undefined>(undefined)
-  const [clients, setClients] = useState<HostClient[]>([])
   const [pairing, setPairing] = useState<HostPairingCode | undefined>(undefined)
   const [remaining, setRemaining] = useState(0)
   const [qr, setQr] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
-
-  /** Wie viele Geräte beim letzten Nachsehen zugelassen waren. */
-  const bekannt = useRef(0)
 
   const hide = useCallback((): void => {
     setPairing(undefined)
@@ -51,26 +45,8 @@ export function PairingOffer(): React.JSX.Element {
 
   const refresh = useCallback((): void => {
     void host.status().then(setStatus, () => undefined)
+  }, [host])
 
-    void host.clients().then((fresh) => {
-      // **Ein benutzter Code verschwindet.** Dass jemand ihn eingelöst hat,
-      // sagt niemand ausdrücklich; es zeigt sich daran, dass die Liste um einen
-      // Eintrag gewachsen ist.
-      //
-      // Gezählt wird in einem Ref und nicht im Zustand: ein Vergleich in einer
-      // Zustandsfunktion müsste dort etwas anderes anstoßen, und die Funktion
-      // soll rechnen und nichts auslösen.
-      if (fresh.length > bekannt.current) {
-        hide()
-      }
-
-      bekannt.current = fresh.length
-      setClients(fresh)
-    }, () => undefined)
-  }, [host, hide])
-
-  // Beim Öffnen einmal, danach im Takt: nur so fällt auf, dass der Code eben
-  // benutzt wurde.
   useEffect(() => {
     refresh()
 
@@ -119,13 +95,7 @@ export function PairingOffer(): React.JSX.Element {
   }, [pairing])
 
   if (!host.available) {
-    return (
-      <p className="settings-hint">
-        Dieses Gerät lässt sich nicht anbieten — im Browser gibt es nichts, was
-        eine Gegenstelle wäre. Von hier aus koppeln geht trotzdem: dafür ist der
-        Bereich darunter da.
-      </p>
-    )
+    return <p className="settings-hint">Im Browser lässt sich dieses Gerät nicht anbieten.</p>
   }
 
   const running = status?.running === true
@@ -141,31 +111,24 @@ export function PairingOffer(): React.JSX.Element {
       {!running && (
         <p className="settings-hint">
           {host.toggleable
-            ? 'Dieses Gerät ist gerade nicht freigegeben. Einen Code gibt es erst, ' +
-              'wenn es das ist — unter „Einstellungen → Dieses Gerät freigeben“.'
-            : 'Der Agent läuft nicht. Einen Code kann nur er ausgeben und nur er ' +
-              'einlösen — starten im Fenster unter „Übersicht“.'}
+            ? 'Erst freigeben — der Code kommt vom laufenden Server. Einstellungen → Dieses Gerät freigeben.'
+            : 'Der Agent läuft nicht. Nur er gibt Codes aus. Starten unter „Übersicht“.'}
         </p>
       )}
 
       {running && pairing === undefined && (
-        <>
-          <p className="settings-hint">
-            Der Code gilt fünf Minuten und lässt genau eine Kopplung zu.
-          </p>
-          <button
-            type="button"
-            className="settings-entry"
-            onClick={() => {
-              setError(undefined)
-              void host.pairingCode().then(setPairing, (failure: unknown) => {
-                setError(failure instanceof Error ? failure.message : String(failure))
-              })
-            }}
-          >
-            <span>Kopplungscode anzeigen</span>
-          </button>
-        </>
+        <button
+          type="button"
+          className="settings-entry"
+          onClick={() => {
+            setError(undefined)
+            void host.pairingCode().then(setPairing, (failure: unknown) => {
+              setError(failure instanceof Error ? failure.message : String(failure))
+            })
+          }}
+        >
+          <span>Kopplungscode anzeigen</span>
+        </button>
       )}
 
       {running && pairing !== undefined && (
@@ -173,62 +136,25 @@ export function PairingOffer(): React.JSX.Element {
           <p className="pairing-code">{pairing.code}</p>
           <p className="settings-hint">Noch {remaining} Sekunden gültig.</p>
 
-          {qr === undefined ? (
-            <p className="settings-hint">
-              Für einen QR-Code fehlt die Adresse — abtippen geht trotzdem.
-            </p>
-          ) : (
+          {qr !== undefined && (
             <img className="pairing-qr" src={qr} alt="QR-Code zur Kopplung" />
           )}
 
           <button type="button" className="settings-entry" onClick={hide}>
-            <span>Code ausblenden</span>
+            <span>Ausblenden</span>
           </button>
         </>
       )}
 
       {/* Die Adresse steht auch ohne Code da: sie beschreibt, wie dieses Gerät
           erreichbar wäre, und wer von Hand koppelt, braucht sie zuerst. */}
-      <p className="settings-hint">
-        {address === undefined
-          ? 'Noch keine Adresse im Netz — ohne sie findet die Gegenseite dieses Gerät nicht.'
-          : 'Wer von Hand koppelt, trägt drüben diese Adresse ein:'}
-      </p>
-
-      {address !== undefined && <p className="pairing-code address">{address}</p>}
-
-      {status?.caFingerprint !== undefined && (
-        <>
-          <p className="settings-hint">
-            Ohne QR-Code kommt kein Vergleichswert mit. Dann zeigt die Gegenseite
-            den Fingerabdruck dieser Stelle an — er muss derselbe sein:
-          </p>
-          <p className="fingerprint">
-            <small>{readable(status.caFingerprint)}</small>
-          </p>
-        </>
-      )}
-
-      <h2>Wer dieses Gerät steuern darf</h2>
-
-      {clients.length === 0 ? (
-        <p className="settings-hint">Noch niemand.</p>
+      {address === undefined ? (
+        <p className="settings-hint">Noch keine Adresse im Netz.</p>
       ) : (
-        clients.map((client) => (
-          <div key={client.id} className="settings-entry">
-            <span>{client.label}</span>
-            <button
-              type="button"
-              onClick={() => {
-                void host.revoke(client.id).then(refresh, (failure: unknown) => {
-                  setError(failure instanceof Error ? failure.message : String(failure))
-                })
-              }}
-            >
-              Entfernen
-            </button>
-          </div>
-        ))
+        <>
+          <p className="settings-hint">Adresse für die Gegenseite:</p>
+          <p className="pairing-code address">{address}</p>
+        </>
       )}
     </>
   )

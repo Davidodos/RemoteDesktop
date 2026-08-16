@@ -298,6 +298,44 @@ class HostPlugin : Plugin() {
         call.resolve(JSObject().put("clients", array))
     }
 
+    /**
+     * Was dieses Gerät über sich selbst weiß: sein Name, und ob der Erststart
+     * schon durch ist.
+     *
+     * Beides liegt nativ und nicht im Speicher der Weboberfläche: der Name
+     * steht in `/api/info`, und der beantwortet auch dann, wenn keine Seite
+     * läuft.
+     */
+    @PluginMethod
+    fun identity(call: PluginCall) {
+        call.resolve(
+            JSObject()
+                .put("name", HostRuntime.deviceNameOf(context))
+                .put("chosen", HostPreference.deviceName(context) != null)
+                .put("firstRunDone", HostPreference.firstRunDone(context)),
+        )
+    }
+
+    @PluginMethod
+    fun setDeviceName(call: PluginCall) {
+        val name = call.getString("name")
+
+        if (name.isNullOrBlank()) {
+            call.reject("Ohne Namen geht es nicht.")
+            return
+        }
+
+        HostPreference.setDeviceName(context, name)
+        call.resolve(JSObject().put("name", HostRuntime.deviceNameOf(context)))
+    }
+
+    /** Der Erststart ist durch — er wird nicht wieder gestellt. */
+    @PluginMethod
+    fun markFirstRunDone(call: PluginCall) {
+        HostPreference.markFirstRunDone(context)
+        call.resolve()
+    }
+
     @PluginMethod
     fun revoke(call: PluginCall) {
         val id = call.getString("id")

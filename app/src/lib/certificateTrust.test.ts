@@ -3,7 +3,6 @@ import {
   certificateFingerprint,
   certificateUrl,
   fetchAgentCertificate,
-  readable,
   TrustError,
   TRUST_PORT,
   downloadAuthority,
@@ -86,11 +85,6 @@ describe('Zertifikat eines Agents holen', () => {
     await expect(
       fetchAgentCertificate('pc', 'a'.repeat(64), antwort(zertifikat, 404)),
     ).rejects.toThrow(TrustError)
-  })
-
-  test('der Fingerabdruck lässt sich vorlesen', () => {
-    // `a1b2c3…` vergleicht niemand von Hand, `a1:b2:c3` schon.
-    expect(readable('a1b2c3')).toBe('a1:b2:c3')
   })
 })
 

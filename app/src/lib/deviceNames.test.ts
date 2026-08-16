@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { deviceLabel, suggestAlias } from './deviceNames.ts'
+import { deviceLabel } from './deviceNames.ts'
 import type { Device } from './types.ts'
 
 const PC: Device = {
@@ -24,21 +24,5 @@ describe('wie ein Rechner in dieser App heißt', () => {
   test('ein leerer eigener Name zählt nicht', () => {
     // Sonst stünde in der Liste ein Gerät ohne Beschriftung.
     expect(deviceLabel({ ...PC, alias: '   ' })).toBe('DESKTOP-4711')
-  })
-})
-
-describe('der Vorschlag beim Koppeln', () => {
-  test('vom Namen im Tailnet bleibt der vordere Teil', () => {
-    expect(suggestAlias('pc.tailnet-1234.ts.net')).toBe('pc')
-  })
-
-  test('eine IP-Adresse bleibt, wie sie ist', () => {
-    // Sie hat auch Punkte, meint damit aber nichts Abkürzbares.
-    expect(suggestAlias('192.168.178.33')).toBe('192.168.178.33')
-    expect(suggestAlias('fd7a::1')).toBe('fd7a::1')
-  })
-
-  test('ein einzelner Name bleibt unverändert', () => {
-    expect(suggestAlias('laptop')).toBe('laptop')
   })
 })

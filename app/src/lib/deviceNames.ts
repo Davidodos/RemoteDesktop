@@ -14,24 +14,3 @@ export function deviceLabel(device: Device): string {
 
   return alias !== undefined && alias.length > 0 ? alias : device.name
 }
-
-/**
- * Ein brauchbarer Vorschlag für den eigenen Namen, aus dem, was schon dasteht.
- *
- * Bei `pc.tailnet-1234.ts.net` ist das `pc`: der vordere Teil ist der, den
- * jemand wiedererkennt, der Rest ist Verwaltung. Bei einer IP-Adresse gibt es
- * nichts zu kürzen — dort bleibt sie stehen, bis der Rechner seinen echten
- * Namen meldet.
- */
-export function suggestAlias(host: string): string {
-  const trimmed = host.trim()
-
-  // Eine IPv4-Adresse hat auch Punkte, meint damit aber nichts Abkürzbares.
-  if (/^[\d.]+$/.test(trimmed) || trimmed.includes(':')) {
-    return trimmed
-  }
-
-  const [first] = trimmed.split('.')
-
-  return first !== undefined && first.length > 0 ? first : trimmed
-}

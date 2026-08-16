@@ -4,6 +4,7 @@ import { PlatformError } from './errors.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
 // Werte direkt aus den definierenden Modulen — siehe web.ts.
 import { noHost } from './host.ts'
+import { noIdentity } from './identity.ts'
 import { noLocalNode, usableProfile } from './localNode.ts'
 import { noTrust } from './trust.ts'
 import type {
@@ -12,6 +13,8 @@ import type {
   HostPairingCode,
   HostService,
   HostStatus,
+  DeviceIdentity,
+  IdentityState,
   LocalNode,
   Capabilities,
   ClipboardAccess,
@@ -121,6 +124,9 @@ interface HostPlugin {
   localClientKey(): Promise<{ publicKey?: string; privateKey?: string }>
   clients(): Promise<{ clients: HostClient[] }>
   revoke(options: { id: string }): Promise<void>
+  identity(): Promise<{ name?: string; chosen?: boolean; firstRunDone?: boolean }>
+  setDeviceName(options: { name: string }): Promise<{ name?: string }>
+  markFirstRunDone(): Promise<void>
   answerConnection(options: { id: string; allow: boolean }): Promise<void>
   addListener(
     event: string,
@@ -404,6 +410,7 @@ export function capacitorPlatform(
     trust: certificateTrust(plugins),
     host: hostService(plugins),
     node: localNode(plugins),
+    identity: deviceIdentity(plugins),
   }
 }
 
@@ -470,6 +477,37 @@ function localNode(plugins: CapacitorPlugins): LocalNode {
  * wurde, soll weiterlaufen und die Freigabeseite gar nicht erst anbieten,
  * statt an einem Aufruf ins Leere zu scheitern.
  */
+/**
+ * Der eigene Name und der Erststart — beides führt das Host-Plugin, weil beides
+ * auch dann gelten muss, wenn keine Oberfläche offen ist.
+ *
+ * Ohne Plugin (im Testlauf, ohne Brücke) bleibt es bei der Leerlauf-Umsetzung:
+ * dann gibt es nichts zu benennen.
+ */
+function deviceIdentity(plugins: CapacitorPlugins): DeviceIdentity {
+  const plugin = plugins.host
+
+  if (plugin === undefined) {
+    return noIdentity
+  }
+
+  return {
+    read: async (): Promise<IdentityState> => {
+      const answer = await plugin.identity()
+
+      return {
+        name: answer.name ?? 'Handy',
+        chosen: answer.chosen === true,
+        firstRunDone: answer.firstRunDone === true,
+      }
+    },
+    rename: async (name: string): Promise<void> => {
+      await plugin.setDeviceName({ name })
+    },
+    finishFirstRun: () => plugin.markFirstRunDone(),
+  }
+}
+
 function hostService(plugins: CapacitorPlugins): HostService {
   const plugin = plugins.host
 

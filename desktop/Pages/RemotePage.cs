@@ -348,6 +348,19 @@ public sealed class RemotePage : Control
 
                 "local-clients" => new { clients = await LocalNode.ClientsAsync() },
 
+                // Der eigene Name. Er wird einmal in der Einrichtung vergeben
+                // und liegt in derselben Datei, die der Agent für /api/info
+                // liest — die Seite fragt danach und tippt ihn nicht ab.
+                "local-identity" => new
+                {
+                    name = AgentData.DeviceName(),
+                    chosen = AgentData.DeviceNameSet(),
+
+                    // Am Rechner führt der Erststart durch den Assistenten, und
+                    // der ist nativ. Die Seite fragt hier nie nach.
+                    firstRunDone = true
+                },
+
                 "trust-forget" => Vergessen(request.Fingerprint),
 
                 _ => throw new InvalidOperationException(

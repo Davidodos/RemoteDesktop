@@ -109,6 +109,20 @@ Name: "{app}\data"; Permissions: admins-full system-full users-modify
 ; Schlüssel wäre die unangenehmste Art von Rückstand.
 Type: filesandordirs; Name: "{app}\data"
 
+; Der Zwischenspeicher im Benutzerprofil: der Ordner von WebView2 (darin liegt
+; der localStorage der Oberfläche — also die Geräteliste des Fensters samt
+; Zugangsdaten) und die Absturzprotokolle.
+;
+; **Der Befund dahinter:** wer deinstallierte, den Programmordner löschte und
+; neu installierte, fand seine alten Geräte wieder — mitsamt Zugangsdaten zu
+; Kopplungen, die auf der Gegenseite längst weg waren. Der Uninstaller kannte
+; diesen Ordner nicht, weil ihn niemand angelegt hatte außer WebView2 selbst.
+;
+; {localappdata} zeigt auf das Profil des Benutzers, der deinstalliert. Läuft
+; die Deinstallation erhöht unter einem anderen Konto, greift zusätzlich die
+; Schleife in CurUninstallStepChanged weiter unten.
+Type: filesandordirs; Name: "{localappdata}\RemoteDesktop"
+
 [Icons]
 Name: "{group}\RemoteDesktop"; Filename: "{app}\{#Exe}"
 Name: "{group}\RemoteDesktop deinstallieren"; Filename: "{uninstallexe}"
@@ -157,6 +171,46 @@ begin
   if ServiceExists then
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#Service}', '',
          SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+{ Die Zwischenspeicher aller Benutzerprofile wegräumen.
+
+  [UninstallDelete] trifft nur {localappdata} des Kontos, unter dem die
+  Deinstallation läuft — und das ist bei einer erhöhten Deinstallation nicht
+  zwangsläufig das Konto, das RemoteDesktop benutzt hat. Deshalb hier noch
+  einmal über alle Profile: derselbe Ordner, überall.
+
+  Fehlschläge bleiben still. Ein Profil, an das der Uninstaller nicht
+  herankommt, ist kein Grund, eine Deinstallation abzubrechen. }
+procedure RemoveUserCaches;
+var
+  Profiles: String;
+  Search: TFindRec;
+begin
+  Profiles := ExpandConstant('{sd}\Users');
+
+  if not DirExists(Profiles) then
+    Exit;
+
+  if FindFirst(Profiles + '\*', Search) then
+  begin
+    try
+      repeat
+        if (Search.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0)
+           and (Search.Name <> '.') and (Search.Name <> '..') then
+          DelTree(Profiles + '\' + Search.Name
+                  + '\AppData\Local\RemoteDesktop', True, True, True);
+      until not FindNext(Search);
+    finally
+      FindClose(Search);
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    RemoveUserCaches;
 end;
 
 { Nichts weiter zu entscheiden.

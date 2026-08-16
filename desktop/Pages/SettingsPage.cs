@@ -54,6 +54,9 @@ public sealed class SettingsPage : PageView
     private readonly Action _openSetup;
     private readonly Action _openNetwork;
 
+    /// <summary>Der Gerätename. Er steht ganz oben — siehe <see cref="NameCard"/>.</summary>
+    private readonly ThemedTextBox _nameBox = new();
+
     public SettingsPage(IAutostartHost autostart, Action openSetup, Action openNetwork)
         : base("Einstellungen", "Start, Aktualisierung und was sonst selten gebraucht wird.")
     {
@@ -89,6 +92,7 @@ public sealed class SettingsPage : PageView
 
         _updateAct.Click += async (_, _) => await UpdateStepAsync();
 
+        Body.Add(NameCard());
         Body.Add(AutostartCard());
         Body.Add(NetworkCard());
         Body.Add(SetupCard());
@@ -101,7 +105,58 @@ public sealed class SettingsPage : PageView
     {
         Show(Autostart.Read(_autostart));
 
+        // Nicht überschreiben, während jemand tippt — sonst rutscht der
+        // Zeiger bei jedem Takt an den Anfang zurück.
+        if (!_nameBox.Focused)
+        {
+            _nameBox.Value = AgentData.DeviceName();
+        }
+
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Wie dieser Rechner heißt.
+    ///
+    /// <para>
+    /// Er steht ganz oben, weil er das Einzige ist, was andere Geräte von diesem
+    /// Rechner je zu sehen bekommen. Vergeben wird er im ersten Schritt der
+    /// Einrichtung; hier ist der Weg, ihn danach zu ändern — er wirkt sofort,
+    /// auch bei laufendem Agent.
+    /// </para>
+    /// </summary>
+    private Card NameCard()
+    {
+        var card = new Card("Name dieses Rechners");
+        var save = new ThemedButton("Übernehmen", ButtonTone.Primary);
+
+        _nameBox.MaxLength = DeviceNameFile.MaxLength;
+
+        save.Click += (_, _) =>
+        {
+            if (DeviceNameFile.Sanitize(_nameBox.Value) is not { } chosen)
+            {
+                Report("Ohne Namen geht es nicht.", Tone.Bad);
+
+                return;
+            }
+
+            try
+            {
+                AgentData.SetDeviceName(chosen);
+                _nameBox.Value = chosen;
+                Report($"Dieser Rechner heißt jetzt „{chosen}“.", Tone.Good);
+            }
+            catch (Exception failure)
+            {
+                Report($"Nicht gespeichert: {failure.Message}", Tone.Bad);
+            }
+        };
+
+        card.Body.Add(new TextBlock("So steht er in den Listen der gekoppelten Geräte."));
+        card.Body.Add(Row.Fill(_nameBox, save));
+
+        return card;
     }
 
     private void Show(AutostartMode mode)
@@ -158,9 +213,7 @@ public sealed class SettingsPage : PageView
         open.Click += (_, _) => _openNetwork();
 
         card.Body.Add(new TextBlock(
-            "Unter welcher Adresse dieser Rechner erreichbar ist und über welches "
-            + "Netz — Heimnetz, Tailscale, Headscale oder ein anderer VPN-Anbieter. "
-            + "Dort steht auch, ob die Verbindung gerade steht."));
+            "Adresse und Netzmodus — Heimnetz, Tailscale, Headscale oder eigenes VPN."));
 
         card.Body.Add(Row.Buttons(open));
 
@@ -175,11 +228,8 @@ public sealed class SettingsPage : PageView
         again.Click += (_, _) => _openSetup();
 
         card.Body.Add(new TextBlock(
-            "Nachträglich den Agent einrichten, den Netzmodus wechseln, die Adresse "
-            + "ändern oder das Zertifikat neu holen — derselbe Weg wie beim ersten "
-            + "Start. Er steht nur hier: in der Seitenleiste wäre er eine ständige "
-            + "Einladung, eine fertige Einrichtung noch einmal anzufassen. Die Adresse "
-            + "allein steht auch unter „Netz“."));
+            "Agent nachrüsten, Netzmodus wechseln, Zertifikat neu holen — derselbe "
+            + "Weg wie beim ersten Start."));
 
         card.Body.Add(Row.Buttons(again));
 
@@ -195,10 +245,7 @@ public sealed class SettingsPage : PageView
     {
         var card = new Card("Updates");
 
-        card.Body.Add(new TextBlock(
-            "Aktualisiert wird über den Installer. Er kennt die Komponenten, die beim "
-            + "letzten Mal gewählt waren, und richtet nichts nach, was du bewusst "
-            + "weggelassen hast."));
+        card.Body.Add(new TextBlock("Aktualisiert wird über den Installer."));
 
         card.Body.Add(Row.Fill(_updateState, _updateAct));
 

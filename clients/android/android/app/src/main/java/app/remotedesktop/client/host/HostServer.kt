@@ -24,7 +24,12 @@ class HostServer(
     private val pairing: PairingService,
     private val codes: PairingCodes,
     private val material: HostCertificate.Material,
-    private val deviceName: String,
+    /**
+     * Wie dieses Gerät heißt — als Frage und nicht als Wert: der Name ist
+     * änderbar, und ein Server, der den von seinem Start behielte, meldete
+     * nach einer Umbenennung den alten.
+     */
+    private val deviceName: () -> String,
     private val version: String,
     private val port: Int = DEFAULT_PORT,
     private val trustPort: Int = DEFAULT_TRUST_PORT,
@@ -344,7 +349,7 @@ class HostServer(
             .put("name", "Display")
 
         val json = JSONObject()
-            .put("hostname", deviceName)
+            .put("hostname", deviceName())
             .put("version", version)
             .put("protocol", PROTOCOL)
             .put("capabilities", JSONArray(HostScopes.CAPABILITIES))
@@ -422,7 +427,7 @@ class HostServer(
         val json = JSONObject()
             .put("clientId", client.id)
             .put("scopes", JSONArray(client.scopes))
-            .put("hostname", deviceName)
+            .put("hostname", deviceName())
             .put("agentPublicKey", identity.publicKey)
             .put("agentFingerprint", identity.fingerprint)
             // Was dieses Gerät ist — für das Symbol in der Geräteliste der
@@ -435,7 +440,7 @@ class HostServer(
             .put(
                 "peer",
                 JSONObject()
-                    .put("name", deviceName)
+                    .put("name", deviceName())
                     .put("clientKey", local.publicKey),
             )
 

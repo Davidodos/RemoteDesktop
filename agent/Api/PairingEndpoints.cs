@@ -30,7 +30,11 @@ public static class PairingEndpoints
     /// nicht mitliest: der Code steht auf dem Bildschirm des Rechners.
     /// </param>
     public static void MapPairingEndpoints(
-        this WebApplication app, string? hostName, int port, string? caFingerprint = null)
+        this WebApplication app,
+        string? hostName,
+        int port,
+        Func<string> deviceName,
+        string? caFingerprint = null)
     {
         // Nur vom Rechner selbst erreichbar (siehe ClientAuthMiddleware). Ab
         // Phase 11 drückt darauf ein Knopf im Fenster; bis dahin ist es der Weg,
@@ -53,10 +57,10 @@ public static class PairingEndpoints
                 // QR-Code. Er wird hier erzeugt und nicht dort, weil das Format
                 // damit an einer Stelle steht, die Tests hat.
                 //
-                // Der Name kommt aus dem Zertifikat und nicht aus
-                // Environment.MachineName: Letzterer ist der Windows-Name und
-                // hat mit dem Tailnet-Namen nichts zu tun. Ein QR mit dem
-                // falschen Namen sieht gültig aus und führt ins Leere.
+                // Der Name im QR-Code kommt aus dem Zertifikat und nicht aus
+                // der Namensdatei: er ist eine Adresse, kein Anzeigename. Ein
+                // QR mit dem falschen Namen sieht gültig aus und führt ins
+                // Leere.
                 pairingUri = hostName is null
                     ? null
                     : PairingUri.Build(hostName, port, code, caFingerprint)
@@ -82,7 +86,7 @@ public static class PairingEndpoints
                     {
                         host = hostName,
                         port,
-                        name = Environment.MachineName,
+                        name = deviceName(),
                         caFingerprint,
                         agentFingerprint = identity.Fingerprint,
                         clientKey = local.PublicKey,
@@ -189,7 +193,7 @@ public static class PairingEndpoints
             {
                 clientId = result.Client.Id,
                 scopes = result.Client.Scopes,
-                hostname = Environment.MachineName,
+                hostname = deviceName(),
                 agentPublicKey = identity.PublicKey,
                 agentFingerprint = identity.Fingerprint,
 
@@ -209,7 +213,7 @@ public static class PairingEndpoints
                 // ohne noch einmal ins Netz zu gehen.
                 peer = new
                 {
-                    name = Environment.MachineName,
+                    name = deviceName(),
                     clientKey = local.PublicKey
                 }
             });

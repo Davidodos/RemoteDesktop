@@ -4,6 +4,7 @@ import { noSessionKeepAlive } from './session.ts'
 // importiert ihrerseits diese Datei, und in einem Kreis entsteht das zuerst
 // Gefragte zuletzt. Die Vorgabe-Plattform hatte deshalb ein leeres `node`.
 import { noHost } from './host.ts'
+import { noIdentity } from './identity.ts'
 import { noLocalNode } from './localNode.ts'
 import { noTrust } from './trust.ts'
 import { noSurfaces } from './surfaces.ts'
@@ -152,4 +153,5 @@ export const webPlatform: Platform = {
   trust: noTrust,
   host: noHost,
   node: noLocalNode,
+  identity: noIdentity,
 }

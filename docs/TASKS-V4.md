@@ -806,6 +806,136 @@ Nach dem ersten Blick auf die gebaute Seite umgestellt:
 **Abnahme:** PC steuert Handy, Handy steuert Handy, Handy steuert PC — alles
 aus derselben Oberfläche. **Am echten Gerät noch zu prüfen.**
 
+
+---
+
+## Phase 31i — die Oberfläche aufgeräumt ✅ (16.08.2026, am Gerät noch zu prüfen)
+
+Nicht eine Funktion mehr, sondern weniger davon. Der Auslöser war ein Satz:
+„auf dem PC und dem Handy ist alles ziemlich unübersichtlich geworden."
+
+### Der eigene Gerätename — einmal, nicht jedes Mal
+
+**Der Befund:** der Name wurde bei *jeder* Kopplung neu eingetippt, und zwar
+zweimal — „wie heißt dieses Gerät drüben?" und „wie soll die Gegenseite hier
+heißen?". Wer drei Geräte koppelte, vergab denselben Namen dreimal und tippte
+ihn beim dritten Mal anders. Und wer gar nicht selbst koppelte, sondern nur
+seinen Code vorzeigte, hieß drüben `DESKTOP-4F2K9L1` — dann sprang der
+Systemname ein.
+
+Jetzt steht er an genau einer Stelle, und zwar **nativ**, nicht im Speicher der
+Weboberfläche: er geht in `/api/info`, und das beantwortet ein Gerät auch dann,
+wenn keine Seite offen ist.
+
+| | wo er liegt | wo er vergeben wird |
+|---|---|---|
+| PC | `{app}\data\devicename.txt` (`setup/DeviceNameFile.cs`) | erster Schritt der Einrichtung, danach Einstellungen |
+| Handy | `HostPreference` (`deviceName`) | erster Start, danach Einstellungen |
+
+Gelesen wird er **bei jedem Aufruf frisch** — `DeviceNameFile.Read` im Agent,
+`HostRuntime.deviceName` als berechnete Eigenschaft am Handy. Wer sich
+umbenennt, muss dafür weder den Agent neu starten noch die App. Deshalb nimmt
+`HostServer` den Namen als Funktion (`() -> String`) und nicht als Wert: ein
+Server, der den von seinem Start behielte, meldete nach einer Umbenennung den
+alten.
+
+Der zweite Name — der lokale Spitzname für die Gegenseite — ist beim Koppeln
+**weg**. Die Gegenseite erscheint unter dem Namen, den sie sich selbst gegeben
+hat; umbenennen geht weiterhin nachträglich in der Geräteliste.
+
+### Der Fingerabdruck ist weg
+
+Er stand an vier Stellen zum Vergleichen da — beim Koppeln, in der Übersicht des
+Fensters, im Kopplungsangebot, auf der Freigabeseite — und **verglichen hat ihn
+nie jemand**. Ein Sicherheitsschritt, den niemand ausführt, ist kein
+Sicherheitsschritt, sondern eine Zeile, die den Blick auf die nimmt, die zählen.
+
+Was bleibt: **kommt der Fingerabdruck über den QR-Code, wird er geprüft** — von
+der App, gegen das geholte Zertifikat (`verify` in `PairingView`). Ohne QR-Code
+gibt es keinen Vergleichswert; dann trägt der Kopplungscode allein: sechs
+Ziffern, fünf Minuten, genau eine Kopplung. **Das ist eine bewusste Abwägung
+und keine Nachlässigkeit.** Wer in genau diesem Fenster im Netz dazwischensitzt,
+kommt durch; wer es nicht tut, kommt nie wieder heran.
+
+### „Wer dieses Gerät steuern darf" ist weg
+
+Die Liste stand im Kopplungsangebot und sagte dasselbe wie die Geräteliste — nur
+an zweiter Stelle, mit einem zweiten Knopf zum Entfernen. Wer koppelt,
+entscheidet damit ohnehin genau darüber, wer darin steht. Entfernt wird jetzt
+an der einen Stelle, an der auch alles andere steht, und es wirkt weiterhin auf
+**beiden** Seiten (`DELETE /api/unpair`).
+
+### Was wo Sinn ergibt
+
+| | PC (Fenster) | Handy |
+|---|---|---|
+| QR-Code **zeigen** | ja | ja |
+| QR-Code **scannen** | nein (keine Kamera) | ja |
+| Adresse + Code eintippen | ja | ja |
+| Burger-Menü | nein (native Leiste daneben) | ja, **immer** |
+| Freigabe schalten | nein — das ist der Agent | ja |
+
+Das Burger-Menü gab es vorher erst, **sobald etwas verbunden war**. Damit war
+der eine durchgehende Weg durch die App genau dann verschwunden, wenn man ihn
+braucht: bevor überhaupt etwas gekoppelt ist. Es steht jetzt immer da und zeigt
+die gekoppelten Geräte und die Einstellungen; die Ansichten des verbundenen
+Geräts kommen dazu, sobald eines verbunden ist.
+
+Im Fenster fehlt der Eintrag „Einstellungen" in der Seitenleiste: dort steht er
+in der nativen Leiste daneben. Zwei Wege zu zwei verschiedenen
+Einstellungsseiten wären einer zu viel.
+
+### Der erste Start am Handy
+
+Zwei Fragen, dann ist die App benutzbar (`views/FirstRunView.tsx`):
+
+1. **Wie heißt dieses Gerät?**
+2. **Darf es ferngesteuert werden?** Ein „nein" ist der Normalfall und kostet
+   nichts. Bei „ja" geht es sofort weiter zu den beiden Rechten, die Android
+   verlangt — Bedienungshilfe und Bildschirmaufnahme. Sie später nachzureichen
+   hieße, dass am anderen Ende jemand wartend vor einem schwarzen Bild sitzt.
+
+Am Rechner gibt es diese Seite nicht: dort führt der Einrichtungsassistent, und
+der fragt jetzt als Erstes nach dem Namen.
+
+### Deinstallieren räumt wirklich auf
+
+**Der Befund:** wer deinstallierte, den Programmordner löschte und neu
+installierte, fand seine alten Geräte wieder — mitsamt Zugangsdaten zu
+Kopplungen, die auf der Gegenseite längst weg waren. Schuld war
+`%localappdata%\RemoteDesktop`: darin liegt der Zwischenspeicher von WebView2
+und damit der `localStorage` der Oberfläche, also die Geräteliste des Fensters.
+Der Uninstaller kannte den Ordner nicht, weil ihn niemand angelegt hatte außer
+WebView2 selbst.
+
+* **PC:** `[UninstallDelete]` räumt ihn im Profil des Deinstallierenden weg;
+  `CurUninstallStepChanged` geht zusätzlich über alle Profile unter
+  `{sd}\Users`, weil eine erhöhte Deinstallation unter einem anderen Konto
+  laufen kann.
+* **Handy:** Android löscht `/data/data/app.remotedesktop.client` selbst. Neu
+  ist `res/xml/data_extraction_rules.xml`: `allowBackup="false"` schaltet seit
+  Android 12 nur noch das Cloud-Backup ab, die Übertragung auf ein neues Gerät
+  ist ein zweiter Weg mit eigenen Regeln. Beide sind jetzt ausdrücklich leer —
+  sonst hätte eine Neuinstallation den alten Stand aus der Sicherung
+  zurückgeholt, und der private Host-Schlüssel wäre auf ein fremdes Handy
+  gewandert.
+
+**Was Android nicht hergibt:** ein Zertifikat, das der Nutzer in den
+Systemeinstellungen als vertrauenswürdige Stelle installiert hat, überlebt die
+Deinstallation. Es gibt dafür keine Schnittstelle. Wer restlos aufräumen will,
+entfernt es unter *Einstellungen → Sicherheit → Verschlüsselung und
+Anmeldedaten → Vertrauenswürdige Anmeldedaten → Nutzer*.
+
+### Und die langen Texte
+
+Weg. Sie standen überall, erklärten in drei Absätzen, was ein Schalter selbst
+sagt, und haben jede Seite doppelt so lang gemacht wie nötig. Was an
+Erklärung bleibt, steht in einem Satz oder gar nicht.
+
+**Abnahme:** am echten Gerät noch zu prüfen — Erststart am Handy, Erststart am
+PC, Koppeln in beide Richtungen ohne Namensfelder, Umbenennen im laufenden
+Betrieb, und eine Deinstallation gefolgt von einer Neuinstallation.
+
 ---
 
 # Teil B — Dateimanager

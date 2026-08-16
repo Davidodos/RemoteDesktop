@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fetchAgentCertificate, readable } from '../lib/certificateTrust.ts'
+import { fetchAgentCertificate } from '../lib/certificateTrust.ts'
 import type { Device } from '../lib/types.ts'
 import { getPlatform } from '../platform/index.ts'
 
@@ -10,16 +10,17 @@ interface Props {
 }
 
 /**
- * Der letzte Schritt der Kopplung, wenn der Rechner ohne Tailscale läuft.
+ * Der letzte Schritt der Kopplung — nur dort, wo der erste Anlauf nicht schon
+ * gereicht hat (siehe `PairingView`).
  *
- * Er stellt sich sein Zertifikat dann selbst aus, und dieses Gerät muss der
- * ausstellenden Stelle einmal vertrauen — sonst scheitert jede Verbindung,
+ * Die Gegenseite stellt sich ihr Zertifikat selbst aus, und dieses Gerät muss
+ * der ausstellenden Stelle einmal vertrauen. Sonst scheitert jede Verbindung,
  * bevor überhaupt ein Ausweis geprüft wird.
  *
- * Der Fingerabdruck steht hier, weil er das Einzige ist, was diesen Schritt
- * sicher macht: er kam über den Kopplungscode, also über den Bildschirm des
- * Rechners, und nicht über das Netz. Das Zertifikat selbst wird unverschlüsselt
- * geholt (anders geht es nicht) und nur angenommen, wenn beides zusammenpasst.
+ * Der Fingerabdruck aus der Kopplung wird **geprüft** und nicht angezeigt: er
+ * kam über den QR-Code und nicht über das Netz, und damit ist er ein
+ * Vergleichswert für die App, keine Aufgabe für einen Menschen. Angezeigt stand
+ * er hier lange — verglichen hat ihn nie jemand.
  */
 export function CertificateTrustStep({ device, onDone }: Props): React.JSX.Element {
   const [busy, setBusy] = useState(false)
@@ -62,28 +63,16 @@ export function CertificateTrustStep({ device, onDone }: Props): React.JSX.Eleme
       <h2>Zertifikat bestätigen</h2>
 
       <p>
-        <strong>{device.name}</strong> weist sich mit einem <strong>selbst ausgestellten</strong>{' '}
-        Zertifikat aus. Dein Handy muss der ausstellenden Stelle einmal vertrauen — danach nie
-        wieder, auch wenn sich die Adresse ändert.
-      </p>
-
-      <p>
-        Benutzt der Rechner Tailscale, ist das vermeidbar: dort im Fenster unter „Netz“ das
-        Zertifikat von Tailscale holen und den Agent neu starten. Dann ist der Aussteller
-        öffentlich bekannt und hier gibt es nichts mehr zu bestätigen.
-      </p>
-
-      <p className="fingerprint">
-        <small>{readable(fingerprint)}</small>
+        <strong>{device.name}</strong> stellt sein Zertifikat selbst aus. Dieses Gerät muss
+        der Stelle einmal vertrauen — danach nie wieder.
       </p>
 
       {manual && (
         <p className="hint">
-          Android lässt das seit Version 11 nicht mehr aus einer App heraus zu. Die Datei
-          <strong> RemoteDesktop-CA.crt</strong> liegt jetzt in deinen Downloads, und die
-          Einstellungen sind offen. Dort: <em>Sicherheit → Verschlüsselung und Anmeldedaten
-          → Zertifikat installieren → CA-Zertifikat</em>, dann die Datei auswählen. Danach
-          hier auf „Fertig“.
+          Android verlangt das seit Version 11 von Hand. <strong>RemoteDesktop-CA.crt</strong>{' '}
+          liegt in den Downloads, die Einstellungen sind offen: <em>Sicherheit →
+          Verschlüsselung und Anmeldedaten → Zertifikat installieren → CA-Zertifikat</em>.
+          Danach hier auf „Fertig“.
         </p>
       )}
 
@@ -110,8 +99,8 @@ export function CertificateTrustStep({ device, onDone }: Props): React.JSX.Eleme
 
       {!platform.trust.available && (
         <p className="hint">
-          In dieser Umgebung lässt sich das nicht aus der App heraus erledigen. Im Browser
-          erscheint stattdessen beim ersten Aufruf eine Warnung, die du einmal bestätigst.
+          Hier geht das nicht aus der App heraus. Im Browser erscheint beim ersten Aufruf
+          eine Warnung, die du einmal bestätigst.
         </p>
       )}
     </section>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AppUpdateView } from './AppUpdateView.tsx'
 import { DevicesIcon, ScreenIcon } from './icons.tsx'
+import { cleanName, MAX_NAME_LENGTH, useIdentity } from '../lib/ownName.ts'
 import { getPlatform } from '../platform/index.ts'
 
 interface Props {
@@ -16,21 +17,8 @@ interface Props {
 }
 
 /**
- * Die Einstellungen der App.
- *
- * <p>
- * **Der Befund dahinter:** hinter dem Burger-Menü stand „Alle Geräte
- * verwalten", und das war zugleich der einzige Ort, an dem es überhaupt etwas
- * einzustellen gab. Die Aktualisierung der App war zwar gebaut, hing aber in
- * der Power-Ansicht *eines* Rechners — an einer Stelle also, an der niemand
- * sucht, was die App selbst betrifft, und die es gar nicht gibt, solange kein
- * Gerät verbunden ist. Aus Sicht des Nutzers gab es die Funktion damit nicht.
- * </p>
- *
- * <p>
- * Jetzt führt der Weg über „Einstellungen": was die App angeht, steht hier, und
- * die Geräte sind ein Eintrag darin statt der Überschrift darüber.
- * </p>
+ * Die Einstellungen der App: der eigene Name, die Geräte, die Freigabe, die
+ * Fassung.
  */
 export function SettingsView({
   onDevices,
@@ -50,11 +38,10 @@ export function SettingsView({
     <div className="settings-view">
       <h1>Einstellungen</h1>
 
+      <NameCard />
+
       <section className="settings-group">
         <h2>Geräte</h2>
-        <p className="settings-hint">
-          Rechner umbenennen, entfernen oder einen neuen koppeln.
-        </p>
 
         <button type="button" className="settings-entry" onClick={onDevices}>
           <DevicesIcon />
@@ -64,14 +51,11 @@ export function SettingsView({
 
       {onShare !== undefined && platform.host.available && (
         <section className="settings-group">
-          <h2>Dieses Gerät</h2>
-          <p className="settings-hint">
-            Den eigenen Bildschirm für ein anderes Gerät freigeben.
-          </p>
+          <h2>Fernsteuerung dieses Geräts</h2>
 
           <button type="button" className="settings-entry" onClick={onShare}>
             <ScreenIcon />
-            <span>Dieses Gerät freigeben</span>
+            <span>Freigabe und Rechte</span>
           </button>
         </section>
       )}
@@ -79,7 +63,7 @@ export function SettingsView({
       <section className="settings-group">
         <h2>App</h2>
         <p className="settings-hint">
-          {version === undefined ? 'RemoteDesktop' : `RemoteDesktop, Fassung ${version}`}
+          {version === undefined ? 'RemoteDesktop' : `RemoteDesktop ${version}`}
         </p>
 
         {/* `asked`: hier hat jemand ausdrücklich nachgesehen. „Alles aktuell"
@@ -87,5 +71,101 @@ export function SettingsView({
         <AppUpdateView asked />
       </section>
     </div>
+  )
+}
+
+/**
+ * Der eigene Gerätename.
+ *
+ * Er steht ganz oben, weil er das Einzige ist, was andere Geräte von diesem
+ * hier zu sehen bekommen. Am Rechner ist er nur zu lesen: dort gehört das dem
+ * Fenster, und ein zweiter Weg zu derselben Einstellung wäre einer zu viel.
+ */
+function NameCard(): React.JSX.Element | null {
+  const { state, rename } = useIdentity()
+  const [draft, setDraft] = useState<string | undefined>(undefined)
+  const [error, setError] = useState<string | undefined>(undefined)
+
+  if (state === undefined) {
+    return null
+  }
+
+  const editable = getPlatform().name === 'capacitor'
+
+  if (!editable) {
+    return (
+      <section className="settings-group">
+        <h2>Dieses Gerät</h2>
+        <p className="settings-hint">
+          {state.name} — ändern im Fenster unter „Einstellungen“.
+        </p>
+      </section>
+    )
+  }
+
+  if (draft === undefined) {
+    return (
+      <section className="settings-group">
+        <h2>Dieses Gerät</h2>
+
+        <button
+          type="button"
+          className="settings-entry"
+          onClick={() => setDraft(state.name)}
+        >
+          <span>{state.name}</span>
+          <span aria-hidden="true">✎</span>
+        </button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="settings-group">
+      <h2>Dieses Gerät</h2>
+
+      <form
+        className="device-rename"
+        onSubmit={(event) => {
+          event.preventDefault()
+
+          if (cleanName(draft).length === 0) {
+            setError('Ein Name darf nicht leer sein.')
+
+            return
+          }
+
+          void rename(draft).then(
+            () => {
+              setDraft(undefined)
+              setError(undefined)
+            },
+            (failure: unknown) =>
+              setError(failure instanceof Error ? failure.message : String(failure)),
+          )
+        }}
+      >
+        <div className="device-rename-row">
+          <input
+            value={draft}
+            maxLength={MAX_NAME_LENGTH}
+            onChange={(event) => setDraft(event.target.value)}
+            autoFocus
+          />
+
+          <button type="submit" className="secondary">
+            Übernehmen
+          </button>
+
+          <button type="button" className="secondary" onClick={() => setDraft(undefined)}>
+            Abbrechen
+          </button>
+        </div>
+      </form>
+
+      {error !== undefined && <p className="error-text">{error}</p>}
+
+      <p className="settings-hint">So steht dieses Gerät in fremden Listen.</p>
+    </section>
   )
 }

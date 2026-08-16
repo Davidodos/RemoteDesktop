@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import { readable } from '../lib/certificateTrust.ts'
 import { getPlatform } from '../platform/index.ts'
 import type { HostStatus } from '../platform/index.ts'
 
@@ -8,15 +7,20 @@ interface Props {
 }
 
 /**
- * „Dieses Gerät steuerbar machen" — die andere Richtung.
+ * „Darf dieses Gerät ferngesteuert werden?" — die andere Richtung.
  *
- * Bis V4 war die App ausschließlich Fernbedienung. Hier wird das Handy selbst
- * zum Ziel: es spricht dasselbe Protokoll wie ein Windows-Agent, und wer es
- * steuern will, koppelt sich genauso wie an einen PC.
+ * <p>
+ * Am Handy ist das ein Schalter: der Server lebt mit der App. Am Rechner ist es
+ * eine Auskunft — freigegeben ist er, solange sein Agent läuft, und den startet
+ * nicht die Oberfläche.
+ * </p>
  *
- * Die Seite sagt beim Einschalten ausdrücklich, was das bedeutet. Ein Schalter,
- * der ein Handy von außen erreichbar macht, gehört nicht kommentarlos neben die
- * Aktualisierungsprüfung.
+ * <p>
+ * **Was hier nicht mehr steht:** der Fingerabdruck der eigenen Stelle (stand
+ * zum Vergleichen da und wurde nie verglichen), der Verweis auf die
+ * Kopplungsseite und drei Absätze darüber, was eine Freigabe bedeutet. Der
+ * Schalter sagt es selbst.
+ * </p>
  */
 export function ShareView({ onBack }: Props): React.JSX.Element {
   const host = getPlatform().host
@@ -40,9 +44,7 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
       <div className="settings-view">
         <Header onBack={onBack} />
         <p className="settings-hint">
-          Steuerbar machen lässt sich nur die Android-App. An diesem Rechner
-          übernimmt das der Agent — er läuft neben dem Fenster und wird in der
-          Einrichtung eingeschaltet.
+          An diesem Rechner übernimmt das der Agent — siehe „Übersicht“.
         </p>
       </div>
     )
@@ -76,48 +78,24 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
       {error !== undefined && <p className="error-text">{error}</p>}
 
       <section className="settings-group">
-        <h2>Dieses Gerät darf ferngesteuert werden</h2>
-
-        {/* Am Handy ist das ein Schalter: der Server lebt mit der App. Am
-            Rechner ist es eine Auskunft — freigegeben ist er, solange sein
-            Agent läuft, und den startet nicht die Oberfläche. Ein Schalter
-            hier meinte etwas, das ihr nicht gehört. */}
         <p className="settings-hint">
           {host.toggleable
             ? running
-              ? 'Eingeschaltet. Der Server läuft, solange diese App offen ist — ' +
-                'und endet mit ihr. Er überlebt, dass die App im Hintergrund ist ' +
-                'oder der Bildschirm ausgeht; daran erinnert die Benachrichtigung.'
-              : 'Ausgeschaltet. Solange das so bleibt, ist dieses Handy von außen ' +
-                'nicht erreichbar — auch nicht von einem Gerät, das schon ' +
-                'gekoppelt ist.'
+              ? 'Eingeschaltet. Läuft, solange die App nicht weggewischt wird. Jede Verbindung wird einzeln bestätigt.'
+              : 'Ausgeschaltet. Dieses Gerät ist von außen nicht erreichbar.'
             : running
-              ? 'Der Agent läuft — dieser Rechner ist für gekoppelte Geräte ' +
-                'erreichbar. Beenden lässt er sich im Fenster unter ' +
-                '„Einstellungen".'
-              : 'Der Agent läuft nicht. Dieser Rechner ist damit von außen nicht ' +
-                'erreichbar — koppeln geht trotzdem, gesteuert werden kann er ' +
-                'erst wieder, wenn er läuft. Starten im Fenster unter ' +
-                '„Einstellungen".'}
+              ? 'Der Agent läuft — dieser Rechner ist erreichbar.'
+              : 'Der Agent läuft nicht. Koppeln geht trotzdem, steuern nicht.'}
         </p>
 
         {host.toggleable && (
-          <>
-            <p className="settings-hint">
-              Jede Verbindung wird hier außerdem einzeln bestätigt: es erscheint eine
-              Karte, und ohne Antwort gilt die Anfrage nach einer halben Minute als
-              abgelehnt. Eine Kopplung sagt, <em>wer</em> fragen darf — dass jetzt
-              gerade jemand zusehen darf, sagt nur ein Mensch.
-            </p>
-
-            <button type="button" className="settings-entry" onClick={toggle} disabled={busy}>
-              <span>{running ? 'Ausschalten' : 'Einschalten'}</span>
-            </button>
-          </>
+          <button type="button" className="settings-entry" onClick={toggle} disabled={busy}>
+            <span>{running ? 'Ausschalten' : 'Einschalten'}</span>
+          </button>
         )}
       </section>
 
-      {(running || !host.toggleable) && (
+      {running && (
         <section className="settings-group">
           <h2>Erreichbar als</h2>
           <p className="settings-hint">{status?.deviceName ?? 'Dieses Gerät'}</p>
@@ -131,34 +109,6 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
               ? `${status.addresses[0]}:${status.port}`
               : 'noch keine Adresse im Netz'}
           </p>
-
-          {status !== undefined && status.addresses.length > 1 && (
-            <p className="settings-hint">
-              Über ein zweites Netz erreichbar als{' '}
-              {status.addresses
-                .slice(1)
-                .map((address) => `${address}:${status.port}`)
-                .join(' · ')}
-            </p>
-          )}
-          <p className="settings-hint">
-            Die Adresse kommt vom Router und kann sich ändern. Wer dieses Handy
-            dauerhaft erreichen will, trägt im Router eine feste Adresse ein —
-            oder benutzt Tailscale, wo der Name bleibt.
-          </p>
-
-          {status?.caFingerprint !== undefined && (
-            <>
-              <p className="settings-hint">
-                Fingerabdruck der eigenen Stelle. Wer von Hand koppelt — am PC
-                gibt es keine Kamera —, bekommt ihn dort gezeigt und vergleicht
-                ihn mit diesem:
-              </p>
-              <p className="fingerprint">
-                <small>{readable(status.caFingerprint)}</small>
-              </p>
-            </>
-          )}
         </section>
       )}
 
@@ -167,16 +117,11 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
           <h2>Bildschirm</h2>
           <p className="settings-hint">
             {status?.sharingScreen === true
-              ? 'Die Aufnahme läuft. Sie endet, wenn dieses Handy neu startet ' +
-                'oder du sie hier beendest — danach fragt Android bei der ' +
-                'nächsten zugelassenen Verbindung wieder nach.'
-              : 'Android fragt danach, sobald du die erste Verbindung zulässt — ' +
-                'nicht vorher. Bis dahin liegt hier keine Erlaubnis herum, die ' +
-                'jemand vergessen könnte. Lehnst du sie dann ab, lässt sich ' +
-                'dieses Gerät bedienen, aber nicht ansehen.'}
+              ? 'Freigegeben. Endet mit einem Neustart des Handys.'
+              : 'Noch nicht freigegeben — Android fragt bei der ersten Verbindung danach.'}
           </p>
 
-          {status?.sharingScreen === true && (
+          {status?.sharingScreen === true ? (
             <button
               type="button"
               className="settings-entry"
@@ -184,7 +129,17 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
                 void host.disableScreen().then(setStatus, describe(setError))
               }}
             >
-              <span>Bildschirmaufnahme beenden</span>
+              <span>Bildschirmfreigabe beenden</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="settings-entry"
+              onClick={() => {
+                void host.enableScreen().then(setStatus, describe(setError))
+              }}
+            >
+              <span>Bildschirm freigeben</span>
             </button>
           )}
         </section>
@@ -192,17 +147,11 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
 
       {running && host.toggleable && (
         <section className="settings-group">
-          <h2>Fernsteuerung</h2>
+          <h2>Eingaben</h2>
           <p className="settings-hint">
             {status?.acceptingInput === true
-              ? 'Eingaben kommen an. Tippen, wischen und Text in das gerade ' +
-                'geöffnete Eingabefeld — echte Tastenkombinationen kennt ' +
-                'Android nicht.'
-              : 'Noch nicht eingeschaltet. Android verlangt dafür den Gang in ' +
-                'die Einstellungen unter „Bedienungshilfen" und dort ' +
-                '„RemoteDesktop-Fernsteuerung". Das ist ein großes Recht: der ' +
-                'Dienst darf überall hintippen. Deshalb kann die App es nicht ' +
-                'für dich einschalten.'}
+              ? 'Freigegeben. Tippen, wischen und Text kommen an.'
+              : 'Nicht freigegeben. Android verlangt dafür die Bedienungshilfe — die App kann sie nicht selbst einschalten.'}
           </p>
 
           {status?.acceptingInput !== true && (
@@ -223,16 +172,6 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
           )}
         </section>
       )}
-
-      <section className="settings-group">
-        <h2>Koppeln</h2>
-        <p className="settings-hint">
-          Der Kopplungscode und die Liste der Geräte, die dieses hier steuern
-          dürfen, stehen unter <strong>Geräte → Neues Gerät koppeln</strong>.
-          Beides gehört zusammen: wer koppelt, entscheidet damit genau darüber,
-          wer in dieser Liste steht.
-        </p>
-      </section>
     </div>
   )
 }
@@ -243,7 +182,7 @@ function Header({ onBack }: { onBack: () => void }): React.JSX.Element {
       <button type="button" className="link-button" onClick={onBack}>
         ← Einstellungen
       </button>
-      <h1>Dieses Gerät freigeben</h1>
+      <h1>Fernsteuerung dieses Geräts</h1>
     </>
   )
 }

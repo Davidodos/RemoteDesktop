@@ -45,7 +45,8 @@ public static class AgentPaths
         AuthorityFile,
         AuthorityPublicFile,
         ClientKeyFile.FileName,
-        CoordinatorConfig.FileName
+        CoordinatorConfig.FileName,
+        DeviceNameFile.FileName
     ];
 
     /// <summary>

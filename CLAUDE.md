@@ -18,6 +18,17 @@ offenen Punkte von dort sind gebaut: der Client-Schlüssel liegt in
 `{app}\data\clientkey.json` (am Handy in `clientkey.txt`) und wird nirgends
 mehr hinterlegt, und Koppeln geht bei eingerichtetem, aber gestopptem Agent —
 das Fenster liest und schreibt dann die Dateien selbst.
+**Mit 31i ist die Oberfläche aufgeräumt** (16.08.2026, am Gerät noch zu prüfen):
+der eigene Gerätename wird **einmal** vergeben — am PC im ersten Schritt der
+Einrichtung, am Handy beim ersten Start, danach beidseits über die
+Einstellungen — und geht bei jeder Kopplung von allein mit. Koppeln fragt
+deshalb nichts mehr außer Adresse und Code; die beiden Namensfelder und der
+Fingerabdruck zum Vergleichen sind weg, ebenso die Liste „wer dieses Gerät
+steuern darf". Am Handy gibt es das Burger-Menü **immer**, und der Erststart
+fragt zusätzlich nach der Freigabe samt Android-Rechten. Deinstallieren räumt
+jetzt auch `%localappdata%\RemoteDesktop` weg (dort lag der `localStorage` des
+Fensters). Einzelheiten unter **31i** in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen
@@ -108,8 +119,19 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
   weder Bildschirm noch Desktop — Bild und Eingabe scheitern dort grundsätzlich.
   Preis: ohne angemeldeten Benutzer ist der Rechner nicht erreichbar.
 - Aller Zustand liegt in **einem** Ordner: `{app}\data` (`setup/AgentPaths.cs`) —
-  Schlüssel, Zertifikate, `clients.json`, `setup.json`. Nichts davon gehört
-  neben die `.exe`, und nichts nach `ProgramData`.
+  Schlüssel, Zertifikate, `clients.json`, `setup.json`, `devicename.txt`. Nichts
+  davon gehört neben die `.exe`, und nichts nach `ProgramData`. Der einzige
+  Rückstand außerhalb ist `%localappdata%\RemoteDesktop` (WebView2), und den
+  räumt der Uninstaller weg — siehe `installer/RemoteDesktop.iss`.
+- **Der eigene Gerätename wird einmal vergeben, nicht bei jeder Kopplung.** Er
+  liegt nativ, weil er in `/api/info` steht und das auch ohne offene Oberfläche
+  beantwortet wird: am PC in `{app}\data\devicename.txt`
+  (`setup/DeviceNameFile.cs`), am Handy in `HostPreference`. Beide lesen ihn bei
+  jedem Aufruf frisch — eine Umbenennung wirkt ohne Neustart. Wer eine der
+  Fassungen ändert, ändert auch `app/src/lib/ownName.ts`: dieselben Regeln fürs
+  Kürzen, sonst nimmt eine Seite einen Namen an, den die andere verwirft.
+- **Keine Erklärung, die länger ist als das, was sie erklärt.** Ein Satz oder
+  gar nichts. Drei Absätze neben einem Schalter sagen weniger als der Schalter.
 - Keine Tokens, MACs oder Tailnet-Namen im Repo — `.env` bzw. `devices.json`
   (beide in `.gitignore`).
 

@@ -10,6 +10,7 @@ import {
   saveLocalDevice,
 } from './lib/deviceSources.ts'
 import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
+import { useIdentity } from './lib/ownName.ts'
 import { InputChannel } from './lib/inputChannel.ts'
 import { protocolMismatch } from './lib/protocol.ts'
 import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
@@ -22,6 +23,7 @@ import { DeviceListView } from './views/DeviceListView.tsx'
 import { KeyboardView } from './views/KeyboardView.tsx'
 import { MediaView } from './views/MediaView.tsx'
 import { ConnectionRequestView } from './views/ConnectionRequestView.tsx'
+import { FirstRunView } from './views/FirstRunView.tsx'
 import { PairingView } from './views/PairingView.tsx'
 import { PowerView } from './views/PowerView.tsx'
 import { ScreenView } from './views/ScreenView.tsx'
@@ -62,10 +64,16 @@ function Shell(): React.JSX.Element {
   const [devices, setDevices] = useState<Device[]>([])
   const [selected, setSelected] = useState<Device | undefined>(undefined)
   const [pairing, setPairing] = useState(false)
-  const [page, setPage] = useState<Page>('screen')
+  const [page, setPage] = useState<Page>('devices')
   const [menuOpen, setMenuOpen] = useState(false)
   const [connection, setConnection] = useState<ConnectionState>('disconnected')
   const [error, setError] = useState<string | undefined>(undefined)
+
+  /**
+   * Der eigene Name und der Erststart. Beide liegen nativ — siehe
+   * `platform/identity.ts`.
+   */
+  const { state: identity, rename, finishFirstRun } = useIdentity()
 
   /**
    * Die Selbstauskunft des verbundenen Geräts. Daran hängt, welche Ansichten es
@@ -83,6 +91,20 @@ function Shell(): React.JSX.Element {
    * Namen — erkennt die App, dass ein Ziel dieser Rechner selbst ist.
    */
   const eigenerFingerabdruck = useRef<string | undefined>(undefined)
+
+  /**
+   * Der eigene Name — der Notbehelf der Sperre, wo ein Fingerabdruck fehlt.
+   *
+   * In einem Ref und nicht als Abhängigkeit von `select`: die Sperre wird im
+   * Augenblick des Verbindens gelesen, nicht beim Zeichnen. Seit der Name
+   * wählbar ist, wäre `machineName` hier falsch — der Agent meldet unter
+   * `/api/info` den gewählten und nicht mehr den von Windows.
+   */
+  const eigenerName = useRef<string | undefined>(undefined)
+
+  useEffect(() => {
+    eigenerName.current = identity?.name
+  }, [identity])
 
   /**
    * Die Liste hat sich geändert — umbenannt oder entfernt.
@@ -320,7 +342,7 @@ function Shell(): React.JSX.Element {
       isSelfConnection(
         { name: probe.hostname, fingerprint: device.fingerprint },
         {
-          name: getPlatform().machineName,
+          name: eigenerName.current,
           fingerprint: eigenerFingerabdruck.current,
         },
       )
@@ -386,6 +408,25 @@ function Shell(): React.JSX.Element {
     }
   }, [selected])
 
+  // **Der erste Start** — Name und Freigabe, genau einmal. Solange die Antwort
+  // von der Plattform noch aussteht, wird nichts gezeigt: eine Erststartfrage,
+  // die für einen Bilddurchlauf aufblitzt, wäre schlimmer als eine, die kurz
+  // auf sich warten lässt. Am Rechner meldet die Plattform `firstRunDone`
+  // immer als erledigt — dort führt der Assistent des Fensters.
+  if (identity === undefined) {
+    return <p className="placeholder">Einen Moment…</p>
+  }
+
+  if (!identity.firstRunDone) {
+    return (
+      <FirstRunView
+        suggestion={identity.name}
+        rename={rename}
+        onDone={() => void finishFirstRun()}
+      />
+    )
+  }
+
   if (pairing) {
     return (
       <PairingView
@@ -401,7 +442,7 @@ function Shell(): React.JSX.Element {
             isSelfConnection(
               { name: paired.name, fingerprint: paired.fingerprint },
               {
-                name: getPlatform().machineName,
+                name: eigenerName.current,
                 fingerprint: eigenerFingerabdruck.current,
               },
             )
@@ -412,68 +453,9 @@ function Shell(): React.JSX.Element {
 
           storage.setLastDevice(paired.id)
           setSelected(paired)
+          setPage('screen')
         }}
       />
-    )
-  }
-
-  // Ohne ein einziges gekoppeltes Gerät gibt es nichts zu zeigen. Bis Phase 13
-  // stand hier die Abfrage nach dem Hub-Token; mit der Registry auf der NAS ist
-  // sie weggefallen — der Weg hinein ist jetzt für jeden Rechner derselbe.
-  if (devices.length === 0) {
-    // Auch ohne ein einziges gekoppeltes Gerät führt der Weg in die
-    // Einstellungen — dort wird entschieden, ob dieses Gerät selbst steuerbar
-    // sein soll. Vorher war das erst zu erreichen, wenn schon etwas gekoppelt
-    // war: eine Einrichtung, die eine fertige Einrichtung voraussetzt.
-    if (page === 'share') {
-      return <ShareView onBack={() => setPage('settings')} />
-    }
-
-    if (page === 'settings') {
-      return (
-        <SettingsView
-          onDevices={() => setPage('screen')}
-          onShare={() => setPage('share')}
-          devicesLabel="Gerät koppeln"
-        />
-      )
-    }
-
-    return (
-      <WelcomeView
-        onPair={() => setPairing(true)}
-        onSettings={() => setPage('settings')}
-        error={error}
-      />
-    )
-  }
-
-  if (selected === undefined) {
-    return (
-      <>
-        <ErrorBanner message={error} onDismiss={() => setError(undefined)} />
-        {/* Ohne verbundenes Gerät gibt es keine Seitenleiste. Damit die
-            Einstellungen trotzdem erreichbar bleiben — dort steckt die
-            Aktualisierung der App —, schalten die beiden Ansichten hier
-            gegenseitig um. */}
-        {page === 'share' ? (
-          <ShareView onBack={() => setPage('settings')} />
-        ) : page === 'settings' ? (
-          <SettingsView
-            onDevices={() => setPage('devices')}
-            onShare={() => setPage('share')}
-          />
-        ) : (
-          <DeviceListView
-            devices={devices}
-            onDevices={applyDevices}
-            onError={setError}
-            onPair={() => setPairing(true)}
-            onSelect={(device) => void select(device)}
-            onSettings={() => setPage('settings')}
-          />
-        )}
-      </>
     )
   }
 
@@ -483,16 +465,33 @@ function Shell(): React.JSX.Element {
   /**
    * Die Seite, die wirklich zu sehen ist.
    *
-   * Der Wunsch bleibt in `page` stehen, auch wenn das eben gewählte Gerät ihn
-   * nicht erfüllen kann — wer von einem Handy zurück auf den PC wechselt,
-   * landet wieder auf „Ein/Aus", statt eine Seite neu suchen zu müssen.
+   * <p>
+   * Ohne verbundenes Gerät gibt es nur drei: die Liste, die Einstellungen und
+   * die Freigabe. Mit einem bleibt der Wunsch in `page` stehen, auch wenn das
+   * eben gewählte Gerät ihn nicht erfüllen kann — wer von einem Handy zurück
+   * auf den PC wechselt, landet wieder auf „Ein/Aus", statt eine Seite neu
+   * suchen zu müssen.
+   * </p>
+   *
+   * <p>
    * Entschieden wird das hier und nicht in einem Effekt: sonst wäre ein
    * Bilddurchlauf lang die Seite zu sehen, die es dort gar nicht gibt.
+   * </p>
    */
-  const view = pageAvailable(page, abilities) ? page : 'screen'
+  const view: Page =
+    selected === undefined
+      ? page === 'settings' || page === 'share'
+        ? page
+        : 'devices'
+      : pageAvailable(page, abilities)
+        ? page
+        : 'screen'
 
   return (
     <div className="app">
+      {/* **Die Kopfzeile steht immer da.** Vorher entstand sie erst mit einer
+          Verbindung — und damit war der einzige durchgehende Weg durch die App
+          genau dann weg, wenn man ihn braucht: bevor etwas gekoppelt ist. */}
       <header className="app-header">
         <button
           type="button"
@@ -502,8 +501,12 @@ function Shell(): React.JSX.Element {
         >
           <MenuIcon />
         </button>
-        <span className="header-title">{deviceLabel(selected)}</span>
-        <span className={`connection ${connection}`}>{describeConnection(connection)}</span>
+        <span className="header-title">
+          {selected === undefined ? 'RemoteDesktop' : deviceLabel(selected)}
+        </span>
+        {selected !== undefined && (
+          <span className={`connection ${connection}`}>{describeConnection(connection)}</span>
+        )}
       </header>
 
       <ErrorBanner message={error} onDismiss={() => setError(undefined)} />
@@ -512,7 +515,7 @@ function Shell(): React.JSX.Element {
         {/* Die Bildschirmansicht bleibt auch auf den anderen Seiten bestehen,
             nur unsichtbar: sonst würde der Videostrom bei jedem Wechsel neu
             aufgebaut, und das dauert Sekunden. */}
-        {input !== undefined && agent !== undefined && (
+        {selected !== undefined && input !== undefined && agent !== undefined && (
           <div className="tab-panel" hidden={view !== 'screen'}>
             <ScreenView
               device={selected}
@@ -532,18 +535,18 @@ function Shell(): React.JSX.Element {
           <SettingsView
             onDevices={() => setPage('devices')}
             onShare={() => setPage('share')}
+            {...(devices.length === 0 ? { devicesLabel: 'Gerät koppeln' } : {})}
           />
         ) : view === 'devices' ? (
           <DeviceListView
             devices={devices}
-            current={selected}
+            {...(selected === undefined ? {} : { current: selected })}
             onDevices={applyDevices}
             onError={setError}
             onPair={() => setPairing(true)}
             onSelect={(device) => {
               void select(device).then(() => setPage('screen'))
             }}
-            onBack={() => setPage('settings')}
           />
         ) : input === undefined || agent === undefined ? (
           <p className="placeholder">Verbinde…</p>
@@ -552,11 +555,11 @@ function Shell(): React.JSX.Element {
         ) : view === 'keyboard' ? (
           <KeyboardView input={input} />
         ) : view === 'media' ? (
-          <MediaView agent={agent} deviceName={selected.name} onError={setError} />
+          <MediaView agent={agent} deviceName={selected!.name} onError={setError} />
         ) : view === 'power' ? (
-          <PowerView agent={agent} deviceName={selected.name} onError={setError} />
+          <PowerView agent={agent} deviceName={selected!.name} onError={setError} />
         ) : view === 'actions' ? (
-          <ActionsView agent={agent} deviceName={selected.name} onError={setError} />
+          <ActionsView agent={agent} deviceName={selected!.name} onError={setError} />
         ) : view === 'shortcuts' ? (
           <ShortcutsView />
         ) : null}
@@ -565,9 +568,9 @@ function Shell(): React.JSX.Element {
       {menuOpen && (
         <Sidebar
           devices={devices}
-          current={selected}
+          {...(selected === undefined ? {} : { current: selected })}
           page={view}
-          abilities={abilities}
+          abilities={selected === undefined ? [] : abilities}
           onDevice={(device) => {
             void select(device).then(() => setPage('screen'))
           }}
@@ -599,49 +602,6 @@ function ErrorBanner({
       <span>{message}</span>
       <button type="button" onClick={onDismiss} aria-label="Meldung schließen">
         ✕
-      </button>
-    </div>
-  )
-}
-
-/**
- * Der Einstieg, solange nichts gekoppelt ist.
- *
- * Vorher stand hier die Abfrage nach dem Hub-Token. Sie ist mit der Registry
- * auf der NAS weggefallen: es gibt kein Geheimnis mehr, das für alle Rechner
- * zugleich gilt — gekoppelt wird bei jedem einzeln.
- */
-function WelcomeView({
-  onPair,
-  onSettings,
-  error,
-}: {
-  onPair: () => void
-  onSettings: () => void
-  error: string | undefined
-}): React.JSX.Element {
-  return (
-    <div className="token-prompt">
-      <h1>RemoteDesktop</h1>
-      <p>
-        Noch kein Gerät gekoppelt. Am anderen Gerät den Kopplungscode anzeigen
-        lassen und hier eintippen — oder den QR-Code scannen.
-      </p>
-
-      <p className="settings-hint">
-        Soll dieses Gerät auch selbst steuerbar sein, wird das in den
-        Einstellungen eingerichtet. Beides ist unabhängig voneinander: man kann
-        steuern, ohne steuerbar zu sein, und umgekehrt.
-      </p>
-
-      {error !== undefined && <p className="error-text">{error}</p>}
-
-      <button type="button" onClick={onPair}>
-        Gerät koppeln
-      </button>
-
-      <button type="button" className="secondary" onClick={onSettings}>
-        Einstellungen
       </button>
     </div>
   )

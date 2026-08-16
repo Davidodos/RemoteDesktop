@@ -3,7 +3,8 @@ package app.remotedesktop.client.host
 import android.content.Context
 
 /**
- * Die eine Einstellung: darf dieses Handy ferngesteuert werden?
+ * Was dieses Handy über sich selbst weiß: sein Name, und ob es ferngesteuert
+ * werden darf.
  *
  * <p>
  * **Warum sie nativ liegt und nicht in der App.** Sie entscheidet über den
@@ -21,6 +22,11 @@ object HostPreference {
 
     private const val FILE = "host"
     private const val KEY = "enabled"
+    private const val KEY_NAME = "deviceName"
+    private const val KEY_ASKED = "firstRunDone"
+
+    /** Länger nennt sich kein Gerät — wie `DeviceProfile.MAX_NAME`. */
+    const val MAX_NAME = 64
 
     fun isEnabled(context: Context): Boolean =
         preferences(context).getBoolean(KEY, false)
@@ -28,6 +34,36 @@ object HostPreference {
     fun set(context: Context, enabled: Boolean) {
         preferences(context).edit().putBoolean(KEY, enabled).apply()
     }
+
+    /**
+     * Der gewählte Gerätename, oder `null`, solange keiner gewählt wurde.
+     *
+     * Ein eigener Wert und nicht der aus den Android-Einstellungen: er steht in
+     * fremden Gerätelisten, und dort will man „Handy" lesen und nicht „Pixel 8".
+     * Der Rückfall auf den Systemnamen steht in `HostRuntime.deviceNameOf`.
+     */
+    fun deviceName(context: Context): String? =
+        sanitize(preferences(context).getString(KEY_NAME, null))
+
+    fun setDeviceName(context: Context, name: String) {
+        preferences(context).edit().putString(KEY_NAME, sanitize(name)).apply()
+    }
+
+    /**
+     * Ob der Erststart schon durch ist. Er fragt nach dem Namen und nach der
+     * Freigabe — beides genau einmal, danach führt der Weg über die
+     * Einstellungen.
+     */
+    fun firstRunDone(context: Context): Boolean =
+        preferences(context).getBoolean(KEY_ASKED, false)
+
+    fun markFirstRunDone(context: Context) {
+        preferences(context).edit().putBoolean(KEY_ASKED, true).apply()
+    }
+
+    private fun sanitize(name: String?): String? =
+        name?.filterNot { it.isISOControl() }?.trim()?.take(MAX_NAME)?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
     private fun preferences(context: Context) =
         context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)

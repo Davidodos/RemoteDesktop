@@ -46,6 +46,17 @@ public sealed class ThemedTextBox : Control, IMeasurable
         Height = LogicalToDeviceUnits(34);
     }
 
+    /// <summary>
+    /// Wie viel hineinpasst. Gebraucht für den Gerätenamen: was länger ist,
+    /// verwerfen beide Gegenseiten beim Koppeln — dann lieber gar nicht erst
+    /// tippen lassen.
+    /// </summary>
+    public int MaxLength
+    {
+        get => _input.MaxLength;
+        set => _input.MaxLength = value;
+    }
+
     /// <summary>Siehe <see cref="NavigationRail.OnHandleCreated"/> — dieselbe Rechnung.</summary>
     protected override void OnHandleCreated(EventArgs e)
     {

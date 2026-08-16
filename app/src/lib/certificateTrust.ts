@@ -157,15 +157,6 @@ function toBase64(data: Uint8Array): string {
 }
 
 /**
- * Der Fingerabdruck in Zweiergruppen, wie ihn ein Mensch vergleicht.
- * `a1b2c3…` liest niemand; `a1:b2:c3:…` schon.
- */
-export function readable(fingerprint: string): string {
-  return (fingerprint.match(/../g) ?? []).join(':')
-}
-
-
-/**
  * Der Stelle eines Geräts vertrauen — dann, wenn es gebraucht wird.
  *
  * <p>
