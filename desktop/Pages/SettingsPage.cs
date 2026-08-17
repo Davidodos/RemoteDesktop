@@ -70,7 +70,10 @@ public sealed class SettingsPage : PageView
         _openSetup = openSetup;
         _openNetwork = openNetwork;
 
-        _updateState = new TextBlock($"Fassung {ClientUpdate.InstalledVersion()}");
+        // Kein Anfangszustand mit Fassungsnummer: die steht in „Über" darunter.
+        // Hier steht, was die letzte Suche ergeben hat — und vor der ersten,
+        // dass es noch keine gab.
+        _updateState = new TextBlock("Noch nicht nachgesehen.");
 
         _withWindows.Add(
             true,
@@ -349,8 +352,9 @@ public sealed class SettingsPage : PageView
     {
         var card = new Card("Updates");
 
-        card.Body.Add(new TextBlock("Aktualisiert wird über den Installer."));
-
+        // Kein „Aktualisiert wird über den Installer" — das ist eine Auskunft
+        // über die Bauart und keine über diesen Rechner. Und keine
+        // Fassungsnummer: sie steht in der Karte direkt darunter.
         card.Body.Add(Row.Fill(_updateState, _updateAct));
 
         return card;
@@ -439,16 +443,14 @@ public sealed class SettingsPage : PageView
 
                 if (_offer is null)
                 {
-                    _updateState.Retext(
-                        $"Fassung {ClientUpdate.InstalledVersion()} — das ist die neueste.");
-
+                    _updateState.Retext("Alles aktuell.");
                     _updateAct.Relabel("Nach Updates suchen");
                     Report("Alles aktuell.", Tone.Good);
 
                     return;
                 }
 
-                _updateState.Retext($"Fassung {_offer.Version} liegt bereit.");
+                _updateState.Retext($"Update verfügbar: {_offer.Version}.");
                 _updateAct.Relabel("Jetzt installieren");
                 Report($"Fassung {_offer.Version} steht zum Installieren bereit.", Tone.Good);
 

@@ -68,6 +68,8 @@ class HostService : Service() {
             return START_NOT_STICKY
         }
 
+        runtime.onConnectionsChanged = { repost(runtime) }
+
         try {
             createChannel()
             ServiceCompat.startForeground(
@@ -96,10 +98,34 @@ class HostService : Service() {
     }
 
     override fun onDestroy() {
-        HostRuntime.of(this).stop()
+        val runtime = HostRuntime.of(this)
+
+        runtime.onConnectionsChanged = null
+        runtime.stop()
         super.onDestroy()
     }
 
+    /**
+     * Die Benachrichtigung des Vordergrunddienstes.
+     *
+     * <p>
+     * **Sie sagt, ob gerade jemand zusieht — und sonst nichts.** Vorher stand
+     * dort „Erreichbar unter 192.168.178.30:8443", unabhängig davon, ob
+     * überhaupt jemand verbunden war. Eine Adresse ist keine Nachricht: sie
+     * ändert sich nicht, man kann nichts mit ihr tun, und sie nannte in der
+     * Statusleiste eine Angabe, die dort niemand braucht. Ob jemand auf dem
+     * eigenen Bildschirm mitliest, ist dagegen genau das, wofür es
+     * Benachrichtigungen gibt.
+     * </p>
+     *
+     * <p>
+     * **Ganz weg kann sie nicht.** Ein Vordergrunddienst ohne sichtbare
+     * Benachrichtigung ist unter Android nicht vorgesehen — und das ist
+     * richtig so: ein Handy, das im Hintergrund seinen Bildschirm anbietet,
+     * soll das zeigen. Solange niemand verbunden ist, steht dort deshalb der
+     * kürzeste wahre Satz und keine Adresse.
+     * </p>
+     */
     private fun notification(runtime: HostRuntime): Notification {
         val open = PendingIntent.getActivity(
             this,
@@ -108,22 +134,44 @@ class HostService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val address = runtime.addresses().firstOrNull()
+        val connected = runtime.liveCount > 0
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.host_notification_title))
+            .setContentTitle(
+                getString(
+                    if (connected) {
+                        R.string.host_notification_title_connected
+                    } else {
+                        R.string.host_notification_title
+                    },
+                ),
+            )
             .setContentText(
-                if (address == null) {
-                    getString(R.string.host_notification_text_unknown)
-                } else {
-                    getString(R.string.host_notification_text, address, runtime.port)
-                },
+                getString(
+                    if (connected) {
+                        R.string.host_notification_text_connected
+                    } else {
+                        R.string.host_notification_text_idle
+                    },
+                ),
             )
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(open)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+    }
+
+    /**
+     * Die Benachrichtigung nachziehen, sobald sich die Zahl der Verbindungen
+     * ändert. Neu gesetzt und nicht neu gestartet: `notify` mit derselben
+     * Kennung ersetzt sie, ohne dass der Dienst etwas davon merkt.
+     */
+    private fun repost(runtime: HostRuntime) {
+        runCatching {
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
+                .notify(NOTIFICATION_ID, notification(runtime))
+        }
     }
 
     private fun createChannel() {

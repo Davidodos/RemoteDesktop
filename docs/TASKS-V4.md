@@ -1170,6 +1170,78 @@ es keinen zu finden: ein Handy hört im Schlaf auf kein Magic Packet.
 
 ---
 
+## Phase 31l — der ruhige Bildschirm ✅ (17.08.2026, am Gerät noch zu prüfen)
+
+### Ein Handy, auf dem sich nichts bewegt, ist nicht kaputt
+
+Am echten Gerät: nach etwa einer Sekunde Stillstand stand „Bildschirm nicht
+verfügbar" im Bild, und nach fünf bis zehn Sekunden brach die Verbindung ab —
+danach musste jemand die Freigabe von Hand neu erteilen. **Drei Fehler, alle
+derselbe Denkfehler.**
+
+Android liefert ein Bild, **wenn sich etwas ändert**. Sonst keins. Ein Handy,
+das ruhig auf dem Tisch liegt, liefert minutenlang nichts, und das ist kein
+Ausfall, sondern ein Bildschirm, auf dem nichts passiert. Der Stream las ein
+ausbleibendes Bild aber als Störung:
+
+1. **`missing > fps` → „unavailable".** Bei 20 Bildern je Sekunde genau eine
+   Sekunde. `FrameSource.isRunning` trennt jetzt die beiden Fragen: „gerade
+   nichts Neues" (der Normalfall) und „die Quelle ist weg" (die Meldung).
+2. **Die Kennzahlen standen hinter dem Bild.** Kam keins, ging auch keine
+   Textnachricht hinaus — der Socket verstummte vollständig. Nach sechs
+   Sekunden Stille (`STALL_TIMEOUT_MS`) hielt die Gegenseite die Verbindung für
+   tot und baute sie neu auf. Jetzt gehen sie auch ohne Bild.
+3. **`ProjectionSource.close()` beendete die MediaProjection.** `stop()` löst
+   `MediaProjection.Callback.onStop` aus, und das warf die Zustimmung weg — das
+   war der Grund für „Freigabe wieder aktivieren" nach jedem Abbruch. Die
+   Projektion gehört der Zustimmung und nicht dem einzelnen WebSocket: sie
+   liegt jetzt in `ScreenCapture` und überlebt den Strom. Nebenbei ist das das,
+   was Android ohnehin verlangt — seit Android 14 gibt `getMediaProjection` zu
+   **einer** Zustimmung genau **eine** Projektion heraus.
+
+### Koppeln verbindet nicht mehr
+
+Koppeln und Verbinden sind zwei Entscheidungen. Wer ein Gerät einträgt, will es
+später steuern können — nicht zwangsläufig jetzt. Nach dem Koppeln steht man
+wieder in der Geräteliste.
+
+### Die Übersicht im Fenster
+
+- **„Als Nächstes" ist weg.** Die Karte wiederholte in einem Satz, was die
+  Karten darunter ohnehin zeigten — und stand ganz oben.
+- **„Fernsteuerung" ist weg.** Sie beschrieb das Fenster, in dem sie steht.
+- **Ganz oben steht der Name dieses Rechners** — das Erste, was ein anderes
+  Gerät von ihm zu sehen bekommt.
+- **Der Satz unter „Übersicht" ist weg.** Einzige Ausnahme von der Regel in
+  `PageView`, und sie ist begründet: der Inhalt *ist* die Antwort.
+- **„Netz" nennt jetzt in jedem Modus die eigene Adresse.** Sie stand nur im
+  Heimnetz-Fall da; bei Tailscale las man „verbunden" und musste für die
+  Adresse in die Einstellungen wechseln.
+- **„Updates" und „Über" stehen hier *und* in den Einstellungen.** Dort sucht
+  man sie, wenn man etwas ändern will; hier sieht man sie, ohne zu suchen.
+- **Die Update-Karte sagt einen Satz:** „Alles aktuell." oder „Update
+  verfügbar: x.y.z." Kein „Aktualisiert wird über den Installer" (eine Auskunft
+  über die Bauart), keine Fassungsnummer (sie steht eine Karte tiefer).
+- **Beim Start wird einmal nachgesehen.** Wer nie in die Einstellungen sieht,
+  erfuhr sonst nie, dass es eine neuere Fassung gibt.
+
+### Die Benachrichtigung sagt, ob jemand zusieht
+
+Statt „Erreichbar unter 192.168.178.30:8443" — unabhängig davon, ob überhaupt
+jemand verbunden war. Eine Adresse ist keine Nachricht: sie ändert sich nicht,
+und man kann nichts mit ihr tun. Jetzt steht dort „Niemand verbunden"
+beziehungsweise „Dieses Gerät wird gerade ferngesteuert"
+(`LiveConnections.onChange` → `HostService.repost`).
+
+**Ganz weg kann sie nicht:** ein Vordergrunddienst ohne sichtbare
+Benachrichtigung ist unter Android nicht vorgesehen — und das ist richtig so.
+Ein Handy, das im Hintergrund seinen Bildschirm anbietet, soll das zeigen.
+
+**Abnahme:** am echten Gerät noch zu prüfen — ein Handy eine Minute lang ruhig
+liegen lassen, während der PC zusieht.
+
+---
+
 # Teil B — Dateimanager
 
 ## Phase 32 — Dateidienst im Windows-Agent

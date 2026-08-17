@@ -10,6 +10,14 @@ namespace RemoteDesktopClient.Pages;
 /// in einer Zeile sagen können, wofür sie da ist — geht das nicht, gehört ihr
 /// Inhalt auf zwei Seiten.
 /// </para>
+///
+/// <para>
+/// **Eine Ausnahme, und die ist begründet:** die Übersicht. Ihr Inhalt *ist*
+/// die Antwort auf „wofür ist diese Seite da" — ganz oben steht der Name dieses
+/// Rechners, darunter, was auf ihm läuft. „Was auf diesem Rechner steht." dazu
+/// zu schreiben wäre eine Erklärung, die länger ist als das, was sie erklärt.
+/// Ein leerer Satz lässt die Zeile weg; der Inhalt rückt dann nach oben.
+/// </para>
 /// </summary>
 public abstract class PageView : Control
 {
@@ -69,7 +77,8 @@ public abstract class PageView : Control
 
     private int Side => LogicalToDeviceUnits(28);
 
-    private int HeaderHeight => LogicalToDeviceUnits(84);
+    /// <summary>Ohne Satz unter der Überschrift beginnt der Inhalt weiter oben.</summary>
+    private int HeaderHeight => LogicalToDeviceUnits(_subtitle.Length == 0 ? 62 : 84);
 
     protected override void OnLayout(LayoutEventArgs e)
     {
@@ -91,6 +100,11 @@ public abstract class PageView : Control
             e.Graphics, _title, Theme.PageTitle, Theme.Text,
             new Rectangle(Side, LogicalToDeviceUnits(26), Width - (Side * 2), LogicalToDeviceUnits(30)),
             TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.NoPrefix);
+
+        if (_subtitle.Length == 0)
+        {
+            return;
+        }
 
         Theme.Draw(
             e.Graphics, _subtitle, Theme.Body, Theme.TextDim,

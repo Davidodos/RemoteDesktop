@@ -159,6 +159,25 @@ class HostRuntime private constructor(
 
     val isRunning: Boolean get() = server.isRunning
 
+    /**
+     * Wie viele Verbindungen gerade offen sind — Bild und Eingabe zählen
+     * einzeln.
+     */
+    val liveCount: Int get() = server.live.count
+
+    /**
+     * Wer erfahren will, dass sich das geändert hat.
+     *
+     * <p>
+     * Der Vordergrunddienst hängt daran: seine Benachrichtigung soll sagen, ob
+     * gerade jemand zusieht, und nicht die eigene Adresse wiederholen. Sie
+     * steht hier und nicht im Dienst, weil der Server bei jedem Einschalten neu
+     * entsteht und der Zuhörer das überleben soll.
+     * </p>
+     */
+    @Volatile
+    var onConnectionsChanged: ((Int) -> Unit)? = null
+
     val port: Int get() = if (server.isRunning) server.boundPort else HostServer.DEFAULT_PORT
 
     /** Ob jemand die Bildschirmaufnahme bestätigt hat. */
@@ -208,6 +227,8 @@ class HostRuntime private constructor(
             },
             confirm = connections::ask,
         )
+
+        server.live.onChange = { count -> onConnectionsChanged?.invoke(count) }
 
         return Endpoint(material, server)
     }

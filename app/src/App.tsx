@@ -634,9 +634,13 @@ function Shell(): React.JSX.Element {
             return
           }
 
-          storage.setLastDevice(paired.id)
-          setSelected(paired)
-          setPage('screen')
+          // **Zurück in die Liste, nicht in die Sitzung.** Koppeln und
+          // Verbinden sind zwei Entscheidungen: wer ein Gerät einträgt, will
+          // es später steuern können — nicht zwangsläufig jetzt. Direkt in den
+          // Bildschirm zu springen nahm die zweite Entscheidung vorweg und war
+          // beim Einrichten mehrerer Geräte hintereinander jedes Mal ein
+          // Rückweg.
+          setPage('devices')
         }}
       />
     )

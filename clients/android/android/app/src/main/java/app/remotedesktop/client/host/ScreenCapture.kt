@@ -45,6 +45,27 @@ object ScreenCapture {
     @Volatile
     private var resultCode: Int = 0
 
+    /**
+     * Die laufende Aufnahme.
+     *
+     * <p>
+     * **Sie überlebt die einzelne Verbindung.** Vorher wurde sie mit jedem
+     * Bild-Socket geöffnet und am Ende mit `stop()` beendet — und `stop()`
+     * löst `MediaProjection.Callback.onStop` aus, was die Erlaubnis
+     * wegwarf. Riss die Verbindung einmal ab, musste jemand die Freigabe in
+     * den Einstellungen erneut erteilen. Eine Bestätigung gilt aber der
+     * Aufnahme und nicht dem WebSocket, der sie gerade benutzt.
+     * </p>
+     *
+     * <p>
+     * Nebenbei ist es das, was Android ohnehin verlangt: seit Android 14 gibt
+     * `getMediaProjection` zu **einer** Zustimmung genau **eine** Projektion
+     * heraus. Ein zweiter Aufruf mit demselben Token bekommt nichts.
+     * </p>
+     */
+    @Volatile
+    private var projection: MediaProjection? = null
+
     /** Ob jemand die Aufnahme bereits bestätigt hat. */
     val isPermitted: Boolean get() = permission != null
 
@@ -55,6 +76,10 @@ object ScreenCapture {
      * `getMediaProjection` nichts heraus, gleich, was sonst stimmt.
      */
     fun remember(resultCode: Int, data: Intent) {
+        // Eine neue Zustimmung ersetzt die alte Projektion; die alte gehört zu
+        // einem Token, das niemand mehr benutzt.
+        stopProjection()
+
         this.resultCode = resultCode
         this.permission = data
     }
@@ -62,6 +87,7 @@ object ScreenCapture {
     fun forget() {
         permission = null
         resultCode = 0
+        stopProjection()
     }
 
     /**
@@ -71,16 +97,25 @@ object ScreenCapture {
      * @param display Die echte Größe des Bildschirms; daraus ergibt sich, wie
      *   weit heruntergerechnet wird.
      */
+    @Synchronized
     fun open(context: Context, display: HostServer.Screen): FrameSource? {
+        val running = projection ?: start(context) ?: return null
+
+        return runCatching { ProjectionSource(context, running, display) }
+            .onFailure { Log.e(TAG, "Aufnahme lässt sich nicht öffnen.", it) }
+            .getOrNull()
+    }
+
+    /** Holt die Projektion zur verwahrten Zustimmung — einmal je Zustimmung. */
+    private fun start(context: Context): MediaProjection? {
         val data = permission ?: return null
 
         val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
             as MediaProjectionManager
 
-        val projection = runCatching { manager.getMediaProjection(resultCode, data) }
-            .getOrNull()
+        val fresh = runCatching { manager.getMediaProjection(resultCode, data) }.getOrNull()
 
-        if (projection == null) {
+        if (fresh == null) {
             // Android nimmt die Erlaubnis zurück, wenn der Vordergrunddienst
             // nicht rechtzeitig mit dem passenden Typ läuft. Sie zu behalten
             // hieße, bei jedem Versuch dasselbe Nichts zu bekommen.
@@ -89,9 +124,29 @@ object ScreenCapture {
             return null
         }
 
-        return runCatching { ProjectionSource(context, projection, display) }
-            .onFailure { Log.e(TAG, "Aufnahme lässt sich nicht öffnen.", it) }
-            .getOrNull()
+        // Der Rückruf gehört der Projektion und nicht dem einzelnen Strom: er
+        // meldet, dass der Nutzer die Aufnahme in der Systemleiste beendet hat,
+        // und das gilt dann für alle.
+        fresh.registerCallback(
+            object : MediaProjection.Callback() {
+                override fun onStop() = forget()
+            },
+            Handler(Looper.getMainLooper()),
+        )
+
+        projection = fresh
+
+        return fresh
+    }
+
+    private fun stopProjection() {
+        // Erst aus dem Feld nehmen, dann beenden: `stop()` ruft `onStop`, und
+        // das landet wieder hier.
+        val running = projection ?: return
+
+        projection = null
+
+        runCatching { running.stop() }
     }
 
     /** Die Zielgröße: heruntergerechnet, aber im Seitenverhältnis des Geräts. */
@@ -133,25 +188,22 @@ object ScreenCapture {
 
         private val handler = Handler(Looper.getMainLooper())
 
-        /**
-         * Seit Android 14 muss ein Rückruf angemeldet sein, bevor der virtuelle
-         * Bildschirm entsteht — sonst wirft `createVirtualDisplay`. Er ist
-         * zugleich die einzige Stelle, an der man erfährt, dass der Nutzer die
-         * Aufnahme in der Systemleiste beendet hat.
-         */
-        private val callback = object : MediaProjection.Callback() {
-            override fun onStop() {
-                ScreenCapture.forget()
-            }
-        }
-
         private var virtualDisplay: VirtualDisplay? = null
 
         private var reusable: Bitmap? = null
 
-        init {
-            projection.registerCallback(callback, handler)
+        /**
+         * Ob die Quelle noch etwas liefern kann. Sie ist geschlossen oder die
+         * Zustimmung ist weg — beides heißt „nichts mehr zu holen", und das ist
+         * etwas anderes als „gerade nichts Neues".
+         */
+        override val isRunning: Boolean
+            get() = virtualDisplay != null && ScreenCapture.isPermitted
 
+        init {
+            // Der Rückruf hängt an der Projektion und wird dort einmal
+            // angemeldet (siehe `start`) — seit Android 14 muss er stehen,
+            // bevor der virtuelle Bildschirm entsteht.
             virtualDisplay = projection.createVirtualDisplay(
                 "RemoteDesktop",
                 target.width,
@@ -203,11 +255,20 @@ object ScreenCapture {
             }
         }
 
+        /**
+         * Nur der eigene Strom — **die Projektion bleibt**.
+         *
+         * Sie gehört der Zustimmung und nicht diesem WebSocket. Sie hier zu
+         * stoppen war der Grund, warum nach jedem Verbindungsabbruch jemand die
+         * Freigabe von Hand erneut erteilen musste: `stop()` löst `onStop` aus,
+         * und das wirft die Erlaubnis weg. Beendet wird sie dort, wo sie auch
+         * erteilt wurde — in [ScreenCapture.forget].
+         */
         override fun close() {
             runCatching { virtualDisplay?.release() }
+            virtualDisplay = null
+
             runCatching { reader.close() }
-            runCatching { projection.unregisterCallback(callback) }
-            runCatching { projection.stop() }
 
             reusable?.recycle()
             reusable = null

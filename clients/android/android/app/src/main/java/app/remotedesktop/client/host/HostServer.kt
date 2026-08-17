@@ -70,7 +70,7 @@ class HostServer(
      * Android unter Test steht.
      */
     private val input: (InputCommand) -> String? = { NO_INPUT },
-    private val live: LiveConnections = LiveConnections(),
+    internal val live: LiveConnections = LiveConnections(),
     /**
      * Wer die Verbindung bestätigt. Gibt `false` zurück, wenn niemand
      * zugestimmt hat — Ablehnung ist die Vorgabe. Ein Lambda, damit der Server
@@ -643,6 +643,23 @@ class LiveConnections {
     private val gate = Any()
     private val open = HashMap<String, MutableList<() -> Unit>>()
 
+    /**
+     * Wer erfahren will, dass sich die Zahl der offenen Verbindungen geändert
+     * hat.
+     *
+     * <p>
+     * Gebraucht für die Benachrichtigung des Vordergrunddienstes: sie stand
+     * dort mit der eigenen Adresse, unabhängig davon, ob überhaupt jemand
+     * verbunden war. Eine Adresse ist keine Nachricht — sie ändert sich nicht,
+     * und man kann nichts mit ihr tun. Ob gerade jemand zusieht, schon.
+     * </p>
+     */
+    @Volatile
+    var onChange: ((Int) -> Unit)? = null
+
+    /** Wie viele Sockets gerade offen sind — über alle Clients. */
+    val count: Int get() = synchronized(gate) { open.values.sumOf { it.size } }
+
     fun register(clientId: String?, cut: () -> Unit): () -> Unit {
         if (clientId == null) {
             return {}
@@ -652,21 +669,30 @@ class LiveConnections {
             open.getOrPut(clientId) { mutableListOf() }.add(cut)
         }
 
+        announce()
+
         return {
             synchronized(gate) {
                 open[clientId]?.remove(cut)
             }
-            Unit
+
+            announce()
         }
     }
 
+    /** Außerhalb des Schlosses: der Zuhörer darf hier alles tun, auch fragen. */
+    private fun announce() {
+        onChange?.invoke(count)
+    }
+
     /** @return Wie viele Verbindungen dabei getrennt wurden. */
-    fun close(clientId: String): Int = synchronized(gate) {
-        val cuts = open.remove(clientId).orEmpty()
+    fun close(clientId: String): Int {
+        val cuts = synchronized(gate) { open.remove(clientId).orEmpty() }
 
         cuts.forEach { runCatching(it) }
+        announce()
 
-        cuts.size
+        return cuts.size
     }
 
     fun closeAll() = synchronized(gate) {

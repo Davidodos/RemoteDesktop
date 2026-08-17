@@ -748,7 +748,25 @@ public class InventoryTests
             Inventory.NetworkTitle);
 
         Assert.True(teil.Ok);
-        Assert.Equal("verbunden", teil.State);
+        Assert.StartsWith("verbunden", teil.State);
+    }
+
+    /// <summary>
+    /// Die eigene Adresse ist die eine Angabe, die auf der Übersicht wirklich
+    /// gesucht wird. Sie stand nur im Heimnetz-Fall da; bei Tailscale las man
+    /// „verbunden" und musste für die Adresse in die Einstellungen wechseln.
+    /// </summary>
+    [Fact]
+    public void Das_Netz_nennt_immer_die_eigene_Adresse()
+    {
+        var profil = NetworkProfile.Default with { Address = "pc.example.ts.net" };
+
+        var teil = Teil(
+            new Machine(Tailscale: true, TailscaleConnected: true, Certificate: true),
+            Inventory.NetworkTitle,
+            profil);
+
+        Assert.Contains("pc.example.ts.net", teil.State);
     }
 
     private static Part Teil(Machine machine, string titel, NetworkProfile? profil = null) =>

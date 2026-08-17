@@ -27,6 +27,21 @@ interface FrameSource {
      */
     fun next(quality: Int): CapturedFrame?
 
+    /**
+     * Ob die Aufnahme überhaupt noch läuft.
+     *
+     * <p>
+     * **Der Unterschied, an dem es hing.** Ein `null` aus [next] heißt „gerade
+     * nichts Neues" — auf einem Handy ist das der Normalfall, denn Android
+     * liefert nur bei Änderung ein Bild. Ein stehender Bildschirm liefert
+     * minutenlang nichts, und das ist richtig so. *Hier* steht die andere
+     * Frage: ist die Quelle weg? Beides in einem `null` zu führen hieß, dass
+     * ein ruhiger Bildschirm nach einer Sekunde als „nicht verfügbar" gemeldet
+     * wurde.
+     * </p>
+     */
+    val isRunning: Boolean get() = true
+
     fun close()
 }
 
@@ -101,7 +116,6 @@ class ScreenStream(
 
         lastStats = now()
 
-        var missing = 0
         var announcedMissing = false
 
         while (socket.isOpen) {
@@ -115,15 +129,23 @@ class ScreenStream(
             val frame = source.next(quality())
 
             if (frame == null) {
-                missing++
-
-                // Erst nach einer Weile melden: einzelne ausbleibende Bilder
-                // sind der Normalfall, ein schwarzes Bild ohne Erklärung nicht.
-                if (missing > fps && !announcedMissing) {
+                // **Kein „nicht verfügbar", nur weil nichts kommt.** Android
+                // liefert ein Bild, wenn sich etwas ändert — sonst keins. Ein
+                // Handy, das ruhig auf dem Tisch liegt, liefert minutenlang
+                // nichts, und das ist kein Fehler, sondern ein Bildschirm, auf
+                // dem sich nichts tut. Gemeldet wird nur, wenn die Aufnahme
+                // wirklich weg ist.
+                if (!source.isRunning && !announcedMissing) {
                     socket.sendText(JSONObject().put("t", "unavailable").toString())
                     announcedMissing = true
                 }
 
+                // **Auch dann werden die Kennzahlen geschickt.** Sie standen
+                // vorher hinter dem Bild, und damit verstummte der Socket,
+                // sobald sich eine Weile nichts bewegte — nach sechs Sekunden
+                // Stille hielt die Gegenseite die Verbindung für tot und baute
+                // sie neu auf. Das war der zweite Teil desselben Befunds.
+                sendStatsIfDue(socket)
                 sleep(budget())
                 continue
             }
@@ -132,8 +154,6 @@ class ScreenStream(
                 socket.sendText(JSONObject().put("t", "available").toString())
                 announcedMissing = false
             }
-
-            missing = 0
 
             socket.sendBinary(frame(frame))
 

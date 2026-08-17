@@ -26,11 +26,12 @@
     <string name="host_channel_name">Dieses Gerät ist freigegeben</string>
     <string name="host_channel_description">Zeigt an, dass dieses Gerät von außen gesteuert werden kann.</string>
     <string name="host_notification_title">RemoteDesktop — freigegeben</string>
-    <string name="host_notification_text">Erreichbar unter %1$s:%2$d</string>
+    <string name="host_notification_title_connected">RemoteDesktop — verbunden</string>
+    <string name="host_notification_text_idle">Niemand verbunden</string>
+    <string name="host_notification_text_connected">Dieses Gerät wird gerade ferngesteuert</string>
     <string name="input_service_label">RemoteDesktop-Fernsteuerung</string>
     <string name="input_service_description">Erlaubt einem gekoppelten Gerät, auf diesem Handy zu tippen und zu wischen. Ohne diese Berechtigung lässt sich der Bildschirm ansehen, aber nicht bedienen.</string>
 
-    <string name="host_notification_text_unknown">Erreichbar, sobald das Gerät im Netz ist</string>
 
     <string name="tile_sleeping">%1$s wird schlafen gelegt.</string>
     <string name="tile_waking">%1$s wird geweckt.</string>

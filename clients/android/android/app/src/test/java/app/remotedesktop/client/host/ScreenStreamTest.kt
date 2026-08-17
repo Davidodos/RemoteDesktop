@@ -37,6 +37,12 @@ class ScreenStreamTest {
         @Volatile
         var closed = false
 
+        /** Ob die Aufnahme noch läuft — siehe [FrameSource.isRunning]. */
+        @Volatile
+        var running = true
+
+        override val isRunning: Boolean get() = running
+
         override fun next(quality: Int): CapturedFrame? {
             calls++
             lastQuality = quality
@@ -155,13 +161,79 @@ class ScreenStreamTest {
         assertEquals(1424, read(header, 6))
     }
 
+    /**
+     * **Der Befund dahinter (17.08.2026):** ein Handy, auf dem sich nichts
+     * bewegte, meldete nach einer Sekunde „Bildschirm nicht verfügbar". Android
+     * liefert aber nur bei Änderung ein Bild — ein ruhiger Bildschirm liefert
+     * minutenlang nichts, und das ist kein Fehler, sondern ein Bildschirm, auf
+     * dem sich nichts tut.
+     */
     @Test(timeout = 10_000)
-    fun `sagt Bescheid, wenn laenger kein Bild kommt`() {
-        val source = FakeSource(640, 1424, frames = 1, missing = 12)
+    fun `ein ruhiger Bildschirm ist nicht dasselbe wie ein fehlender`() {
+        val source = FakeSource(640, 1424, frames = 0)
         val (socket, messages) = collector()
 
         Thread {
-            while (source.calls <= 13) {
+            while (source.calls <= 50) {
+                Thread.sleep(1)
+            }
+
+            socket.close()
+        }.start()
+
+        ScreenStream(source, 640, 1424, fps = 10, sleep = {}).run(socket)
+
+        val texts = messages.filterIsInstance<String>().map { JSONObject(it).getString("t") }
+
+        assertTrue("„unavailable\" steht da, obwohl die Aufnahme läuft", !texts.contains("unavailable"))
+    }
+
+    /**
+     * Die zweite Hälfte desselben Befunds: die Kennzahlen standen hinter dem
+     * Bild. Bewegte sich eine Weile nichts, verstummte der Socket ganz — und
+     * nach sechs Sekunden Stille hielt die Gegenseite die Verbindung für tot
+     * und baute sie neu auf.
+     */
+    @Test(timeout = 10_000)
+    fun `auch ohne Bild verstummt der Socket nicht`() {
+        val source = FakeSource(640, 1424, frames = 0)
+        val (socket, messages) = collector()
+        val uhr = java.util.concurrent.atomic.AtomicLong(0)
+
+        Thread {
+            while (source.calls <= 30) {
+                Thread.sleep(1)
+            }
+
+            socket.close()
+        }.start()
+
+        ScreenStream(
+            source, 640, 1424, fps = 10, now = { uhr.addAndGet(200) }, sleep = {},
+        ).run(socket)
+
+        val texts = messages.filterIsInstance<String>().map { JSONObject(it).getString("t") }
+
+        assertTrue("keine Kennzahlen bei stehendem Bild", texts.contains("stats"))
+    }
+
+    /** Ist die Aufnahme wirklich weg, wird es gesagt — und die Rückkehr auch. */
+    @Test(timeout = 10_000)
+    fun `eine weggefallene Aufnahme wird gemeldet`() {
+        val source = FakeSource(640, 1424, frames = 1, missing = 12)
+        val (socket, messages) = collector()
+
+        source.running = false
+
+        Thread {
+            while (source.calls <= 5) {
+                Thread.sleep(1)
+            }
+
+            // Sie kommt zurück: ab jetzt liefert die Quelle wieder.
+            source.running = true
+
+            while (source.calls <= 20) {
                 Thread.sleep(1)
             }
 

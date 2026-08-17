@@ -224,15 +224,23 @@ public static class Inventory
     /// </summary>
     private static Part Network(Machine machine, NetworkProfile profile)
     {
+        // **Die eigene Adresse gehört in jeden Zustand dieser Karte.** Sie ist
+        // die eine Angabe, die jemand hier wirklich sucht — und sie stand nur
+        // im Heimnetz-Fall da. Bei Tailscale las man „verbunden" und musste für
+        // die Adresse in die Einstellungen wechseln.
+        var reachable = profile.AdvertisedAddress is { } address
+            ? $" — erreichbar als {address}"
+            : " — Adresse fehlt noch";
+
         if (!profile.NeedsTailscale)
         {
-            var known = profile.AdvertisedAddress;
-
             return new Part(
                 NetworkTitle,
                 profile.Describe(),
-                known is null ? "Adresse fehlt noch" : $"erreichbar als {known}",
-                Ok: known is not null,
+                profile.AdvertisedAddress is null
+                    ? "Adresse fehlt noch"
+                    : $"erreichbar als {profile.AdvertisedAddress}",
+                Ok: profile.AdvertisedAddress is not null,
                 Missing: false,
                 []);
         }
@@ -272,11 +280,12 @@ public static class Inventory
         // sich sonst selbst eins aus. Es bleibt trotzdem der bessere Weg: ein
         // Zertifikat von Tailscale kennt jeder Browser bereits.
         return machine.Certificate
-            ? new Part(NetworkTitle, profile.Describe(), "verbunden", true, false, [])
+            ? new Part(NetworkTitle, profile.Describe(), $"verbunden{reachable}", true, false, [])
             : new Part(
                 NetworkTitle,
                 profile.Describe(),
-                "verbunden — ohne Zertifikat von Tailscale muss jedes Handy einmal bestätigen",
+                $"verbunden{reachable} — ohne Zertifikat von Tailscale muss jedes Handy "
+                + "einmal bestätigen",
                 Ok: true,
                 Missing: false,
                 [PartAction.Certificate]);

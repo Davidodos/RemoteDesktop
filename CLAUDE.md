@@ -54,6 +54,20 @@ meldet `/api/info` die Fähigkeit `screen` gar nicht; „Fernsteuerung dieses
 Geräts" ist eine Liste statt vier Abschnitten; und ein Handy bekommt keinen
 Wecken-Knopf mehr. Einzelheiten unter **31k** in `docs/TASKS-V4.md`.
 
+**31l repariert den ruhigen Bildschirm** (17.08.2026, am Gerät noch zu prüfen):
+Android liefert nur bei Änderung ein Bild — der Stream las das als Störung und
+meldete nach einer Sekunde „nicht verfügbar", verstummte dann ganz (die
+Kennzahlen standen hinter dem Bild), und `ProjectionSource.close()` beendete die
+MediaProjection samt Zustimmung. Jetzt trennt `FrameSource.isRunning` „gerade
+nichts Neues" von „Quelle weg", die Kennzahlen gehen auch ohne Bild hinaus, und
+die Projektion liegt in `ScreenCapture` und überlebt den einzelnen WebSocket.
+Dazu: Koppeln führt zurück in die Geräteliste statt in die Sitzung; die
+Übersicht im Fenster zeigt Gerätename, Agent, Netz samt eigener Adresse, Updates
+und Über (kein „Als Nächstes", keine „Fernsteuerung", kein Untertitel) und sucht
+beim Start einmal nach einer neuen Fassung; die Android-Benachrichtigung nennt
+statt der eigenen Adresse, ob gerade jemand zusieht. Einzelheiten unter **31l**
+in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen
