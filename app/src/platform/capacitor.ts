@@ -117,6 +117,7 @@ interface HostPlugin {
   pairingCode(): Promise<HostPairingCode>
   enableScreen(): Promise<HostStatus>
   disableScreen(): Promise<HostStatus>
+  allowScreen(options: { allowed: boolean }): Promise<HostStatus>
   openInputSettings(): Promise<void>
   profile(): Promise<{ profile?: unknown }>
   peers(): Promise<{ peers?: unknown }>
@@ -530,6 +531,7 @@ function hostService(plugins: CapacitorPlugins): HostService {
     pairingCode: () => plugin.pairingCode(),
     enableScreen: () => plugin.enableScreen(),
     disableScreen: () => plugin.disableScreen(),
+    allowScreen: (allowed) => plugin.allowScreen({ allowed }),
     openInputSettings: () => plugin.openInputSettings(),
     onRequests: (listener) => watchConnections(plugin, listener),
     answer: (id, allow) => plugin.answerConnection({ id, allow }),

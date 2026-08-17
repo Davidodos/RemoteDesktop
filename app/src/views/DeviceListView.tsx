@@ -3,7 +3,7 @@ import { AgentClient } from '../lib/agentClient.ts'
 import { deviceLabel } from '../lib/deviceNames.ts'
 import { collectPeers } from '../lib/bothWays.ts'
 import { renameLocalDevice } from '../lib/deviceSources.ts'
-import { testConnection, type ConnectionReport } from '../lib/connectionTest.ts'
+import { describeReport, testConnection, type ConnectionReport } from '../lib/connectionTest.ts'
 import { removeDevice } from '../lib/removeDevice.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
@@ -228,7 +228,11 @@ export function DeviceListView({
                       : 'offline'}
               </span>
 
-              {!erreichbar && device.waker !== true && (
+              {/* **Bei einem Handy gar nicht.** Ausgegraut heißt „geht gerade
+                  nicht" und lädt dazu ein, den Grund zu suchen; hier gibt es
+                  keinen zu finden: ein Handy hört im Schlaf auf kein Magic
+                  Packet, und daran ändert auch kein Netz etwas. */}
+              {!erreichbar && device.waker !== true && device.platform !== 'android' && (
                 <button
                   type="button"
                   className="wake-button"
@@ -481,26 +485,3 @@ function RenameRow({
   )
 }
 
-/**
- * Aus dem Bericht wird ein Satz, der weiterhilft.
- *
- * „Antwortet nicht" verschweigt, ob es am Netz, am Vertrauen oder an einer
- * fehlenden Freigabe liegt — und genau danach sucht man dann an der falschen
- * Stelle.
- */
-function describeReport(device: Device, report: ConnectionReport): string {
-  const name = report.hostname ?? device.name
-
-  const hin = !report.reachable
-    ? `Nicht erreichbar: ${report.failure ?? 'kein Grund genannt'}`
-    : report.scopesThere === undefined
-      ? `${name} antwortet, kennt dieses Gerät aber nicht mehr. Neu koppeln.`
-      : `${name}: ${report.scopesThere.join(', ') || 'nichts erlaubt'}.`
-
-  const her =
-    device.peerClientId === undefined || report.scopesHere === undefined
-      ? 'Zurück steht nichts bereit — neu koppeln.'
-      : `Zurück: ${report.scopesHere.join(', ') || 'nichts erlaubt'}.`
-
-  return `${hin} ${her}`
-}

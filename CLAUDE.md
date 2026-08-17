@@ -43,6 +43,17 @@ viermal je Verbindung), H.264 als Fähigkeit statt als Fehlversuch, „Trennen" 
 der Kopfzeile, und am Rechner während der Sitzung weder Symbolreihe noch
 Burger-Menü. Einzelheiten unter **31j** in `docs/TASKS-V4.md`.
 
+**31k räumt nach dem ersten Testlauf auf** (17.08.2026, am Gerät noch zu
+prüfen): der Verbindungstest behauptete „Zurück steht nichts bereit — neu
+koppeln" für drei verschiedene Lagen, von denen zwei nicht kaputt sind
+(`ConnectionReport.reverse`); „Geräte" ist im Handy-Menü eine eigene Seite unter
+**App** statt ein Abschnitt in den Einstellungen; „Bildschirm freigeben" ist am
+Handy eine **Einstellung** (`allowScreen`) und löst nicht mehr sofort Androids
+Aufnahmedialog aus — der kommt beim ersten Verbinden, und ohne die Einstellung
+meldet `/api/info` die Fähigkeit `screen` gar nicht; „Fernsteuerung dieses
+Geräts" ist eine Liste statt vier Abschnitten; und ein Handy bekommt keinen
+Wecken-Knopf mehr. Einzelheiten unter **31k** in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen

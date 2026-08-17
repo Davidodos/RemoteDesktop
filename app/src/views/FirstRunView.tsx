@@ -149,12 +149,15 @@ export function FirstRunView({ suggestion, rename, onDone }: Props): React.JSX.E
   }
 
   const input = status?.acceptingInput === true
-  const screen = status?.sharingScreen === true
+  const screen = status?.screenAllowed === true
 
   return (
     <div className="token-prompt">
-      <h1>Zwei Rechte fehlen noch</h1>
-      <p>Android vergibt beide selbst — die App kann das nicht für dich tun.</p>
+      <h1>Noch zwei Freigaben</h1>
+      <p>
+        Die Bedienungshilfe vergibt Android selbst — die App kann das nicht für dich tun. Nach
+        dem Bild fragt es beim ersten Zusehen.
+      </p>
 
       {error !== undefined && <p className="error-text">{error}</p>}
 
@@ -180,7 +183,12 @@ export function FirstRunView({ suggestion, rename, onDone }: Props): React.JSX.E
         disabled={screen}
         onClick={() => {
           setError(undefined)
-          void host.enableScreen().then(setStatus, report)
+
+          // **Kein Systemdialog hier.** Nur die Einstellung: dieses Gerät gibt
+          // sein Bild her. Die Aufnahmeerlaubnis holt Android beim ersten
+          // Zusehen — vorher wäre sie eine Erlaubnis für nichts, und beim
+          // nächsten Neustart des Handys ist sie ohnehin wieder weg.
+          void host.allowScreen(true).then(setStatus, report)
         }}
       >
         {screen ? '✓ Bildschirm freigegeben' : 'Bildschirm freigeben'}

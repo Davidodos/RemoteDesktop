@@ -95,6 +95,51 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
         )}
       </section>
 
+      {/* **Zwei Zeilen statt zweier Abschnitte.** Bildschirm und Eingaben sind
+          dasselbe Muster — etwas ist freigegeben oder nicht, und es gibt einen
+          Weg dorthin. Sie standen als zwei Überschriften mit je einem Absatz
+          und einem Knopf da; das waren sechs Zeilen für zwei Zustände. */}
+      {running && host.toggleable && (
+        <section className="settings-group">
+          <h2>Was freigegeben ist</h2>
+
+          <Toggle
+            label="Bildschirm"
+            reversible
+            on={status?.screenAllowed === true}
+            hintOn="Andere dürfen zusehen. Android fragt beim ersten Zusehen noch einmal."
+            hintOff="Dieses Gerät gibt kein Bild heraus."
+            action={status?.screenAllowed === true ? 'Nicht mehr freigeben' : 'Freigeben'}
+            onAction={() => {
+              // **Kein Systemdialog hier.** Das ist eine Einstellung: sie sagt
+              // der Gegenseite, dass es möglich ist. Die Aufnahmeerlaubnis
+              // holt `ConnectionRequestView`, wenn wirklich jemand zusehen
+              // will — vorher wäre sie eine Erlaubnis für nichts, und Android
+              // nimmt sie beim nächsten Neustart ohnehin zurück.
+              void host
+                .allowScreen(status?.screenAllowed !== true)
+                .then(setStatus, describe(setError))
+            }}
+          />
+
+          <Toggle
+            label="Eingaben"
+            on={status?.acceptingInput === true}
+            hintOn="Tippen, wischen und Text kommen an."
+            hintOff="Android verlangt dafür die Bedienungshilfe — einschalten muss sie ein Mensch."
+            action="Bedienungshilfen öffnen"
+            onAction={() => {
+              void host.openInputSettings().then(
+                // Beim Zurückkommen ist der Stand ein anderer — nachgefragt
+                // wird deshalb hier und nicht erst beim nächsten Öffnen.
+                () => window.setTimeout(refresh, 500),
+                describe(setError),
+              )
+            }}
+          />
+        </section>
+      )}
+
       {running && (
         <section className="settings-group">
           <h2>Erreichbar als</h2>
@@ -111,66 +156,52 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
           </p>
         </section>
       )}
+    </div>
+  )
+}
 
-      {running && host.toggleable && (
-        <section className="settings-group">
-          <h2>Bildschirm</h2>
-          <p className="settings-hint">
-            {status?.sharingScreen === true
-              ? 'Freigegeben. Endet mit einem Neustart des Handys.'
-              : 'Noch nicht freigegeben — Android fragt bei der ersten Verbindung danach.'}
-          </p>
+/**
+ * Eine Freigabe: Name, Zustand, ein Satz dazu und der Weg dorthin.
+ *
+ * Der Knopf steht rechts und nicht darunter — er gehört zu dieser einen Zeile,
+ * und untereinander sahen zwei Freigaben aus wie vier voneinander unabhängige
+ * Dinge.
+ */
+function Toggle({
+  label,
+  on,
+  reversible = false,
+  hintOn,
+  hintOff,
+  action,
+  onAction,
+}: {
+  label: string
+  on: boolean
+  /**
+   * Ob sich die Freigabe hier auch wieder zurücknehmen lässt. Bei den Eingaben
+   * nicht: dort führt der Weg in die Systemeinstellungen, und der ist zu Ende,
+   * sobald sie an sind.
+   */
+  reversible?: boolean
+  hintOn: string
+  hintOff: string
+  action: string
+  onAction: () => void
+}): React.JSX.Element {
+  return (
+    <div className="share-toggle">
+      <div className="share-toggle-text">
+        <span className="device-name">
+          {label} {on ? '✓' : ''}
+        </span>
+        <span className="settings-hint">{on ? hintOn : hintOff}</span>
+      </div>
 
-          {status?.sharingScreen === true ? (
-            <button
-              type="button"
-              className="settings-entry"
-              onClick={() => {
-                void host.disableScreen().then(setStatus, describe(setError))
-              }}
-            >
-              <span>Bildschirmfreigabe beenden</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="settings-entry"
-              onClick={() => {
-                void host.enableScreen().then(setStatus, describe(setError))
-              }}
-            >
-              <span>Bildschirm freigeben</span>
-            </button>
-          )}
-        </section>
-      )}
-
-      {running && host.toggleable && (
-        <section className="settings-group">
-          <h2>Eingaben</h2>
-          <p className="settings-hint">
-            {status?.acceptingInput === true
-              ? 'Freigegeben. Tippen, wischen und Text kommen an.'
-              : 'Nicht freigegeben. Android verlangt dafür die Bedienungshilfe — die App kann sie nicht selbst einschalten.'}
-          </p>
-
-          {status?.acceptingInput !== true && (
-            <button
-              type="button"
-              className="settings-entry"
-              onClick={() => {
-                void host.openInputSettings().then(
-                  // Beim Zurückkommen ist der Stand ein anderer — nachgefragt
-                  // wird deshalb hier und nicht erst beim nächsten Öffnen.
-                  () => window.setTimeout(refresh, 500),
-                  describe(setError),
-                )
-              }}
-            >
-              <span>Bedienungshilfen öffnen</span>
-            </button>
-          )}
-        </section>
+      {(!on || reversible) && (
+        <button type="button" className="secondary" onClick={onAction}>
+          {action}
+        </button>
       )}
     </div>
   )

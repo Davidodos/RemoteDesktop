@@ -129,6 +129,41 @@ class HostPlugin : Plugin() {
      * Erlaubnis weg. Das steht auf der Freigabeseite, damit niemand sein Handy
      * in dem Glauben weglegt, es bleibe einsehbar.
      */
+    /**
+     * Die Einstellung „dieses Handy gibt sein Bild her" — **ohne**
+     * Systemdialog.
+     *
+     * <p>
+     * **Der Befund dahinter (17.08.2026):** „Bildschirm freigeben" fragte
+     * Android sofort nach der Aufnahmeerlaubnis. Das ist der falsche Zeitpunkt
+     * gleich zweimal: es ist eine Erlaubnis für nichts, solange niemand
+     * zusieht, und Android nimmt sie beim nächsten Neustart ohnehin zurück —
+     * wer sein Handy in dem Glauben weglegt, es sei eingerichtet, findet am
+     * nächsten Tag eine Einstellung vor, die nichts mehr bedeutet.
+     * </p>
+     *
+     * <p>
+     * Hier wird nur gesagt, dass es möglich ist: `/api/info` meldet daraufhin
+     * die Fähigkeit `screen`. Gefragt wird beim ersten Verbinden, und dann
+     * steht die Frage neben der anderen, die ohnehin gestellt wird.
+     * </p>
+     */
+    @PluginMethod
+    fun allowScreen(call: PluginCall) {
+        val allowed = call.getBoolean("allowed") ?: true
+
+        HostPreference.setScreenAllowed(context, allowed)
+
+        // Zurückgenommen heißt zurückgenommen: eine laufende Aufnahme endet
+        // sofort, statt bis zum nächsten Start weiterzulaufen.
+        if (!allowed) {
+            ScreenCapture.forget()
+            HostService.start(context)
+        }
+
+        call.resolve(describe())
+    }
+
     @PluginMethod
     fun enableScreen(call: PluginCall) {
         val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
@@ -359,6 +394,10 @@ class HostPlugin : Plugin() {
             .put("port", runtime.port)
             .put("caFingerprint", runtime.material.fingerprint)
             .put("sharingScreen", runtime.isSharingScreen)
+            // Die Einstellung, nicht die laufende Aufnahme. Beides steht hier,
+            // weil es zwei verschiedene Dinge sind: das eine sagt, was dieses
+            // Handy hergibt, das andere, ob Android es gerade herausgibt.
+            .put("screenAllowed", HostPreference.isScreenAllowed(context))
             .put("acceptingInput", runtime.isAcceptingInput(context))
             .put("addresses", JSArray(runtime.addresses().toTypedArray()))
     }

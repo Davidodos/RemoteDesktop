@@ -24,6 +24,7 @@ object HostPreference {
     private const val KEY = "enabled"
     private const val KEY_NAME = "deviceName"
     private const val KEY_ASKED = "firstRunDone"
+    private const val KEY_SCREEN = "screenAllowed"
 
     /** Länger nennt sich kein Gerät — wie `DeviceProfile.MAX_NAME`. */
     const val MAX_NAME = 64
@@ -33,6 +34,29 @@ object HostPreference {
 
     fun set(context: Context, enabled: Boolean) {
         preferences(context).edit().putBoolean(KEY, enabled).apply()
+    }
+
+    /**
+     * Ob dieses Handy sein Bild herausgibt.
+     *
+     * <p>
+     * **Eine Einstellung und keine Aufnahme.** Sie steht in `/api/info` und
+     * sagt der Gegenseite, dass es möglich ist. Der Systemdialog der
+     * Bildschirmaufnahme kommt erst, wenn wirklich jemand zusehen will — vorher
+     * wäre er eine Frage nach einer Erlaubnis für nichts, und Android nimmt sie
+     * ohnehin beim nächsten Neustart zurück.
+     * </p>
+     *
+     * <p>
+     * **Vorgabe: aus** — wie bei der Freigabe selbst. Was von außen zu sehen
+     * ist, soll durch eine Entscheidung sichtbar geworden sein.
+     * </p>
+     */
+    fun isScreenAllowed(context: Context): Boolean =
+        preferences(context).getBoolean(KEY_SCREEN, false)
+
+    fun setScreenAllowed(context: Context, allowed: Boolean) {
+        preferences(context).edit().putBoolean(KEY_SCREEN, allowed).apply()
     }
 
     /**

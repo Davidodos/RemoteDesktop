@@ -20,8 +20,19 @@ object HostScopes {
 
     val ALL: List<String> = listOf(SCREEN, INPUT, FILES)
 
-    /** Was dieses Gerät kann — steht so in `/api/info`. */
-    val CAPABILITIES: List<String> = listOf(SCREEN, INPUT, FILES)
+    /**
+     * Was dieses Gerät kann — steht so in `/api/info`.
+     *
+     * <p>
+     * **Das Bild hängt an einer Einstellung**, alles andere nicht. Ist es nicht
+     * freigegeben, gibt es dieses Handy schlicht nicht her, und die Gegenseite
+     * soll das erfahren, statt eine Bildschirmseite anzubieten, die leer
+     * bleibt. Das Recht {@link SCREEN} bleibt davon unberührt: es sagt, wer
+     * zusehen dürfte, nicht ob es etwas zu sehen gibt.
+     * </p>
+     */
+    fun capabilities(screenAllowed: Boolean): List<String> =
+        if (screenAllowed) listOf(SCREEN, INPUT, FILES) else listOf(INPUT, FILES)
 
     /**
      * Pfade, die jeder angemeldete Client aufrufen darf. `/api/info` sagt nur,

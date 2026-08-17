@@ -1113,6 +1113,63 @@ und aus der Zwischenablage einfügen, und eine Verbindung zum Handy, die genau
 
 ---
 
+## Phase 31k — Nachbesserungen aus dem Test ✅ (17.08.2026, am Gerät noch zu prüfen)
+
+### Der Verbindungstest log in einer Richtung
+
+Am echten Gerät stand: „Handy: screen, input. **Zurück steht nichts bereit —
+neu koppeln.**" — obwohl die Gegenrichtung nachweislich funktionierte. Der Satz
+stand für **drei** verschiedene Lagen, und in zweien davon war er falsch:
+
+1. die Gegenseite steht wirklich nicht in der eigenen Liste (dann stimmt er),
+2. sie steht vielleicht drin, aber dieses Gerät hat sich beim Koppeln nicht
+   gemerkt, unter welcher Kennung (`peerClientId` fehlt),
+3. die eigene Liste ließ sich gerade nicht lesen.
+
+Wer daraufhin neu koppelt, repariert im zweiten Fall etwas, das nicht kaputt
+war, und im dritten gar nichts. `ConnectionReport.reverse` unterscheidet sie
+jetzt (`lib/connectionTest.ts`, Typ `Reverse`), und „neu koppeln" steht nur noch
+da, wo wirklich nachgesehen wurde. Festgehalten in `connectionTest.test.ts`.
+
+**Welcher der drei Fälle beim Melder vorlag, ist damit noch nicht beantwortet** —
+das sagt der nächste Testlauf.
+
+### Geräte sind eine Seite und keine Einstellung
+
+In den Einstellungen stand ein Abschnitt „Geräte" mit genau einem Knopf, der
+woandershin führte — während im selben Menü die Liste der gekoppelten Geräte
+schon darüber stand. Der Abschnitt ist weg; „Geräte" steht jetzt unter **App**
+neben „Einstellungen" und führt direkt auf die Seite mit Übersicht, Koppeln,
+Entfernen, Umbenennen und Test.
+
+### „Bildschirm freigeben" fragt Android nicht mehr sofort
+
+Der Knopf löste den Systemdialog der Bildschirmaufnahme aus. Das ist der falsche
+Zeitpunkt gleich zweimal: es ist eine Erlaubnis für nichts, solange niemand
+zusieht, und Android nimmt sie beim nächsten Neustart des Geräts ohnehin zurück
+— wer sein Handy in dem Glauben weglegt, es sei eingerichtet, findet am nächsten
+Tag eine Einstellung vor, die nichts mehr bedeutet.
+
+Jetzt ist es eine **Einstellung** (`HostPreference.isScreenAllowed`,
+`HostService.allowScreen`): sie sagt der Gegenseite, dass es möglich ist —
+`/api/info` meldet daraufhin die Fähigkeit `screen`, sonst nicht. Der
+Systemdialog kommt beim ersten Verbinden, neben der Frage, die dort ohnehin
+gestellt wird. Das Recht `screen` bleibt davon unberührt: es sagt, *wer* zusehen
+dürfte, nicht *ob* es etwas zu sehen gibt.
+
+### „Fernsteuerung dieses Geräts" ist eine Liste
+
+Bildschirm und Eingaben standen als zwei Überschriften mit je einem Absatz und
+einem Knopf da — sechs Zeilen für zwei Zustände, die dasselbe Muster haben. Es
+sind jetzt zwei Zeilen mit Zustand, Satz und Weg.
+
+### Kein „Wecken" bei einem Handy
+
+Es war ausgegraut, und ausgegraut lädt dazu ein, den Grund zu suchen. Hier gibt
+es keinen zu finden: ein Handy hört im Schlaf auf kein Magic Packet.
+
+---
+
 # Teil B — Dateimanager
 
 ## Phase 32 — Dateidienst im Windows-Agent

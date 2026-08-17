@@ -33,16 +33,44 @@ export interface ConnectionReport {
   capabilities: string[]
   /** Welche Rechte dieses Gerät dort hat — `undefined`, wenn die Anmeldung scheiterte. */
   scopesThere?: string[]
-  /** Welche Rechte die Gegenseite hier hat — `undefined`, wenn sie hier nicht steht. */
-  scopesHere?: string[]
+  /** Was in der Gegenrichtung los ist — siehe {@link Reverse}. */
+  reverse: Reverse
   /** Warum es nicht ging, in einem Satz. */
   failure?: string
 }
 
-export async function testConnection(device: Device): Promise<ConnectionReport> {
-  const [there, here] = await Promise.all([outbound(device), inbound(device)])
+/**
+ * Die Gegenrichtung: darf die Gegenseite **dieses** Gerät steuern?
+ *
+ * <p>
+ * **Vier Lagen und nicht eine.** Vorher stand für drei davon derselbe Satz da —
+ * „Zurück steht nichts bereit — neu koppeln." —, und das war in zwei von drei
+ * Fällen schlicht falsch. Es sah gleich aus, ob die Gegenseite wirklich nicht
+ * eingetragen ist, ob nur die Kennung fehlt, unter der sie einzutragen wäre,
+ * oder ob sich die eigene Liste gerade nicht lesen ließ. Wer daraufhin neu
+ * koppelt, repariert im zweiten Fall etwas, das nicht kaputt war, und im
+ * dritten gar nichts.
+ * </p>
+ */
+export type Reverse =
+  /**
+   * Die Kennung der Gegenseite steht nicht im Gerät. Dann lässt sich hier
+   * nichts nachsehen — die Gegenrichtung selbst kann trotzdem stehen. Das ist
+   * der Fall bei einer Kopplung von vor dem Steckbrief-Austausch und bei einer
+   * Gegenstelle, die ihren Ausweis nicht mitgeschickt hat.
+   */
+  | { kind: 'unknown' }
+  /** Die eigene Liste ließ sich nicht lesen. Eine Störung, kein Befund. */
+  | { kind: 'unreadable'; failure: string }
+  /** Nachgesehen: die Gegenseite steht hier nicht. Das ist der Fall für „neu koppeln". */
+  | { kind: 'missing' }
+  /** Sie steht hier — mit diesen Rechten. Leer heißt: eingetragen und darf nichts. */
+  | { kind: 'granted'; scopes: string[] }
 
-  return { ...there, ...(here === undefined ? {} : { scopesHere: here }) }
+export async function testConnection(device: Device): Promise<ConnectionReport> {
+  const [there, reverse] = await Promise.all([outbound(device), inbound(device)])
+
+  return { ...there, reverse }
 }
 
 /**
@@ -50,7 +78,7 @@ export async function testConnection(device: Device): Promise<ConnectionReport> 
  */
 async function outbound(
   device: Device,
-): Promise<Omit<ConnectionReport, 'scopesHere'>> {
+): Promise<Omit<ConnectionReport, 'reverse'>> {
   let capabilities: string[] = []
   let hostname: string | undefined
 
@@ -118,19 +146,67 @@ async function scopesThere(device: Device): Promise<{ scopesThere?: string[] }> 
 /**
  * Ob die Gegenseite hier steht — und mit welchen Rechten.
  *
- * `undefined` heißt „steht nicht in der Liste"; ein leeres Array hieße „steht
- * drin und darf nichts", und das ist etwas anderes.
+ * Vier Ausgänge, und jeder sagt etwas anderes. Siehe {@link Reverse}.
  */
-async function inbound(device: Device): Promise<string[] | undefined> {
+async function inbound(device: Device): Promise<Reverse> {
   if (device.peerClientId === undefined) {
-    return undefined
+    return { kind: 'unknown' }
   }
 
-  try {
-    const clients = await getPlatform().host.clients()
+  let clients
 
-    return clients.find((client) => client.id === device.peerClientId)?.scopes
-  } catch {
-    return undefined
+  try {
+    clients = await getPlatform().host.clients()
+  } catch (failure) {
+    return {
+      kind: 'unreadable',
+      failure: failure instanceof Error ? failure.message : String(failure),
+    }
+  }
+
+  const entry = clients.find((client) => client.id === device.peerClientId)
+
+  return entry === undefined ? { kind: 'missing' } : { kind: 'granted', scopes: entry.scopes }
+}
+
+/**
+ * Aus dem Bericht wird ein Satz, der weiterhilft.
+ *
+ * „Antwortet nicht" verschweigt, ob es am Netz, am Vertrauen oder an einer
+ * fehlenden Freigabe liegt — und genau danach sucht man dann an der falschen
+ * Stelle. Deshalb steht hier zu jeder Richtung genau eine Aussage, und zu jeder
+ * Aussage der nächste Schritt.
+ */
+export function describeReport(device: Device, report: ConnectionReport): string {
+  const name = report.hostname ?? device.name
+
+  const hin = !report.reachable
+    ? `Nicht erreichbar: ${report.failure ?? 'kein Grund genannt'}`
+    : report.scopesThere === undefined
+      ? `${name} antwortet, kennt dieses Gerät aber nicht mehr. Neu koppeln.`
+      : `${name}: ${report.scopesThere.join(', ') || 'nichts erlaubt'}.`
+
+  return `${hin} ${describeReverse(name, report.reverse)}`
+}
+
+function describeReverse(name: string, reverse: Reverse): string {
+  switch (reverse.kind) {
+    case 'granted':
+      return `Zurück: ${reverse.scopes.join(', ') || 'nichts erlaubt'}.`
+
+    case 'missing':
+      return `Zurück: ${name} steht hier nicht in der Liste — neu koppeln.`
+
+    case 'unreadable':
+      return `Zurück: nicht nachsehbar (${reverse.failure}).`
+
+    // Kein „neu koppeln": hier ist nichts kaputt, hier fehlt nur die Kennung,
+    // unter der nachzusehen wäre. Wer diese Richtung wirklich prüfen will,
+    // koppelt neu — aber wenn sie funktioniert, funktioniert sie.
+    case 'unknown':
+      return (
+        `Zurück: nicht nachsehbar — dieses Gerät hat sich beim Koppeln nicht gemerkt, `
+        + `unter welcher Kennung ${name} hier steht. Ob es geht, sagt ein Versuch von dort aus.`
+      )
   }
 }

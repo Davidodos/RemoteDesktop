@@ -5,6 +5,7 @@ import type { Device, DeviceStatus } from '../lib/types.ts'
 import { deviceLabel } from '../lib/deviceNames.ts'
 import { getPlatform } from '../platform/index.ts'
 import {
+  DevicesIcon,
   type IconComponent,
   KeyboardIcon,
   MediaIcon,
@@ -174,6 +175,24 @@ export function Sidebar({
         {getPlatform().name !== 'webview2' && (
           <>
             <span className="sidebar-label">App</span>
+
+            {/* **„Geräte" führt jetzt hierher und nicht über die
+                Einstellungen.** Dort stand ein Abschnitt mit genau einem Knopf,
+                der woandershin führte — während die Liste der gekoppelten
+                Geräte im selben Menü schon darüber steht. Die Seite selbst
+                bleibt der Ort für alles, was die Liste nicht zeigt: koppeln,
+                entfernen, umbenennen, testen. */}
+            <button
+              type="button"
+              className={page === 'devices' ? 'sidebar-entry active' : 'sidebar-entry'}
+              onClick={() => {
+                onPage('devices')
+                onClose()
+              }}
+            >
+              <DevicesIcon />
+              <span className="device-name">Geräte</span>
+            </button>
 
             <button
               type="button"

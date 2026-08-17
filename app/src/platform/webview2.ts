@@ -274,6 +274,7 @@ const windowHost: HostService = {
   // steht. Am Handy ist das anders, und diese Schnittstelle bedient beide.
   enableScreen: () => beimAgent(),
   disableScreen: () => beimAgent(),
+  allowScreen: () => beimAgent(),
   openInputSettings: () => beimAgent(),
   onRequests: (): (() => void) => () => undefined,
   answer: () => beimAgent(),

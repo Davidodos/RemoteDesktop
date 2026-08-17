@@ -49,6 +49,22 @@ class HostServer(
      */
     private val screenSource: () -> FrameSource? = { null },
     /**
+     * Ob dieses Handy sein Bild überhaupt herausgibt.
+     *
+     * <p>
+     * **Eine Einstellung, keine Aufnahme.** Sie sagt der Gegenseite, dass es
+     * möglich ist — mehr nicht. Die Aufnahme selbst verlangt Androids
+     * Systemdialog, und der gehört an den Punkt, an dem wirklich jemand zusehen
+     * will, und nicht an den, an dem jemand die Einstellung öffnet.
+     * </p>
+     *
+     * <p>
+     * Als Frage und nicht als Wert: sie ist während des Laufs änderbar, und ein
+     * Server, der den Stand seines Starts behielte, meldete danach den alten.
+     * </p>
+     */
+    private val screenAllowed: () -> Boolean = { true },
+    /**
      * Wohin die Eingaben gehen. Gibt eine Meldung zurück, wenn es nicht geht —
      * etwa weil die Bedienungshilfe aus ist. Ein Lambda, damit der Server ohne
      * Android unter Test steht.
@@ -352,7 +368,10 @@ class HostServer(
             .put("hostname", deviceName())
             .put("version", version)
             .put("protocol", PROTOCOL)
-            .put("capabilities", JSONArray(HostScopes.CAPABILITIES))
+            // Was dieses Gerät kann, sagt es selbst — und „Bild" gehört nur
+            // dazu, wenn es freigegeben ist. Sonst stünde bei der Gegenseite
+            // eine Bildschirmseite bereit, die nie ein Bild bekommt.
+            .put("capabilities", JSONArray(HostScopes.capabilities(screenAllowed())))
             // Was dieses Gerät ist. Es entscheidet nur über das Symbol in der
             // Liste — was es kann, steht darüber.
             .put("platform", DeviceProfile.PLATFORM_ANDROID)

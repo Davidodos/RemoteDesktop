@@ -304,6 +304,32 @@ input::placeholder {
   opacity: 0.5;
 }
 
+/* Eine Freigabe als Zeile: Name und ein Satz links, der Weg dorthin rechts.
+   Zwei davon untereinander lesen sich als eine Liste; als zwei Abschnitte mit
+   je einer Überschrift lasen sie sich als zwei getrennte Themen. */
+.share-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem;
+  background: var(--surface);
+  border-radius: 10px;
+}
+
+.share-toggle-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.share-toggle button {
+  flex-shrink: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+}
+
 /* Der Kopplungscode wird abgetippt — von jemandem, der ihn quer über den Tisch
    liest. Groß und mit Ziffernabstand, nicht als Fließtext. */
 .fingerprint {

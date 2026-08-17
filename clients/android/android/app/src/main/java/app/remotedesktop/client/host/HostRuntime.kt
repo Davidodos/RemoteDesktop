@@ -199,6 +199,10 @@ class HostRuntime private constructor(
             screen = { ScreenCapture.scaled(screenOf(context)) },
             address = { HostAddresses.best(context) },
             screenSource = { ScreenCapture.open(context, screenOf(context)) },
+            // Frisch gelesen bei jedem `/api/info`: die Einstellung ist im
+            // laufenden Betrieb änderbar, und der Server wird dafür nicht neu
+            // gebaut.
+            screenAllowed = { HostPreference.isScreenAllowed(context) },
             input = { command ->
                 RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
             },

@@ -37,6 +37,13 @@ export function ConnectionRequestView(): React.JSX.Element | null {
    */
   const [sharing, setSharing] = useState<boolean | undefined>(undefined)
 
+  /**
+   * Ob dieses Gerät sein Bild überhaupt hergibt — die Einstellung von der
+   * Freigabeseite. Steht sie auf „nein", wird auch nicht gefragt: der
+   * Systemdialog wäre dann eine Frage nach etwas, das niemand angeboten hat.
+   */
+  const [allowed, setAllowed] = useState<boolean | undefined>(undefined)
+
   useEffect(() => {
     if (!host.available) {
       return
@@ -56,8 +63,14 @@ export function ConnectionRequestView(): React.JSX.Element | null {
     }
 
     void host.status().then(
-      (status) => setSharing(status.sharingScreen === true),
-      () => setSharing(undefined),
+      (status) => {
+        setSharing(status.sharingScreen === true)
+        setAllowed(status.screenAllowed === true)
+      },
+      () => {
+        setSharing(undefined)
+        setAllowed(undefined)
+      },
     )
   }, [host, current])
 
@@ -90,7 +103,7 @@ export function ConnectionRequestView(): React.JSX.Element | null {
     // abgelaufen ist, während jemand noch zielte.
     const settle = (): void => void host.answer(current.id, allow).catch(() => undefined)
 
-    if (!allow || sharing !== false) {
+    if (!allow || sharing !== false || allowed === false) {
       settle()
 
       return
@@ -117,7 +130,7 @@ export function ConnectionRequestView(): React.JSX.Element | null {
           abgelehnt.
         </p>
 
-        {sharing === false && (
+        {sharing === false && allowed !== false && (
           <p className="settings-hint">
             Für das Bild fragt Android gleich noch einmal nach. Lehnst du das ab,
             kommt die Verbindung trotzdem zustande — dieses Gerät lässt sich dann

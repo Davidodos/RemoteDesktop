@@ -55,6 +55,20 @@ export interface HostService {
   disableScreen(): Promise<HostStatus>
 
   /**
+   * Die Einstellung „dieses Gerät gibt sein Bild her" — **ohne** Systemdialog.
+   *
+   * <p>
+   * **Sie ist etwas anderes als {@link enableScreen}.** Diese hier sagt der
+   * Gegenseite, dass es möglich ist: `/api/info` meldet daraufhin die Fähigkeit
+   * `screen`. Jene fragt Android nach der Aufnahmeerlaubnis, und die gehört an
+   * den Punkt, an dem wirklich jemand zusehen will — vorher wäre sie eine
+   * Erlaubnis für nichts, und sie ist nach dem nächsten Neustart des Geräts
+   * ohnehin wieder weg.
+   * </p>
+   */
+  allowScreen(allowed: boolean): Promise<HostStatus>
+
+  /**
    * Öffnet die Systemeinstellungen, in denen die Fernsteuerung freigeschaltet
    * wird. Mehr kann die App nicht tun — einschalten muss es ein Mensch, und
    * das ist bei einem Recht dieser Größe richtig so.
@@ -113,6 +127,11 @@ export interface HostStatus {
    */
   sharingScreen?: boolean
   /**
+   * Ob dieses Gerät sein Bild überhaupt hergibt — die Einstellung, nicht die
+   * laufende Aufnahme. Siehe {@link HostService.allowScreen}.
+   */
+  screenAllowed?: boolean
+  /**
    * Ob die Bedienungshilfe läuft. Ohne sie ist das Gerät zu sehen, aber nicht
    * zu bedienen — und das ist der Zustand, den man aus der Ferne nicht von
    * einem hängenden Gerät unterscheiden kann.
@@ -153,6 +172,7 @@ export const noHost: HostService = {
   pairingCode: () => unavailable(),
   enableScreen: () => unavailable(),
   disableScreen: () => unavailable(),
+  allowScreen: () => unavailable(),
   openInputSettings: () => unavailable(),
   onRequests: (): (() => void) => () => undefined,
   answer: () => unavailable(),

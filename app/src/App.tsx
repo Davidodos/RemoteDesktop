@@ -755,11 +755,7 @@ function Shell(): React.JSX.Element {
         {view === 'share' ? (
           <ShareView onBack={() => setPage('settings')} />
         ) : view === 'settings' ? (
-          <SettingsView
-            onDevices={() => setPage('devices')}
-            onShare={() => setPage('share')}
-            {...(devices.length === 0 ? { devicesLabel: 'Gerät koppeln' } : {})}
-          />
+          <SettingsView onShare={() => setPage('share')} />
         ) : view === 'devices' ? (
           <DeviceListView
             devices={devices}

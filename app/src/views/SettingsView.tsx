@@ -1,30 +1,25 @@
 import { useEffect, useState } from 'react'
 import { AppUpdateView } from './AppUpdateView.tsx'
-import { DevicesIcon, PencilIcon, ScreenIcon } from './icons.tsx'
+import { PencilIcon, ScreenIcon } from './icons.tsx'
 import { cleanName, MAX_NAME_LENGTH, useIdentity } from '../lib/ownName.ts'
 import { getPlatform } from '../platform/index.ts'
 
 interface Props {
-  /** Zu den verbundenen Geräten — dort wird verwaltet und gekoppelt. */
-  onDevices: () => void
   /** Zur Freigabe dieses Geräts. Fehlt, wo die Umgebung das nicht kann. */
   onShare?: () => void
-  /**
-   * Beschriftung des Wegs zu den Geräten. Solange noch nichts gekoppelt ist,
-   * gibt es dort nichts zu verwalten — dann heißt der Knopf, was er tut.
-   */
-  devicesLabel?: string
 }
 
 /**
- * Die Einstellungen der App: der eigene Name, die Geräte, die Freigabe, die
- * Fassung.
+ * Die Einstellungen der App: der eigene Name, die Freigabe, die Fassung.
+ *
+ * <p>
+ * **Die Geräte stehen nicht mehr hier.** Sie hatten einen Abschnitt mit genau
+ * einem Knopf, der woandershin führte — und daneben, im selben Menü, stand die
+ * Liste der gekoppelten Geräte schon. Jetzt führt „Geräte" im Menü direkt
+ * dorthin, und die Einstellungen handeln von diesem Gerät.
+ * </p>
  */
-export function SettingsView({
-  onDevices,
-  onShare,
-  devicesLabel = 'Verbundene Geräte',
-}: Props): React.JSX.Element {
+export function SettingsView({ onShare }: Props): React.JSX.Element {
   const platform = getPlatform()
   const [version, setVersion] = useState<string | undefined>(undefined)
 
@@ -39,15 +34,6 @@ export function SettingsView({
       <h1>Einstellungen</h1>
 
       <NameCard />
-
-      <section className="settings-group">
-        <h2>Geräte</h2>
-
-        <button type="button" className="settings-entry" onClick={onDevices}>
-          <DevicesIcon />
-          <span>{devicesLabel}</span>
-        </button>
-      </section>
 
       {onShare !== undefined && platform.host.available && (
         <section className="settings-group">

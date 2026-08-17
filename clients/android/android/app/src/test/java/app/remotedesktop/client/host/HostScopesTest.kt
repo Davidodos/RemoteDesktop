@@ -44,6 +44,16 @@ class HostScopesTest {
     @Test
     fun `ein Handy kennt genau drei Rechte`() {
         assertEquals(listOf("screen", "input", "files"), HostScopes.ALL)
-        assertEquals(HostScopes.ALL, HostScopes.CAPABILITIES)
+        assertEquals(HostScopes.ALL, HostScopes.capabilities(screenAllowed = true))
+    }
+
+    /**
+     * Das Recht bleibt, die Fähigkeit fällt weg: wer zusehen dürfte, ändert
+     * sich durch eine Einstellung nicht — ob es etwas zu sehen gibt, schon.
+     */
+    @Test
+    fun `ohne Bildfreigabe meldet das Handy kein Bild`() {
+        assertEquals(listOf("input", "files"), HostScopes.capabilities(screenAllowed = false))
+        assertEquals(listOf("screen", "input", "files"), HostScopes.ALL)
     }
 }
