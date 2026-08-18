@@ -5,6 +5,14 @@ import { collectPeers } from '../lib/bothWays.ts'
 import { renameLocalDevice } from '../lib/deviceSources.ts'
 import { describeReport, testConnection, type ConnectionReport } from '../lib/connectionTest.ts'
 import { removeDevice } from '../lib/removeDevice.ts'
+import {
+  canUpdateRemotely,
+  compareVersions,
+  describeMatch,
+  fetchVersion,
+  ownVersion,
+  type VersionMatch,
+} from '../lib/versions.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
 import { lastSeen } from '../lib/lastSeen.ts'
@@ -49,6 +57,16 @@ export function DeviceListView({
 }: Props): React.JSX.Element {
   const [statuses, setStatuses] = useState<DeviceStatus[]>([])
 
+  /**
+   * Die Fassung je Gerät — und die eigene, gegen die verglichen wird.
+   *
+   * Gehalten wird sie hier und nicht im Gerät: sie beschreibt einen Augenblick
+   * und nicht die Kopplung. Ein Gerät, das gerade aktualisiert wird, hat für ein
+   * paar Sekunden gar keine.
+   */
+  const [versions, setVersions] = useState<Record<string, string>>({})
+  const [mine, setMine] = useState<string | undefined>(undefined)
+
   const [waking, setWaking] = useState<string | undefined>(undefined)
 
   /** Welches Gerät gerade umbenannt wird — höchstens eines. */
@@ -91,6 +109,22 @@ export function DeviceListView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Die eigene Fassung ändert sich nicht, solange diese App läuft: ein Update
+  // startet sie neu.
+  useEffect(() => {
+    let alive = true
+
+    void ownVersion().then((found) => {
+      if (alive) {
+        setMine(found)
+      }
+    })
+
+    return () => {
+      alive = false
+    }
+  }, [])
+
   /**
    * Wer antwortet, fragt die App selbst — es gibt keinen Hub mehr, der das
    * reihum erledigt. Das ist ohnehin die ehrlichere Auskunft: dass die NAS
@@ -111,6 +145,52 @@ export function DeviceListView({
 
   const isOnline = (id: string): boolean =>
     statuses.find((status) => status.id === id)?.online ?? false
+
+  /**
+   * Die Fassung eines Geräts holen — einmal, sobald es antwortet.
+   *
+   * <p>
+   * **Nicht im Takt.** Der Aufruf geht über `/api/info` und damit über eine
+   * Anmeldung; ihn alle fünfzehn Sekunden für jedes Gerät zu wiederholen wäre
+   * eine Menge Verkehr für eine Zahl, die sich zwischen zwei Updates nie ändert.
+   * Neu geholt wird sie, wenn ein Gerät zurückkommt — und genau dann ist sie
+   * auch interessant, weil ein Update es gerade neu gestartet haben könnte.
+   * </p>
+   */
+  const forget = useCallback((id: string): void => {
+    setVersions((known) => {
+      const rest = { ...known }
+
+      delete rest[id]
+
+      return rest
+    })
+  }, [])
+
+  useEffect(() => {
+    let alive = true
+
+    const fehlend = devices.filter(
+      (device) =>
+        device.waker !== true &&
+        isOnline(device.id) &&
+        versions[device.id] === undefined,
+    )
+
+    for (const device of fehlend) {
+      void fetchVersion(device).then((found) => {
+        if (alive && found !== undefined) {
+          setVersions((known) => ({ ...known, [device.id]: found }))
+        }
+      })
+    }
+
+    return () => {
+      alive = false
+    }
+    // `isOnline` liest aus `statuses`; die Abhängigkeit steht deshalb dort.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devices, statuses, versions])
 
   // Sobald das geweckte Gerät antwortet, zurück auf den ruhigen Takt.
   useEffect(() => {
@@ -147,8 +227,11 @@ export function DeviceListView({
         <h1>Geräte</h1>
       </div>
 
+      {/* Ohne Warnfarbe. „Noch kein Gerät gekoppelt" ist keine Störung, sondern
+          der Anfang — und ein roter Balken um diesen Satz ließ den ersten Start
+          der App aussehen wie einen fehlgeschlagenen. */}
       {devices.length === 0 && (
-        <p className="device-hint">Noch kein Gerät gekoppelt.</p>
+        <p className="device-note">Noch kein Gerät gekoppelt.</p>
       )}
 
       {hinweis !== undefined && (
@@ -164,6 +247,9 @@ export function DeviceListView({
         // Nur, solange das Gerät nicht erreichbar ist. Steht daneben „online",
         // ist „zuletzt verbunden: gerade eben" keine Auskunft, sondern Lärm.
         const zuletzt = lastSeen(device.lastConnectedAt)
+
+        const fassung = versions[device.id]
+        const stand: VersionMatch = compareVersions(mine, fassung)
 
         return (
           <div key={device.id} className="device-entry">
@@ -198,6 +284,20 @@ export function DeviceListView({
                   <span className="device-name">{deviceLabel(device)}</span>
                   {!erreichbar && zuletzt !== undefined && (
                     <span className="device-seen">zuletzt verbunden {zuletzt}</span>
+                  )}
+                  {/* Die Fassung nur, wenn sie etwas sagt. Steht dort dieselbe
+                      wie hier, ist das die Antwort auf eine Frage, die niemand
+                      gestellt hat — außer man hat gerade eine gestellt, weil
+                      sich das Gerät seltsam verhält. Deshalb steht sie da, aber
+                      unauffällig; und wenn sie abweicht, fällt sie auf. */}
+                  {fassung !== undefined && (
+                    <span
+                      className={
+                        stand === 'older' ? 'device-version outdated' : 'device-version'
+                      }
+                    >
+                      {describeMatch(stand, fassung)}
+                    </span>
                   )}
                 </span>
               </button>
@@ -269,8 +369,10 @@ export function DeviceListView({
               <DevicePanel
                 device={device}
                 reachable={erreichbar}
+                match={stand}
                 onSelect={onSelect}
                 onDevices={onDevices}
+                onUpdated={() => forget(device.id)}
                 onClose={() => setManaged(undefined)}
               />
             )}
@@ -307,14 +409,20 @@ export function DeviceListView({
 function DevicePanel({
   device,
   reachable,
+  match,
   onSelect,
   onDevices,
+  onUpdated,
   onClose,
 }: {
   device: Device
   reachable: boolean
+  /** Ob dort dieselbe Fassung läuft wie hier — daran hängt der Update-Knopf. */
+  match: VersionMatch
   onSelect: (device: Device) => void
   onDevices: (devices: Device[]) => void
+  /** Nach einem angestoßenen Update: die gemerkte Fassung ist nichts mehr wert. */
+  onUpdated: () => void
   onClose: () => void
 }): React.JSX.Element {
   const [note, setNote] = useState<string | undefined>(undefined)
@@ -331,6 +439,44 @@ function DevicePanel({
 
       setReport(fresh)
       setNote(describeReport(device, fresh))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Den Rechner drüben aktualisieren — von hier aus.
+   *
+   * <p>
+   * **Warum das von hier aus gehen muss.** Ein Rechner aktualisiert sich beim
+   * Start, und ein Rechner, der wochenlang durchläuft, startet nicht. Wer ihn
+   * gerade steuert, sitzt aber nicht vor ihm — sonst bräuchte er die
+   * Fernsteuerung nicht. Der Weg dorthin führte bis jetzt über einen Gang ins
+   * Nebenzimmer.
+   * </p>
+   *
+   * <p>
+   * Windows fragt dabei nichts: der Agent startet den Installer mit den Rechten,
+   * die er ohnehin hat. Ein Handy geht nicht und steht deshalb gar nicht erst
+   * zur Wahl — siehe {@link canUpdateRemotely}.
+   * </p>
+   */
+  const update = async (): Promise<void> => {
+    setBusy(true)
+    setNote(undefined)
+
+    try {
+      const report = await new AgentClient(device).updateApp()
+
+      setNote(report.message)
+
+      if (report.status === 'installing') {
+        // Die gemerkte Fassung gilt nicht mehr, und die neue steht erst fest,
+        // wenn der Rechner wieder da ist.
+        onUpdated()
+      }
+    } catch (failure) {
+      setNote(failure instanceof Error ? failure.message : String(failure))
     } finally {
       setBusy(false)
     }
@@ -394,6 +540,22 @@ function DevicePanel({
         <button type="button" className="secondary" disabled={busy} onClick={() => void test()}>
           {busy ? 'Teste…' : 'Verbindung testen'}
         </button>
+
+        {/* Nur, wenn es etwas zu aktualisieren gibt. Ein Knopf, der bei
+            gleichem Stand dasteht, lädt dazu ein, ihn zu drücken — und der
+            Rechner wäre danach eine Minute lang weg, ohne dass sich etwas
+            geändert hätte. */}
+        {reachable && canUpdateRemotely(device, match) && (
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            title="Lädt den Installer und führt ihn dort aus. Der Rechner ist danach kurz weg."
+            onClick={() => void update()}
+          >
+            {busy ? 'Aktualisiere…' : 'Aktualisieren'}
+          </button>
+        )}
 
         <button
           type="button"

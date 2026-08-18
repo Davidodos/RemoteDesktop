@@ -12,6 +12,11 @@ import java.io.OutputStream
  * beliebigen Threads — der Bild-Stream läuft in seiner eigenen Schleife —,
  * deshalb ist das Schreiben gesperrt. Zwei ineinander geschriebene Rahmen wären
  * kein halbes Bild, sondern eine kaputte Verbindung.
+ *
+ * @param onClosed Was beim Schließen sonst noch geschehen muss — in der Praxis:
+ *   den TCP-Socket zumachen. Das ist keine Aufräumarbeit, sondern die einzige
+ *   Art, den lesenden Thread aus seinem `read()` zu holen; ohne Zeitlimit
+ *   wartet er dort sonst, bis die App endet. Siehe `HttpServer.openSocket`.
  */
 class WebSocketConnection(
     private val input: InputStream,
@@ -77,13 +82,25 @@ class WebSocketConnection(
             return
         }
 
+        var broke = false
+
         synchronized(writeGate) {
             try {
                 output.write(WebSocketFrames.encode(opcode, payload))
                 output.flush()
             } catch (broken: IOException) {
                 closed = true
+                broke = true
             }
+        }
+
+        // **Außerhalb des Schlosses, und nicht nur ein Flag.** Vorher wurde hier
+        // bloß `closed` gesetzt: der lesende Thread hing weiter in seinem
+        // `read()`, weil den niemand unterbrach, und die Verbindung zählte für
+        // immer als offen. Ein Schreibfehler heißt aber, dass die Gegenseite weg
+        // ist — dann gehört der Socket zu, und das erledigt `onClosed`.
+        if (broke && opcode != WebSocketFrames.OPCODE_CLOSE) {
+            onClosed()
         }
     }
 }

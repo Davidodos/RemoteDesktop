@@ -217,7 +217,26 @@ jobs:
         run: |
           iscc installer\RemoteDesktop.iss /DVersion=${{ steps.version.outputs.value }}
 
+      # Der Installer wird von einem gekoppelten Gerät aus angestoßen und läuft
+      # dann mit vollen Rechten, ohne dass jemand davorsitzt. Dieselbe Bedingung
+      # wie beim Agent selbst: nicht ohne gültige Unterschrift. Der Agent prüft
+      # sie in agent/Services/InstallerUpdate.cs.
+      - name: Installer-Manifest unterschreiben
+        shell: bash
+        env:
+          RELEASE_PRIVATE_KEY: ${{ secrets.RELEASE_PRIVATE_KEY }}
+        run: |
+          node scripts/sign-manifest.mjs \
+            "installer/Output/RemoteDesktop-Setup-${{ steps.version.outputs.value }}.exe" \
+            "${{ steps.version.outputs.value }}" \
+            "$(grep -oP 'Protocol\s*=\s*\K\d+' agent/Services/AgentVersion.cs | head -1)" \
+            installer/Output \
+            installer.json
+
       - name: An das Release hängen
         uses: softprops/action-gh-release@v3
         with:
-          files: installer/Output/RemoteDesktop-Setup-${{ steps.version.outputs.value }}.exe
+          files: |
+            installer/Output/RemoteDesktop-Setup-${{ steps.version.outputs.value }}.exe
+            installer/Output/installer.json
+            installer/Output/installer.json.sig

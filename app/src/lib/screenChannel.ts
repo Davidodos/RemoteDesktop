@@ -21,6 +21,16 @@ const MAX_PENDING_REGIONS = 24
 const STALL_TIMEOUT_MS = 6000
 const STALL_CHECK_MS = 2000
 
+/**
+ * So viele erfolglose Versuche, bevor eine Störung gemeldet wird.
+ *
+ * Wie beim Eingabekanal: der erste Versuch scheitert regelmäßig, ohne dass etwas
+ * kaputt ist — der Agent startet gerade neu, oder am Handy hat noch niemand die
+ * Aufnahme bestätigt. Der nächste kommt durch. Eine Meldung beim ersten Mal
+ * beschreibt deshalb einen Zustand, den es beim Lesen schon nicht mehr gibt.
+ */
+const ATTEMPTS_BEFORE_COMPLAINING = 3
+
 interface ScreenCallbacks {
   onMeta: (meta: ScreenMeta) => void
   onStats: (stats: ScreenStats) => void
@@ -56,6 +66,11 @@ export class ScreenChannel {
   private stallTimer: number | undefined
   private lastMessageAt = 0
 
+  /** Wie oft seit der letzten stehenden Verbindung erfolglos versucht wurde. */
+  private attempts = 0
+  /** Ob diese Verbindung überhaupt schon einmal stand. */
+  private everConnected = false
+
   constructor(
     private readonly device: Device,
     private readonly monitor: number,
@@ -65,6 +80,8 @@ export class ScreenChannel {
 
   connect(): void {
     this.closedByUs = false
+    this.attempts = 0
+    this.everConnected = false
     window.addEventListener('online', this.reconnectNow)
     this.open()
   }
@@ -125,6 +142,8 @@ export class ScreenChannel {
     this.channel = this.transport.screenStream(this.monitor, {
       onOpen: () => {
         this.reconnectDelay = RECONNECT_BASE_MS
+        this.attempts = 0
+        this.everConnected = true
         this.setState('connected')
         this.watchForStall()
       },
@@ -148,7 +167,14 @@ export class ScreenChannel {
       },
 
       onError: () => {
-        this.callbacks.onError(`Bildverbindung zu ${this.device.name} gestört.`)
+        // Nicht beim ersten Mal — siehe {@link ATTEMPTS_BEFORE_COMPLAINING}.
+        // Stand die Bildverbindung schon einmal, kümmert sich der Wiederaufbau
+        // darum, und die Statusanzeige sagt es ohnehin.
+        if (this.everConnected || this.attempts < ATTEMPTS_BEFORE_COMPLAINING) {
+          return
+        }
+
+        this.callbacks.onError(`Bildverbindung zu ${this.device.name} kommt nicht zustande.`)
       },
     })
   }
@@ -276,6 +302,8 @@ export class ScreenChannel {
     if (this.reconnectTimer !== undefined) {
       return
     }
+
+    this.attempts += 1
 
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined

@@ -448,6 +448,21 @@ input::placeholder {
   color: var(--text-dim);
 }
 
+/*
+  Die Fassung des Geräts. Sie steht klein und blass da, solange sie mit der
+  eigenen übereinstimmt: dann ist sie eine Bestätigung und kein Hinweis. Weicht
+  sie ab, wechselt sie in die Warnfarbe — und wird damit zu dem, was sie dann
+  auch ist.
+*/
+.device-version {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.device-version.outdated {
+  color: var(--warn);
+}
+
 /* Rechtsbündig, egal wie lang der Name ist. */
 .device-state {
   margin-left: auto;
@@ -801,6 +816,43 @@ button.danger:active:not(:disabled) {
   flex: 1;
 }
 
+/*
+  Das Update-Band beim Start.
+
+  Unten und nicht oben: oben sitzt das Fehlerband, und ein Angebot ist keine
+  Störung. Es liegt über der Seite statt in ihr, weil es zu keiner Seite gehört
+  — es kann auf jeder erscheinen, auch mitten in einer Sitzung. Sichtbar wird es
+  ohnehin nur, wenn es etwas zu sagen gibt.
+*/
+.agent-update.banner {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 0.6rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
+  font-size: 0.85rem;
+}
+
+.agent-update.banner p {
+  margin: 0;
+  flex: 1;
+}
+
+.agent-update.banner button {
+  flex: none;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+}
+
 .error-banner {
   display: flex;
   align-items: center;
@@ -1130,6 +1182,19 @@ button.danger:active:not(:disabled) {
 .mouse-button.active {
   background: var(--accent);
   border-color: var(--accent);
+}
+
+/*
+  Eine Auskunft ohne Warnfarbe — für Sätze, die nichts melden, sondern etwas
+  feststellen. „Noch kein Gerät gekoppelt" ist der Fall, für den es sie gibt:
+  in einem roten Balken sah der erste Start der App aus wie ein Fehlschlag.
+*/
+.device-note {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
 }
 
 .device-hint {

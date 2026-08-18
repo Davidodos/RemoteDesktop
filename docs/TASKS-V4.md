@@ -1240,6 +1240,237 @@ Ein Handy, das im Hintergrund seinen Bildschirm anbietet, soll das zeigen.
 **Abnahme:** am echten Gerät noch zu prüfen — ein Handy eine Minute lang ruhig
 liegen lassen, während der PC zusieht.
 
+## Phase 31m — Updates, die ankommen ✅ (18.08.2026, am Gerät noch zu prüfen)
+
+Ein Update, das nicht durchläuft, ist schlimmer als keins: es lässt den Stand
+zurück, den es ersetzen sollte, und behauptet dabei, etwas getan zu haben.
+Sieben Befunde, und sie hängen zusammen.
+
+### Am Handy passierte gar nichts
+
+„Wird geladen — Android fragt gleich nach." — und dann fragte nie jemand.
+
+Der Grund steht in Androids Schnittstelle. Außerhalb von Google Play beantwortet
+`PackageInstaller.Session.commit()` **zuerst** mit
+`STATUS_PENDING_USER_ACTION` und legt den Bestätigungsdialog als Absicht unter
+`Intent.EXTRA_INTENT` bei. Starten muss ihn **die App**. Der Rückkanal zeigte
+aber auf die `MainActivity`, und die wusste davon nichts: der Download lief
+durch, die Activity kam nach vorn, und danach passierte sichtbar nichts. Kein
+Dialog, kein Fehler.
+
+Jetzt gibt es `InstallReceiver` — nicht freigegeben, denn das System schickt
+dorthin nur, was zu einer Sitzung dieser App gehört. Er startet den Dialog und
+meldet danach das Ergebnis zurück. Drei Dinge kommen mit:
+
+- **Die Zusage löst erst auf, wenn es installiert ist.** Vorher galt sie als
+  erfüllt, sobald die Datei abgegeben war — also vor jedem Dialog. Der Bereich
+  blieb bei „fragt gleich nach" stehen, gleich ob jemand bestätigte, ablehnte
+  oder nichts sah.
+- **„Unbekannte Apps installieren" wird vorher geprüft.**
+  `REQUEST_INSTALL_PACKAGES` im Manifest ist seit Android 8 nur die halbe Miete;
+  die zweite ist ein Schalter in den Systemeinstellungen. Fehlt er, endet
+  `commit()` wortlos. Jetzt geht die Einstellung auf, statt Dutzende Megabyte zu
+  laden und wegzuwerfen.
+- **Jeder Fehlschlag hat einen Satz.** Abgebrochen, blockiert, falscher
+  Schlüssel, zu wenig Platz — vorher sahen sie alle gleich aus, nämlich wie
+  nichts.
+
+### Und die App hinkte einen Start hinterher
+
+Die Oberfläche liegt als Datei in der APK und wird über `https://localhost`
+geladen — also über einen Weg, auf dem ein HTTP-Zwischenspeicher greift. Eine
+neue APK brachte die neue Oberfläche mit, die WebView zeigte weiter die alte.
+Was am Handy geprüft wurde, war verlässlich die vorletzte Fassung.
+
+`UpgradeCleanup` vergleicht beim Start den `versionCode` mit dem gemerkten und
+leert bei einer Abweichung den Zwischenspeicher. **Was bleibt, ist alles, was
+jemand eingestellt oder gekoppelt hat:** der `localStorage` mit der Geräteliste,
+die Preferences mit Name und Freigaben, der Ordner `host/` mit Schlüsseln,
+Zertifikat und `clients.json`. Weg ist ausschließlich Zwischengespeichertes —
+also das, was sich jederzeit neu herstellen lässt.
+
+### Gesucht wird jetzt bei jedem Start
+
+Die Update-Prüfung stand ausschließlich in den Einstellungen, also an einer
+Stelle, die man aufsuchen muss. Wer das nie tat, erfuhr nie von einer neuen
+Fassung. `AppUpdateView` hängt jetzt zusätzlich als Band in `App` — sichtbar
+nur, wenn es etwas gibt.
+
+### Auf Windows fehlte der Weg zurück
+
+Der Agent **wird** beim Update gestoppt, das war nie das Problem:
+`PrepareToInstall` beendet die geplante Aufgabe und den Dienst einer älteren
+Installation. Drei andere Dinge fehlten:
+
+1. **Niemand wartete, bis der Prozess wirklich weg war.** `schtasks /End` kommt
+   zurück, sobald der Auftrag abgesetzt ist. In der Lücke scheitert das Kopieren
+   an genau der Datei, um die es geht. Jetzt wird beendet *und* gewartet — auch
+   auf das Fenster, das bei einem Fern-Update offen steht.
+2. **Danach startete den Agent niemand wieder.** Ein stilles Update ließ den
+   Rechner bis zur nächsten Anmeldung unerreichbar — und das ist genau der Fall,
+   in dem niemand davorsitzt, der es merkt. Jetzt läuft `schtasks /Run` hinterher.
+3. **Der Agent beendete sich, bevor er antwortete.** `AgentUpdater.Install` rief
+   `Environment.Exit(0)` mitten im Aufruf von `POST /api/update`. Die App bekam
+   keine Auskunft, sondern eine abgebrochene Verbindung, und konnte danach nicht
+   unterscheiden, ob aktualisiert wird oder der Rechner weg ist. Wer beendet, ist
+   jetzt der Aufrufer — nach der Antwort.
+
+### Was nach einem Windows-Update nicht mehr herumliegt
+
+`.old`, `.new` und `.update` des Agent-Selbst-Updates (das `.old` ist eine
+vollständige, startbare Programmdatei einer älteren Fassung), der Ordner `app\`
+mit den Vite-Dateien aller bisherigen Stände, und die Code-Caches von WebView2.
+**Es bleiben:** Zertifikate, die Antworten aus der Einrichtung und die
+gekoppelten Geräte — also `{app}\data` und der `localStorage` daneben.
+
+### Deinstallieren lässt nichts zurück
+
+Der Uninstaller räumte weg, was er abgelegt hatte. Was zur Laufzeit dazukam,
+kannte er nicht — und die laufende `.exe` ließ sich ohnehin nicht löschen. Jetzt
+werden erst Agent und Fenster beendet, dann geht `{app}` als Ganzes,
+`%localappdata%\RemoteDesktop` in **allen** Profilen, die geplante Aufgabe und
+der Dienst einer älteren Installation.
+
+### Ein Rechner lässt sich vom Handy aus aktualisieren
+
+Ein Rechner aktualisiert sich beim Start, und ein Rechner, der wochenlang
+durchläuft, startet nicht. Wer ihn gerade steuert, sitzt nicht vor ihm — sonst
+bräuchte er die Fernsteuerung nicht.
+
+`POST /api/update/app` lädt den Installer und führt ihn still aus.
+**Ohne Rückfrage von Windows,** und das ist keine Umgehung: der Agent läuft als
+geplante Aufgabe mit `HighestAvailable`, ein Prozess, den er startet, erbt
+diesen Token. Es gibt nichts zu bestätigen.
+
+**Und genau deshalb wird geprüft.** Hier wird eine heruntergeladene Datei mit
+vollen Rechten ausgeführt, ohne dass ein Mensch zusieht. Der Installer trägt
+darum sein eigenes unterschriebenes Manifest im Release (`installer.json`,
+derselbe Schlüssel wie beim Agent), und ohne gültige Unterschrift *und* passende
+Prüfsumme passiert nichts.
+
+Der Start geht über ein Zwischenskript: der Installer beendet als Erstes den
+Agent, also den Prozess, der ihn gestartet hat. Ein direktes Kind stünde in
+derselben Job-Zuordnung und ginge mit ihm unter, bevor es eine Datei kopiert
+hätte.
+
+**Ein Handy geht nicht, und das ist keine Lücke.** Android verlangt für jede
+Installation einen Systemdialog, und den beantwortet nur, wer das Gerät in der
+Hand hält. Wer es in der Hand hält, drückt dort auf den Knopf. Die Geräteliste
+zeigt die Fassung trotzdem — auch bei einem Handy.
+
+### Die Fassung steht in der Geräteliste
+
+Je Gerät: „Fassung 1.3.4 — wie hier" oder „— älter als hier", das zweite in
+Warnfarbe. Verglichen wird **gegen dieses Gerät und nicht gegen GitHub**: die
+Frage in der Liste ist, ob zwei Geräte zusammenpassen, und das entscheidet sich
+zwischen ihnen. Bei einem veralteten Rechner steht neben „Verbinden" und
+„Verbindung testen" ein „Aktualisieren".
+
+Geholt wird die Fassung über `/api/info` und damit angemeldet — ausdrücklich
+nicht über `/health`. Der wäre billiger, ist aber der einzige Endpunkt ohne
+Ausweis, und was ein Rechner ungefragt über sich verrät, gehört klein gehalten.
+
+---
+
+## Phase 31n — sieben Meldungen, die nicht stimmten ✅ (18.08.2026, am Gerät noch zu prüfen)
+
+### „Dieses Gerät gibt seinen Bildschirm noch nicht frei" — bei laufender Freigabe
+
+Die Aufnahme entsteht nicht in dem Augenblick, in dem jemand „Zulassen" tippt.
+Erst kommt Androids eigener Dialog, dann meldet sich der Vordergrunddienst mit
+dem Typ „nimmt den Bildschirm auf" neu an — und erst danach gibt
+`getMediaProjection` etwas heraus. Der Client stand längst an der Tür.
+
+`awaitSource()` wartet jetzt bis zu sechs Sekunden. Nicht gewartet wird, wenn
+das Gerät sein Bild gar nicht hergibt: dann gibt es nichts, worauf man warten
+könnte, und der Satz darf sofort hinaus.
+
+### „Das Sicherheitszertifikat ist abgelaufen" — bei tadelloser Verbindung
+
+Ein WebSocket meldet `error`, sobald ein Verbindungsversuch scheitert, und der
+erste tut das regelmäßig: der Agent startet gerade neu, am Handy ist die Anfrage
+noch nicht bestätigt, das WLAN hat eine Sekunde gebraucht. Der nächste kommt
+durch. Trotzdem stand der denkbar ungünstigste Satz da — er schickte jeden, der
+ihn las, an eine Stelle, an der nichts zu reparieren war.
+
+Gemeldet wird jetzt erst nach drei erfolglosen Versuchen, und nur, wenn die
+Verbindung noch **nie** stand. Stand sie schon einmal, kümmert sich der
+Wiederaufbau darum; dafür gibt es die Statusanzeige. Gilt für Bild und Eingabe.
+
+### Nach dem Trennen ging kein zweiter Versuch mehr
+
+Am Handy behauptete die Benachrichtigung weiter, jemand sehe zu. Der alte Socket
+war nur scheinbar weg: `WebSocketConnection.close()` setzte ein Flag und
+schickte einen Close-Rahmen, aber der Thread hing in `input.read()` — ohne
+Zeitlimit, denn das wird beim Aufrüsten aufgehoben. Verlor die Gegenseite die
+Route, statt sauber aufzulegen, wartete er dort für immer: die Verbindung zählte
+weiter als offen, und der Arbeiter blieb belegt. Nach ein paar Versuchen war der
+Vorrat von sechzehn aufgebraucht.
+
+Zwei Hälften repariert:
+
+- **Der TCP-Socket wird mitgeschlossen** (`HttpServer.openSocket`). Das bricht
+  ein blockierendes Lesen sofort ab — damit endet `listen`, und damit läuft das
+  `finally`, an dem die Freigabe hängt. Ein Schreibfehler schließt jetzt
+  ebenfalls, statt nur ein Flag zu setzen.
+- **Ein zweiter Socket derselben Art löst den ersten ab** (`LiveConnections`).
+  Ein Gerät hat genau ein Bild und genau eine Eingabe; der frische gewinnt, weil
+  er der ist, an dem gerade jemand sitzt.
+
+### Der graue Vorschlagstext landete im Feld
+
+Aus „Suchen" und einem getippten `a` wurde „Suchena". Löschte man das weg, war
+das Feld leer, zeigte wieder seinen Platzhalter, und der nächste Buchstabe holte
+ihn erneut herein.
+
+Ein leeres Feld gibt unter `getText()` seinen Hinweistext zurück — das ist
+schließlich, was dort zu lesen steht. Ob es ein Hinweis ist, sagt erst
+`isShowingHintText()`, und danach hatte niemand gefragt.
+
+### „Dieses Feld nimmt keinen Text von außen an" (YouTube, Spotify)
+
+Richtig beschrieben und trotzdem die falsche Auskunft: `ACTION_SET_TEXT`
+scheitert an allem, was seinen Text nicht in einem gewöhnlichen `EditText` hält
+— einfügen lässt sich dort sehr wohl etwas. Zweiter Weg: alles markieren und
+über die Zwischenablage einfügen. **Der Preis ist ausgesprochen** — er
+überschreibt, was dort lag; gegangen wird er nur, wenn der gerade Weg
+gescheitert ist.
+
+### „Zurück: nicht nachsehbar"
+
+Gesucht wird jetzt zweimal: über die Kennung aus der Kopplung, und danach über
+den Namen. Der zweite Weg ist kein Notbehelf — eine Kopplung von vor dem
+Steckbrief-Austausch hat die Kennung nie mitbekommen, und der Test sagte
+daraufhin „nicht nachsehbar" über eine Gegenrichtung, die tadellos eingetragen
+dastand.
+
+### Der Verbindungstest zählte auf, statt zu sagen, was fehlt
+
+Die vollständige Liste der Rechte war jedes Mal richtig und jedes Mal nutzlos:
+um zu wissen, ob etwas fehlt, musste man die Sollmenge im Kopf haben — und die
+hängt davon ab, was für ein Gerät dort steht. Jetzt steht dort „alle Rechte
+verfügbar" oder „es fehlt Bild, Eingabe".
+
+**Und nur, was diese Art Gerät überhaupt vergeben kann.** Ein Handy hat keine
+Medien, keine Energieverwaltung und keine Aktionen; sie als fehlend zu führen
+wäre eine Mängelliste über Dinge, die es nie gab. Die Sollmenge kommt aus
+`capabilities` — was ein Gerät kann, sagt es selbst.
+
+### Oberfläche
+
+- **Kein roter Balken um „Noch kein Gerät gekoppelt".** Das ist keine Störung,
+  sondern der Anfang — in Warnfarbe sah der erste Start aus wie ein Fehlschlag.
+- **„Dieses Gerät anbieten" heißt „Dieses Gerät koppeln".**
+- **Die eigene Adresse erscheint erst mit dem Code.** Sie stand dauerhaft da,
+  auch ohne Code: eine Zeile, die aussieht wie etwas zum Abtippen, aber allein
+  nichts bewirkt. Wer sie abtippte, stand danach vor der Frage nach einem Code,
+  den niemand angezeigt hatte. Jetzt: **QR-Code oben**, darunter „Alternativ:"
+  und dann Code und Adresse.
+
+**Abnahme:** am echten Gerät noch zu prüfen — in beide Richtungen verbinden,
+trennen, erneut verbinden; in ein YouTube-Suchfeld tippen; ein Update am Handy
+und eines vom Handy aus auf den Rechner.
+
 ---
 
 # Teil B — Dateimanager

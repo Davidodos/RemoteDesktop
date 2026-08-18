@@ -201,7 +201,7 @@ class HttpServer(
                     // wenn niemand tippt, und wäre nach dreißig Sekunden weg.
                     connection.soTimeout = 0
 
-                    if (openSocket(request, input, output, upgrade)) {
+                    if (openSocket(connection, request, input, output, upgrade)) {
                         return
                     }
 
@@ -229,6 +229,7 @@ class HttpServer(
      *   fallen zu lassen.
      */
     private fun openSocket(
+        connection: Socket,
         request: Request,
         input: InputStream,
         output: BufferedOutputStream,
@@ -257,7 +258,24 @@ class HttpServer(
             )
             output.flush()
 
-            upgrade(WebSocketConnection(input, output))
+            // **Der TCP-Socket wird mitgeschlossen, und das ist der Punkt.**
+            //
+            // Der Befund dahinter (18.08.2026): `close()` setzte nur ein Flag
+            // und schickte einen Close-Rahmen. Der Thread hing derweil in
+            // `input.read()` — ohne Zeitlimit, denn das wurde oben gerade
+            // aufgehoben. Legte die Gegenseite nicht sauber auf, sondern verlor
+            // einfach die Route (WLAN-Wechsel, geschlossener Deckel, ein
+            // beendetes Fenster), wartete er dort für immer. Zwei Folgen: die
+            // Verbindung zählte weiter als offen — am Handy stand in der
+            // Benachrichtigung, jemand sehe zu, obwohl niemand mehr zusah —,
+            // und der Arbeiter blieb belegt. Nach ein paar solchen Versuchen war
+            // der Vorrat aufgebraucht und ein neuer Versuch wurde abgewiesen:
+            // genau das „geht nicht mehr, bis die App neu startet".
+            //
+            // Ein geschlossener Socket bricht das blockierende Lesen sofort mit
+            // einer IOException ab. Damit endet `listen`, und damit läuft das
+            // `finally`, an dem die Freigabe hängt.
+            upgrade(WebSocketConnection(input, output) { runCatching { connection.close() } })
 
             true
         } catch (broken: IOException) {

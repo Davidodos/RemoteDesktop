@@ -2,6 +2,8 @@ package app.remotedesktop.client.host
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Path
@@ -368,29 +370,126 @@ class RemoteInputService : AccessibilityService() {
     private fun type(text: String): String? {
         val node = focused() ?: return "Kein Eingabefeld im Vordergrund."
 
-        val existing = node.text?.toString().orEmpty()
-
-        return set(node, existing + text)
+        return set(node, contentOf(node) + text)
     }
 
     private fun backspace(): String? {
         val node = focused() ?: return "Kein Eingabefeld im Vordergrund."
 
-        val existing = node.text?.toString().orEmpty()
+        val existing = contentOf(node)
 
         return if (existing.isEmpty()) null else set(node, existing.dropLast(1))
     }
 
+    /**
+     * Was wirklich im Feld steht — **ohne den grauen Vorschlagstext**.
+     *
+     * <p>
+     * **Der Befund dahinter (18.08.2026):** wer vom Rechner aus in ein leeres
+     * Feld tippte, bekam den Platzhalter mitgeschrieben — aus „Suchen" und einem
+     * getippten `a` wurde „Suchena". Löschte man das weg, war das Feld leer,
+     * zeigte wieder seinen Platzhalter, und der nächste Buchstabe holte ihn
+     * erneut herein. Der Grund steht in Androids Schnittstelle: ein leeres Feld
+     * gibt unter `getText()` seinen Hinweistext zurück, weil das nun einmal das
+     * ist, was dort zu lesen steht. Ob es ein Hinweis ist, sagt erst
+     * `isShowingHintText()` — und danach hat vorher niemand gefragt.
+     * </p>
+     */
+    private fun contentOf(node: AccessibilityNodeInfo): String {
+        if (node.isShowingHintText) {
+            return ""
+        }
+
+        val text = node.text?.toString().orEmpty()
+        val hint = node.hintText?.toString()
+
+        // Zweiter Riegel für Felder, die `isShowingHintText` nicht pflegen: ein
+        // Inhalt, der Zeichen für Zeichen der Hinweis ist, ist der Hinweis.
+        return if (hint != null && text == hint) "" else text
+    }
+
+    /**
+     * Setzt den Inhalt eines Feldes — und hat dafür zwei Wege.
+     *
+     * <p>
+     * **Warum zwei.** `ACTION_SET_TEXT` ist der gerade Weg und der einzige, der
+     * ohne Nebenwirkung auskommt. Er scheitert aber an einer ganzen Klasse von
+     * Feldern: die Suchfelder von YouTube und Spotify gehören dazu, und mit
+     * ihnen alles, was seinen Text nicht in einem gewöhnlichen `EditText` hält.
+     * Was dort stand, war „Dieses Feld nimmt keinen Text von außen an" — richtig
+     * beschrieben und trotzdem die falsche Auskunft, denn einfügen lässt sich
+     * dort sehr wohl etwas. Also wird eingefügt.
+     * </p>
+     *
+     * <p>
+     * **Der Preis ist ausgesprochen:** der Weg über die Zwischenablage
+     * überschreibt, was dort lag. Das ist unschön und trotzdem die bessere
+     * Hälfte der Wahl — die andere wäre ein Feld, in das sich nichts schreiben
+     * lässt. Gegangen wird er nur, wenn der gerade Weg vorher gescheitert ist.
+     * </p>
+     */
     private fun set(node: AccessibilityNodeInfo, value: String): String? {
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
         }
 
-        return if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
+        if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)) {
+            // Der Cursor ans Ende. Ohne das steht er bei manchen Feldern nach
+            // dem Setzen wieder vorn, und der nächste Buchstabe landet dort.
+            moveCaretToEnd(node, value.length)
+
+            return null
+        }
+
+        return paste(node, value)
+    }
+
+    /**
+     * Der zweite Weg: alles markieren und den neuen Inhalt darüber einfügen.
+     *
+     * Markiert wird ausdrücklich der ganze bestehende Inhalt — sonst käme der
+     * neue Text zum alten hinzu, und aus jedem Buchstaben würde ein Wort.
+     */
+    private fun paste(node: AccessibilityNodeInfo, value: String): String? {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            ?: return "Dieses Feld nimmt keinen Text von außen an."
+
+        val stored = runCatching {
+            clipboard.setPrimaryClip(ClipData.newPlainText("RemoteDesktop", value))
+        }.isSuccess
+
+        if (!stored) {
+            return "Dieses Feld nimmt keinen Text von außen an."
+        }
+
+        selectAll(node)
+
+        return if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
             null
         } else {
             "Dieses Feld nimmt keinen Text von außen an."
         }
+    }
+
+    private fun selectAll(node: AccessibilityNodeInfo) {
+        val arguments = Bundle().apply {
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
+            putInt(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,
+                node.text?.length ?: 0,
+            )
+        }
+
+        node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
+    }
+
+    private fun moveCaretToEnd(node: AccessibilityNodeInfo, position: Int) {
+        val arguments = Bundle().apply {
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, position)
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, position)
+        }
+
+        node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
     }
 
     private fun focused(): AccessibilityNodeInfo? =

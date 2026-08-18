@@ -190,7 +190,14 @@ public sealed class RemotePage : Control
 
         // Muss vor dem Laden gesetzt sein: die App fragt die Angaben schon beim
         // ersten Rendern ab, um die Selbstverbindung zu sperren.
-        var host = JsonSerializer.Serialize(new { machineName = Environment.MachineName });
+        // Die Fassung gehört dazu, seit die Geräteliste sie vergleicht: sie
+        // zeigt je Gerät, ob es denselben Stand hat wie dieses hier. Ohne den
+        // eigenen Stand gäbe es nichts zu vergleichen.
+        var host = JsonSerializer.Serialize(new
+        {
+            machineName = Environment.MachineName,
+            version = ClientUpdate.InstalledVersion()
+        });
 
         await core.AddScriptToExecuteOnDocumentCreatedAsync($"window.remoteDesktopHost = {host};");
 

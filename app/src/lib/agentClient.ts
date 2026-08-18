@@ -86,6 +86,26 @@ export class AgentClient {
     return await this.request<UpdateReport>('/api/update', { method: 'POST' })
   }
 
+  /**
+   * Das **ganze** Update: Agent, Fenster und Oberfläche über den Installer.
+   *
+   * <p>
+   * Der Weg, auf dem ein Rechner sich von einem gekoppelten Gerät aus erneuern
+   * lässt. {@link update} tauscht nur die Programmdatei des Agents — ändert sich
+   * die Oberfläche, und das ist der häufigere Fall, bliebe sie auf dem Stand von
+   * vorher. Windows fragt dabei nichts nach: der Agent läuft ohnehin mit den
+   * nötigen Rechten (siehe `agent/Services/InstallerUpdate.cs`).
+   * </p>
+   *
+   * <p>
+   * Der Rechner ist danach etwa eine Minute lang nicht erreichbar. Die Antwort
+   * kommt vorher — was danach passiert, sieht man daran, dass er wiederkommt.
+   * </p>
+   */
+  async updateApp(): Promise<UpdateReport> {
+    return await this.request<UpdateReport>('/api/update/app', { method: 'POST' })
+  }
+
   /** Was auf dem Rechner gerade läuft. Leere Liste heißt: nichts. */
   async getMediaSessions(): Promise<MediaSession[]> {
     const { sessions } = await this.request<{ sessions: MediaSession[] }>('/api/media/sessions')

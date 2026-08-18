@@ -119,6 +119,26 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
 
+        <!-- Der Rückkanal des Selbst-Updates.
+
+             Er ist der Grund, warum ein Update am Handy vorher wirkungslos
+             blieb: Android beantwortet eine Installer-Sitzung außerhalb von
+             Google Play zuerst mit STATUS_PENDING_USER_ACTION und legt den
+             Bestätigungsdialog als Absicht bei — starten muss ihn die App.
+             Ohne Empfänger, der das tut, lief der Download durch und danach
+             passierte sichtbar nichts.
+
+             Nicht freigegeben: das System schickt hierher nur, was zu einer
+             Sitzung dieser App gehört. Freigegeben könnte jede andere App eine
+             Installation vortäuschen. -->
+        <receiver
+            android:name=".InstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="app.remotedesktop.client.INSTALL_STATUS" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

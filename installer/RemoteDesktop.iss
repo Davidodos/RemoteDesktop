@@ -81,6 +81,36 @@ Source: "..\agent\appsettings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 ; Autostart — und niemand sieht, warum sich nichts geändert hat.
 Type: filesandordirs; Name: "{app}\client"
 
+; Die Weboberfläche wird geleert und nicht überschrieben.
+;
+; **Der Befund dahinter:** Vite gibt jeder Datei einen Namen mit Prüfsumme.
+; Ein Update legt die neuen daneben, und die alten bleiben für immer liegen —
+; nach ein paar Fassungen steht dort ein Dutzend Stände übereinander. Die
+; `index.html` verweist zwar nur auf den neuesten, aber „liegt nur herum" und
+; „läuft nicht" sind zwei verschiedene Zusagen, und nur die zweite ist die,
+; die hier gelten soll.
+Type: filesandordirs; Name: "{app}\app"
+
+; Die Rückstände des Agent-Selbst-Updates.
+;
+; Es legt die alte Fassung als `.old` beiseite, die geladene als `.new` und
+; merkt sich den Versuch in `.update` (siehe agent/Services/AgentUpdater.cs).
+; Das `.old` ist eine vollständige, startbare Programmdatei einer älteren
+; Fassung — genau die Art Rückstand, die nach einem Update nichts mehr zu
+; suchen hat. Das `.update` muss mit, sonst hält der frisch installierte Agent
+; seine eigene neue Fassung für einen eben erst gescheiterten Versuch und
+; überspringt sie eine halbe Stunde lang.
+Type: files; Name: "{app}\RemoteDesktopAgent.exe.old"
+Type: files; Name: "{app}\RemoteDesktopAgent.exe.new"
+Type: files; Name: "{app}\RemoteDesktopAgent.exe.update"
+
+; Der Zwischenspeicher der Anzeigekomponente: kompiliertes JavaScript der
+; vorigen Oberfläche und ein etwaiger Service Worker aus einer Fassung vor
+; v1.3.0. Der `localStorage` daneben — die Geräteliste des Fensters — bleibt
+; ausdrücklich stehen: gekoppelte Geräte überleben ein Update.
+Type: filesandordirs; Name: "{localappdata}\RemoteDesktop\EBWebView\Default\Code Cache"
+Type: filesandordirs; Name: "{localappdata}\RemoteDesktop\EBWebView\Default\Service Worker"
+
 [Dirs]
 ; Zertifikate, privater Schlüssel, gekoppelte Geräte und das Netzprofil — alles
 ; in einem Ordner neben dem Programm.
@@ -109,6 +139,17 @@ Name: "{app}\data"; Permissions: admins-full system-full users-modify
 ; Schlüssel wäre die unangenehmste Art von Rückstand.
 Type: filesandordirs; Name: "{app}\data"
 
+; Und der Programmordner als Ganzes — als letzter Eintrag, denn die Reihenfolge
+; ist hier die Reihenfolge der Ausführung.
+;
+; **Der Befund dahinter:** Inno räumt weg, was es abgelegt hat. Was zur Laufzeit
+; dazukam, kennt es nicht: die `.old` und `.new` des Agent-Selbst-Updates, die
+; `appsettings.json`, wenn sie jemand angefasst hat, ein Protokoll. Übrig blieb
+; ein Ordner mit einer startbaren `RemoteDesktopAgent.exe.old` darin — nach
+; einer Deinstallation, die sich für abgeschlossen hielt. Jetzt geht der Ordner
+; mit, und danach ist nichts mehr manuell wegzuräumen.
+Type: filesandordirs; Name: "{app}"
+
 ; Der Zwischenspeicher im Benutzerprofil: der Ordner von WebView2 (darin liegt
 ; der localStorage der Oberfläche — also die Geräteliste des Fensters samt
 ; Zugangsdaten) und die Absturzprotokolle.
@@ -128,12 +169,42 @@ Name: "{group}\RemoteDesktop"; Filename: "{app}\{#Exe}"
 Name: "{group}\RemoteDesktop deinstallieren"; Filename: "{uninstallexe}"
 
 [Run]
-; Nur noch das Fenster. Der Dienst wird dort eingetragen und gestartet, nicht
-; hier — siehe die Begründung unter [Tasks].
-Filename: "{app}\{#Exe}"; Description: "RemoteDesktop einrichten"; \
-    Flags: postinstall nowait skipifsilent
+; Der Agent lief vor dem Kopieren und soll danach wieder laufen.
+;
+; **Der Befund dahinter:** ein Update über die Oberfläche startet den Installer
+; still. Dabei wird der Agent angehalten (PrepareToInstall) — und danach startete
+; ihn niemand. Bis zur nächsten Anmeldung war der Rechner unerreichbar, und
+; genau das ist der Fall, in dem niemand davorsitzt, der es merken könnte.
+; Gibt es die Aufgabe nicht, weil dieser Rechner nur steuern soll, geht der
+; Aufruf ins Leere und niemand sieht es.
+Filename: "{sys}\schtasks.exe"; Parameters: "/Run /TN {#Service}"; \
+    Check: AgentTaskExists; Flags: runhidden
+
+; Und das Fenster.
+;
+; „runasoriginaluser", weil der Installer erhöht läuft: als Administrator
+; gestartet legte das Fenster seinen WebView2-Speicher in ein anderes Profil,
+; und die Geräteliste wäre nach jedem Update leer.
+;
+; Ohne „skipifsilent", damit es auch nach einem Update aus der Oberfläche
+; wieder aufgeht — dort hat es sich ja gerade selbst beendet. Bei einem Update
+; von einem gekoppelten Gerät aus bleibt es zu: dort sitzt niemand, und dieser
+; Fall gibt „/NOLAUNCH" mit.
+Filename: "{app}\{#Exe}"; Description: "RemoteDesktop öffnen"; \
+    Check: ShouldOpenWindow; Flags: postinstall nowait runasoriginaluser
 
 [UninstallRun]
+; Erst anhalten, was läuft.
+;
+; **Der Befund dahinter:** eine Deinstallation ließ den Programmordner stehen.
+; Der Grund war nicht der Uninstaller, sondern eine laufende Datei darin — eine
+; .exe, die Windows in Benutzung hat, lässt sich nicht löschen. Der Agent wird
+; über seine Aufgabe beendet; das Fenster und alles, was ein
+; Selbst-Update davon hinterlassen hat, über den Namen der Programmdatei. Das
+; „/F" ist hier richtig: es wird ohnehin gleich alles gelöscht.
+Filename: "{sys}\taskkill.exe"; Parameters: "/IM RemoteDesktopAgent.exe /F /T"; Flags: runhidden
+Filename: "{sys}\taskkill.exe"; Parameters: "/IM {#Exe} /F /T"; Flags: runhidden
+
 ; Der Agent läuft seit v1.3.0 als geplante Aufgabe in der Sitzung des Benutzers
 ; und nicht mehr als Dienst — der Grund steht in setup/AgentTask.cs. Beides wird
 ; hier abgeräumt: die Aufgabe, und der Dienst einer älteren Installation.
@@ -151,12 +222,78 @@ begin
     'SYSTEM\CurrentControlSet\Services\{#Service}');
 end;
 
-{ Vor dem Kopieren den Dienst anhalten.
+{ Ob die geplante Aufgabe des Agents eingetragen ist.
+
+  Nur dann wird sie nach dem Kopieren wieder gestartet. Auf einem Rechner, der
+  nur andere steuern soll, gibt es sie nicht — dort wäre ein fehlgeschlagener
+  Aufruf die einzige Spur eines Vorgangs, der gar nicht vorgesehen ist. }
+function AgentTaskExists: Boolean;
+var
+  ResultCode: Integer;
+begin
+  Result := Exec(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN {#Service}', '',
+                 SW_HIDE, ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+{ Ob nach der Installation das Fenster aufgehen soll.
+
+  Es soll — außer, wenn das Update von einem gekoppelten Gerät aus angestoßen
+  wurde. Dann sitzt vor diesem Rechner niemand, und ein Fenster, das von allein
+  aufgeht, wäre das einzige Zeichen eines Vorgangs, den jemand anderes ausgelöst
+  hat. Der Agent gibt dafür /NOLAUNCH mit (siehe agent/Services/InstallerUpdate.cs). }
+function ShouldOpenWindow: Boolean;
+var
+  Index: Integer;
+begin
+  Result := True;
+
+  for Index := 1 to ParamCount do
+    if CompareText(ParamStr(Index), '/NOLAUNCH') = 0 then
+    begin
+      Result := False;
+      Exit;
+    end;
+end;
+
+{ Beendet eine Programmdatei und wartet, bis sie wirklich weg ist.
+
+  Ein `schtasks /End` kommt zurück, sobald der Auftrag abgesetzt ist, nicht
+  wenn der Prozess weg ist. Zwischen beidem liegen unter Last durchaus ein paar
+  Sekunden — und in dieser Lücke scheitert das Kopieren an genau der Datei, um
+  die es geht. }
+procedure StopAndWait(const ExeName: String);
+var
+  Attempt, ResultCode: Integer;
+begin
+  for Attempt := 1 to 20 do
+  begin
+    { tasklist meldet ohne Treffer den Text „Keine Tasks…" und trotzdem 0.
+      Deshalb über taskkill mit /FI: das liefert einen Code, auf den Verlass
+      ist — 128, wenn kein Prozess dieses Namens läuft. }
+    if not Exec(ExpandConstant('{sys}\taskkill.exe'),
+                '/IM ' + ExeName + ' /F', '',
+                SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      Exit;
+
+    if ResultCode <> 0 then
+      Exit;
+
+    Sleep(250);
+  end;
+end;
+
+{ Vor dem Kopieren alles anhalten, was aus dem Programmordner läuft.
 
   Eine laufende .exe lässt sich unter Windows nicht ersetzen. Ohne diesen
   Schritt scheitert jedes Update an genau der Datei, um die es geht — und der
   Installer meldet einen Dateizugriffsfehler, mit dem niemand etwas anfangen
-  kann. }
+  kann.
+
+  Drei Dinge, und in dieser Reihenfolge: die geplante Aufgabe (damit sie den
+  Agent nicht sofort neu startet), der Dienst einer älteren Installation, und
+  danach die Prozesse selbst — mit Warten, bis sie wirklich weg sind. Das
+  Fenster gehört dazu: bei einem Update von einem gekoppelten Gerät aus steht
+  es offen, und niemand ist da, der es schließt. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
@@ -171,6 +308,9 @@ begin
   if ServiceExists then
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop {#Service}', '',
          SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+  StopAndWait('RemoteDesktopAgent.exe');
+  StopAndWait('{#Exe}');
 end;
 
 // Die Zwischenspeicher aller Benutzerprofile wegräumen.

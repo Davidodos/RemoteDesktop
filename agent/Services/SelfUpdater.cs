@@ -31,7 +31,19 @@ public sealed class SelfUpdater(AgentUpdater updater, ILogger<SelfUpdater> logge
 
         try
         {
-            await updater.CheckAsync(stoppingToken);
+            var result = await updater.CheckAsync(stoppingToken);
+
+            if (result.Outcome == UpdateOutcome.Installing)
+            {
+                // Beendet wird hier und nicht mehr im Updater: der tauscht auch
+                // dann, wenn die Prüfung über <c>POST /api/update</c> kam, und
+                // dort muss vorher noch eine Antwort hinaus. Wer beendet, ist
+                // deshalb der Aufrufer — hier ist das dieser Dienst.
+                logger.LogInformation(
+                    "Fassung {Version} wird installiert — der Agent beendet sich.", result.Version);
+
+                Environment.Exit(0);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

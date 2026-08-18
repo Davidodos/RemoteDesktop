@@ -3,7 +3,14 @@
  * Baut `manifest.json` zur fertigen Agent-Datei und unterschreibt es.
  *
  * Aufruf:
- *   node scripts/sign-manifest.mjs <agent.exe> <version> <protokoll> <ausgabeordner>
+ *   node scripts/sign-manifest.mjs <datei> <version> <protokoll> <ausgabeordner> [name]
+ *
+ * `name` ist der Dateiname des Manifests; ohne Angabe `manifest.json`. Zwei
+ * Manifeste in einem Release, weil es zwei Dinge zu tauschen gibt: die
+ * Programmdatei des Agents (er tauscht sie im Lauf gegen sich selbst) und den
+ * Installer (er erneuert zusätzlich das Fenster und die Oberfläche). Beide
+ * werden auf demselben Rechner mit vollen Rechten ausgeführt, also gilt für
+ * beide dieselbe Bedingung: nicht ohne gültige Unterschrift.
  *
  * Der private Schlüssel kommt aus der Umgebung (`RELEASE_PRIVATE_KEY`, PEM) —
  * nie von der Kommandozeile, weil er dort in der Prozessliste stünde.
@@ -16,7 +23,7 @@ import { createHash, createPrivateKey, sign } from 'node:crypto'
 import { readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 
-const [file, version, protocol, outputDirectory] = process.argv.slice(2)
+const [file, version, protocol, outputDirectory, name = 'manifest.json'] = process.argv.slice(2)
 
 if (file === undefined || version === undefined || protocol === undefined || outputDirectory === undefined) {
   console.error('Aufruf: sign-manifest.mjs <datei> <version> <protokoll> <ausgabeordner>')
@@ -51,7 +58,7 @@ const signature = sign('sha256', bytes, {
   dsaEncoding: 'ieee-p1363',
 }).toString('base64')
 
-writeFileSync(join(outputDirectory, 'manifest.json'), bytes)
-writeFileSync(join(outputDirectory, 'manifest.json.sig'), signature)
+writeFileSync(join(outputDirectory, name), bytes)
+writeFileSync(join(outputDirectory, `${name}.sig`), signature)
 
-console.log(`manifest.json für ${manifest.file} (${manifest.size} Bytes) unterschrieben.`)
+console.log(`${name} für ${manifest.file} (${manifest.size} Bytes) unterschrieben.`)

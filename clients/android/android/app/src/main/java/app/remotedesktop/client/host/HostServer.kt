@@ -100,6 +100,32 @@ class HostServer(
         const val NO_INPUT =
             "Dieses Gerät nimmt noch keine Eingaben an. Am Handy unter " +
                 "„Dieses Gerät freigeben\" die Fernsteuerung einschalten."
+
+        /**
+         * Was der Client hört, wenn wirklich niemand die Aufnahme bestätigt
+         * hat.
+         */
+        const val NO_SCREEN =
+            "Dieses Gerät gibt seinen Bildschirm noch nicht frei. Am Handy unter " +
+                "„Dieses Gerät freigeben\" die Bildschirmaufnahme einschalten."
+
+        /**
+         * So lange wird auf die Aufnahme gewartet, bevor der Satz oben
+         * hinausgeht.
+         *
+         * <p>
+         * **Der Befund dahinter (18.08.2026):** die Aufnahme entsteht nicht in
+         * dem Augenblick, in dem jemand „Zulassen" tippt. Erst kommt Androids
+         * eigener Dialog, dann meldet sich der Vordergrunddienst mit dem Typ
+         * „nimmt den Bildschirm auf" neu an — und erst danach gibt
+         * `getMediaProjection` etwas heraus. Der Client stand längst an der Tür
+         * und bekam „gibt seinen Bildschirm noch nicht frei" zu hören, während
+         * die Freigabe eine Sekunde später stand. Sichtbar war das als eine
+         * Fehlermeldung über ein Gerät, das man daneben tadellos steuern konnte.
+         * </p>
+         */
+        private const val SOURCE_WAIT_MS = 6000L
+        private const val SOURCE_POLL_MS = 250L
     }
 
     /** Der Bildschirm dieses Handys, in echten Pixeln. */
@@ -251,6 +277,36 @@ class HostServer(
     }
 
     /**
+     * Wartet, bis die Aufnahme steht — höchstens {@link SOURCE_WAIT_MS} lang.
+     *
+     * Nicht gewartet wird, wenn dieses Gerät sein Bild gar nicht hergibt: dann
+     * gibt es nichts, worauf man warten könnte, und der Satz darf sofort
+     * hinaus. Siehe {@link SOURCE_WAIT_MS} für den Grund, warum es sonst dauert.
+     */
+    private fun awaitSource(): FrameSource? {
+        if (!screenAllowed()) {
+            return null
+        }
+
+        val deadline = System.currentTimeMillis() + SOURCE_WAIT_MS
+
+        while (true) {
+            screenSource()?.let { return it }
+
+            if (System.currentTimeMillis() >= deadline) {
+                return null
+            }
+
+            try {
+                Thread.sleep(SOURCE_POLL_MS)
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return null
+            }
+        }
+    }
+
+    /**
      * Der Bild-Stream.
      *
      * Die Aufnahme wird hier geöffnet und nicht vorgehalten: sie kostet einen
@@ -259,21 +315,16 @@ class HostServer(
      */
     private fun screenSocket(request: HttpServer.Request): HttpServer.Response =
         HttpServer.Response(101) { socket ->
-            val source = screenSource()
+            val source = awaitSource()
 
             if (source == null) {
-                // Kein Fehler im Sinne von kaputt: es hat nur noch niemand die
-                // Aufnahme bestätigt. Die App zeigt den Satz an, statt ein
-                // schwarzes Bild stehen zu lassen.
+                // Kein Fehler im Sinne von kaputt: es hat niemand die Aufnahme
+                // bestätigt. Die App zeigt den Satz an, statt ein schwarzes Bild
+                // stehen zu lassen.
                 socket.sendText(
                     JSONObject()
                         .put("t", "error")
-                        .put(
-                            "message",
-                            "Dieses Gerät gibt seinen Bildschirm noch nicht frei. " +
-                                "Am Handy unter „Dieses Gerät freigeben\" die " +
-                                "Bildschirmaufnahme einschalten.",
-                        )
+                        .put("message", NO_SCREEN)
                         .toString(),
                 )
 
@@ -284,7 +335,9 @@ class HostServer(
             val display = screen()
             val stream = ScreenStream(source, display.width, display.height)
 
-            val release = live.register(clientOf(request)) { socket.close() }
+            val release = live.register(clientOf(request), LiveConnections.Kind.SCREEN) {
+                socket.close()
+            }
 
             // Zwei Schleifen: das Bild geht in einem eigenen Thread hinaus,
             // während dieser hier auf Steuerbefehle hört. Sie in einer zu
@@ -313,7 +366,9 @@ class HostServer(
      */
     private fun inputSocket(request: HttpServer.Request): HttpServer.Response =
         HttpServer.Response(101) { socket ->
-            val release = live.register(clientOf(request)) { socket.close() }
+            val release = live.register(clientOf(request), LiveConnections.Kind.INPUT) {
+                socket.close()
+            }
 
             // Je Verbindung höchstens eine Meldung derselben Art. Ohne das
             // stünde bei jedem Antippen dieselbe Zeile in der Statuszeile, und
@@ -640,8 +695,13 @@ object PairingUri {
  */
 class LiveConnections {
 
+    /** Wofür eine Verbindung da ist. Bild und Eingabe laufen getrennt. */
+    enum class Kind { SCREEN, INPUT }
+
+    private class Entry(val kind: Kind, val cut: () -> Unit)
+
     private val gate = Any()
-    private val open = HashMap<String, MutableList<() -> Unit>>()
+    private val open = HashMap<String, MutableList<Entry>>()
 
     /**
      * Wer erfahren will, dass sich die Zahl der offenen Verbindungen geändert
@@ -660,20 +720,50 @@ class LiveConnections {
     /** Wie viele Sockets gerade offen sind — über alle Clients. */
     val count: Int get() = synchronized(gate) { open.values.sumOf { it.size } }
 
-    fun register(clientId: String?, cut: () -> Unit): () -> Unit {
+    /**
+     * Meldet eine Verbindung an — und trennt dabei die vorige derselben Art
+     * desselben Geräts.
+     *
+     * <p>
+     * **Der Befund dahinter (18.08.2026):** wer sich verband, trennte und es
+     * gleich noch einmal versuchte, kam nicht mehr durch — am Bildschirm blieb
+     * es dunkel, während die Benachrichtigung am Handy behauptete, jemand sehe
+     * zu. Der alte Socket war nämlich nur *scheinbar* weg: sein Thread hing
+     * ohne Zeitlimit in einem `read()`, das niemand unterbrach. Die eine Hälfte
+     * davon ist repariert, wo sie entstand (`HttpServer.openSocket` schließt
+     * jetzt den TCP-Socket mit). Die andere Hälfte ist diese hier: ein Gerät hat
+     * genau ein Bild und genau eine Eingabe. Ein zweiter Socket derselben Art
+     * ist kein Nebeneinander, sondern eine Ablösung — und der frische gewinnt,
+     * weil er der ist, an dem gerade jemand sitzt.
+     * </p>
+     */
+    fun register(clientId: String?, kind: Kind, cut: () -> Unit): () -> Unit {
         if (clientId == null) {
             return {}
         }
 
-        synchronized(gate) {
-            open.getOrPut(clientId) { mutableListOf() }.add(cut)
+        val entry = Entry(kind, cut)
+
+        // Erst herausnehmen, dann trennen: der Rückruf schließt einen Socket,
+        // und dessen Thread meldet sich gleich hier zurück, um sich abzumelden.
+        // Innerhalb des Schlosses wäre das ein Selbstgespräch mit Nachschlüssel.
+        val abgelöst = synchronized(gate) {
+            val list = open.getOrPut(clientId) { mutableListOf() }
+            val alt = list.filter { it.kind == kind }
+
+            list.removeAll(alt)
+            list.add(entry)
+
+            alt
         }
+
+        abgelöst.forEach { runCatching(it.cut) }
 
         announce()
 
         return {
             synchronized(gate) {
-                open[clientId]?.remove(cut)
+                open[clientId]?.remove(entry)
             }
 
             announce()
@@ -689,7 +779,7 @@ class LiveConnections {
     fun close(clientId: String): Int {
         val cuts = synchronized(gate) { open.remove(clientId).orEmpty() }
 
-        cuts.forEach { runCatching(it) }
+        cuts.forEach { runCatching(it.cut) }
         announce()
 
         return cuts.size

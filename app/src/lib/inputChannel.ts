@@ -18,6 +18,27 @@ const RECONNECT_MAX_MS = 8000
 const MAX_RECONNECT_ATTEMPTS = 10
 
 /**
+ * So viele erfolglose Versuche, bevor eine Störung gemeldet wird.
+ *
+ * <p>
+ * **Der Befund dahinter (18.08.2026):** ein WebSocket meldet `error`, sobald ein
+ * Verbindungsversuch scheitert — und das tut der erste regelmäßig, ohne dass
+ * irgendetwas kaputt wäre. Der Rechner startet den Agent gerade neu, das Handy
+ * hat die Anfrage noch nicht bestätigt, das WLAN hat eine Sekunde gebraucht. Der
+ * nächste Versuch kommt durch, und alles läuft. Trotzdem stand am Bildschirm der
+ * denkbar ungünstigste Satz: das Sicherheitszertifikat sei abgelaufen, man möge
+ * es im Fenster neu holen. Das schickte jeden, der ihn las, an eine Stelle, an
+ * der nichts zu reparieren war — während die Verbindung nebenher tadellos stand.
+ * </p>
+ *
+ * <p>
+ * Drei Versuche decken mit der Verdopplung oben knapp zwei Sekunden ab. Wer die
+ * überschreitet, hat es wirklich nicht mit einem Wackler zu tun.
+ * </p>
+ */
+const ATTEMPTS_BEFORE_COMPLAINING = 3
+
+/**
  * Der Eingabe-WebSocket zum Agent.
  *
  * Bewegungs-Events werden bis zum nächsten Frame gesammelt: ein Finger auf dem
@@ -35,6 +56,14 @@ export class InputChannel {
   private attempts = 0
   /** Ob der laufende Versuch je zustande kam. Siehe {@link open}. */
   private opened = false
+  /**
+   * Ob diese Verbindung überhaupt schon einmal stand.
+   *
+   * Trennt den Wackler vom Grundproblem: nach einer stehenden Verbindung ist ein
+   * Abriss etwas, das wieder zusammenwächst — davor ist er womöglich das, was
+   * eine Meldung wert wäre. Siehe {@link ATTEMPTS_BEFORE_COMPLAINING}.
+   */
+  private everConnected = false
 
   private pendingMove: Record<string, unknown> | undefined
   private frameHandle: number | undefined
@@ -51,6 +80,7 @@ export class InputChannel {
   connect(): void {
     this.closedByUs = false
     this.attempts = 0
+    this.everConnected = false
     window.addEventListener('online', this.reconnectNow)
     this.open()
   }
@@ -198,6 +228,7 @@ export class InputChannel {
         this.reconnectDelay = RECONNECT_BASE_MS
         this.attempts = 0
         this.opened = true
+        this.everConnected = true
         this.setState('connected')
       },
 
@@ -224,12 +255,21 @@ export class InputChannel {
       },
 
       onError: () => {
-        // Details liefert der Browser aus Sicherheitsgründen nicht. Die
-        // häufigste Ursache ist ein abgelaufenes Tailscale-Zertifikat.
+        // **Nicht beim ersten Mal.** Details liefert der Browser aus
+        // Sicherheitsgründen nicht, und ein einzelner gescheiterter Versuch sagt
+        // für sich genommen nichts: er kommt bei jedem Neustart des Agents vor,
+        // bei jeder Verbindung, die drüben noch bestätigt wird, und nach jedem
+        // Netzwechsel. Gemeldet wird erst, wenn es dabei bleibt — und nur, wenn
+        // diese Verbindung noch nie stand. Stand sie schon einmal, kümmert sich
+        // der Wiederaufbau darum, und dafür gibt es die Statusanzeige.
+        if (this.everConnected || this.attempts < ATTEMPTS_BEFORE_COMPLAINING) {
+          return
+        }
+
         this.onError(
-          `Die Verbindung zu ${this.device.name} ist gestört. Meist ist das ` +
-          'Sicherheitszertifikat des Rechners abgelaufen — im Fenster dort unter ' +
-          '„Einrichtung“ neu holen.',
+          `Die Verbindung zu ${this.device.name} kommt nicht zustande. Meist ist ` +
+          'das Sicherheitszertifikat des Rechners abgelaufen — im Fenster dort ' +
+          'unter „Einrichtung“ neu holen.',
         )
       },
     })

@@ -7,12 +7,21 @@ import type { HostPairingCode, HostStatus } from '../platform/index.ts'
 const TICK_MS = 1000
 
 /**
- * Die andere Hälfte des Koppelns: **dieses** Gerät anbieten.
+ * Die andere Hälfte des Koppelns: **dieses** Gerät koppeln.
  *
  * <p>
- * Ein Code, ein QR-Code und die eigene Adresse — mehr braucht die Gegenseite
- * nicht. Die Adresse steht neben dem QR-Code und nicht statt seiner: wer von
- * einem Rechner aus koppelt, hat keine Kamera und tippt beides ab.
+ * **Ein Knopf, danach ein QR-Code — und darunter, für den, der keine Kamera
+ * hat, Code und Adresse.** Vorher stand die eigene Adresse dauerhaft da, auch
+ * ohne Code: eine Zeile, die aussieht wie etwas zum Abtippen, aber allein nichts
+ * bewirkt. Wer sie abtippte, stand danach vor der Frage nach einem Code, den
+ * niemand angezeigt hatte. Beides gehört zusammen und erscheint deshalb
+ * zusammen.
+ * </p>
+ *
+ * <p>
+ * **Der QR-Code steht oben.** Er ist der Weg, den ein Handy nimmt, und er
+ * braucht nichts als eine Kamera. Was darunter kommt, ist die Antwort auf
+ * „und wenn ich keine habe" — deshalb steht dort „Alternativ".
  * </p>
  *
  * <p>
@@ -95,7 +104,7 @@ export function PairingOffer(): React.JSX.Element {
   }, [pairing])
 
   if (!host.available) {
-    return <p className="settings-hint">Im Browser lässt sich dieses Gerät nicht anbieten.</p>
+    return <p className="settings-hint">Im Browser lässt sich dieses Gerät nicht koppeln.</p>
   }
 
   const running = status?.running === true
@@ -133,27 +142,27 @@ export function PairingOffer(): React.JSX.Element {
 
       {running && pairing !== undefined && (
         <>
-          <p className="pairing-code">{pairing.code}</p>
-          <p className="settings-hint">Noch {remaining} Sekunden gültig.</p>
-
           {qr !== undefined && (
             <img className="pairing-qr" src={qr} alt="QR-Code zur Kopplung" />
           )}
 
+          {/* Was ohne Kamera bleibt. Der QR-Code oben trägt dieselben zwei
+              Angaben — deshalb „alternativ" und nicht „außerdem". */}
+          <p className="settings-hint">Alternativ:</p>
+
+          <p className="pairing-code">{pairing.code}</p>
+
+          {address === undefined ? (
+            <p className="settings-hint">Noch keine Adresse im Netz.</p>
+          ) : (
+            <p className="pairing-code address">{address}</p>
+          )}
+
+          <p className="settings-hint">Noch {remaining} Sekunden gültig.</p>
+
           <button type="button" className="settings-entry" onClick={hide}>
             <span>Ausblenden</span>
           </button>
-        </>
-      )}
-
-      {/* Die Adresse steht auch ohne Code da: sie beschreibt, wie dieses Gerät
-          erreichbar wäre, und wer von Hand koppelt, braucht sie zuerst. */}
-      {address === undefined ? (
-        <p className="settings-hint">Noch keine Adresse im Netz.</p>
-      ) : (
-        <>
-          <p className="settings-hint">Adresse für die Gegenseite:</p>
-          <p className="pairing-code address">{address}</p>
         </>
       )}
     </>

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { describeReport, type ConnectionReport } from './connectionTest.ts'
+import {
+  describeReport,
+  missingScopes,
+  type ConnectionReport,
+} from './connectionTest.ts'
 import type { Device } from './types.ts'
 
 const handy: Device = {
@@ -30,10 +34,42 @@ function report(rest: Partial<ConnectionReport> = {}): ConnectionReport {
  * nicht kaputt war.
  */
 describe('describeReport', () => {
-  it('nennt beide Richtungen mit ihren Rechten', () => {
+  /**
+   * **Der zweite Befund (18.08.2026):** hier stand die vollständige Liste der
+   * Rechte, die dieses Gerät drüben hat. Sie war jedes Mal richtig und jedes Mal
+   * nutzlos: um zu wissen, ob etwas fehlt, musste man die Sollmenge im Kopf
+   * haben — und die hängt davon ab, was für ein Gerät dort steht. Jetzt steht
+   * dort entweder, dass nichts fehlt, oder was fehlt.
+   */
+  it('sagt bei vollständigen Rechten, dass nichts fehlt', () => {
     expect(describeReport(handy, report())).toBe(
-      'Handy: screen, input. Zurück: screen, input, media.',
+      'Handy: alle Rechte verfügbar. Zurück: eingetragen (Bild, Eingabe, Medien).',
     )
+  })
+
+  it('nennt nur die fehlenden Rechte', () => {
+    expect(describeReport(handy, report({ scopesThere: ['screen'] }))).toContain(
+      'es fehlt Eingabe',
+    )
+  })
+
+  /**
+   * Ein Handy hat keine Medien, keine Energieverwaltung und keine Aktionen. Sie
+   * als fehlend zu führen wäre eine Mängelliste über Dinge, die es nie gab.
+   */
+  it('führt nur als fehlend, was diese Art Gerät überhaupt anbietet', () => {
+    expect(missingScopes(['screen', 'input'], ['screen', 'input'])).toEqual([])
+    expect(missingScopes(['screen', 'input'], ['input'])).toEqual(['screen'])
+  })
+
+  /** Ein Agent ohne Fähigkeitsliste ist ein Windows-Agent von vor V4. */
+  it('ohne Fähigkeitsliste gilt die Sollmenge eines Rechners', () => {
+    expect(missingScopes([], ['screen', 'input'])).toEqual([
+      'media',
+      'power',
+      'actions',
+      'wake',
+    ])
   })
 
   it('„neu koppeln" nur, wenn wirklich nachgesehen wurde', () => {
@@ -64,9 +100,10 @@ describe('describeReport', () => {
   })
 
   it('eingetragen und ohne Rechte ist etwas anderes als nicht eingetragen', () => {
-    expect(describeReport(handy, report({ reverse: { kind: 'granted', scopes: [] } }))).toContain(
-      'Zurück: nichts erlaubt.',
-    )
+    const satz = describeReport(handy, report({ reverse: { kind: 'granted', scopes: [] } }))
+
+    expect(satz).toContain('ist eingetragen, darf aber nichts')
+    expect(satz).not.toContain('neu koppeln')
   })
 
   it('unerreichbar nennt den Grund', () => {

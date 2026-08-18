@@ -73,7 +73,7 @@ describe('was sie trotzdem nicht kann', () => {
   test('Installieren ebenso', async () => {
     await expect(
       webview2Platform(HOST).update.install({ version: '2.0.0', url: 'https://example.invalid' }),
-    ).rejects.toThrow('noch nicht selbst')
+    ).rejects.toThrow('über seinen Installer')
   })
 
   test('nach Updates zu suchen ist kein Fehler, sondern ergebnislos', async () => {

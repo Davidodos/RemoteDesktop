@@ -101,6 +101,21 @@ demselben Schlüssel unterschrieben ist, und zeigt außerhalb von Google Play
 immer einen Bestätigungsdialog. Beides zusammen ist stärker als eine
 selbstgebaute Prüfung.
 
+**Ein gekoppeltes Gerät darf den Rechner aktualisieren** — seit 31m, über
+`POST /api/update/app`. Der Agent lädt dabei den Installer aus dem Release und
+führt ihn **mit vollen Rechten und ohne Rückfrage von Windows** aus. Das ist
+kein Loch in der Rechteverwaltung: der Agent läuft als geplante Aufgabe mit
+`HighestAvailable`, ein Prozess, den er startet, erbt diesen Token, und wer
+`power` hat, darf den Rechner ohnehin herunterfahren. Es ist trotzdem der Punkt,
+an dem eine heruntergeladene Datei am meisten kann.
+
+Deshalb gilt hier dieselbe Bedingung wie beim Agent selbst und **keine
+schwächere**: der Installer trägt sein eigenes Manifest im Release
+(`installer.json` + `.sig`), unterschrieben mit demselben ECDSA-P-256-Schlüssel,
+und ohne gültige Unterschrift *und* passende Prüfsumme wird nichts ausgeführt.
+Wer das Recht `power` hat, kann ein Update auslösen — er kann nicht bestimmen,
+*was* installiert wird.
+
 ### Offen
 
 **Sperrbildschirm und UAC.** Der Agent läuft als gewöhnlicher Benutzerprozess

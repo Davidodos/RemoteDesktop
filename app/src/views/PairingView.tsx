@@ -29,10 +29,10 @@ interface Props {
  * Koppeln — eine Seite, beide Richtungen.
  *
  * <p>
- * **Oben: dieses Gerät anbieten** (Code und QR-Code). **Darunter: ein anderes
- * eintragen** — am Handy per Kamera oder von Hand, am Rechner nur von Hand.
- * Beides gehört auf dieselbe Seite, weil beim Koppeln immer beide Seiten etwas
- * tun.
+ * **Oben: dieses Gerät koppeln** (QR-Code, darunter Code und Adresse).
+ * **Darunter: ein anderes eintragen** — am Handy per Kamera oder von Hand, am
+ * Rechner nur von Hand. Beides gehört auf dieselbe Seite, weil beim Koppeln
+ * immer beide Seiten etwas tun.
  * </p>
  *
  * <p>
@@ -119,7 +119,7 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
       {error !== undefined && <p className="error-text">{error}</p>}
 
       <section className="settings-group">
-        <h2>Dieses Gerät anbieten</h2>
+        <h2>Dieses Gerät koppeln</h2>
         <PairingOffer />
       </section>
 

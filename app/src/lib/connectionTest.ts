@@ -1,5 +1,7 @@
 import { AgentClient } from './agentClient.ts'
+import { LEGACY_CAPABILITIES, type Capability } from './capabilities.ts'
 import { signChallenge } from './clientKey.ts'
+import { deviceLabel } from './deviceNames.ts'
 import { ensureClientKey } from './pairing.ts'
 import { postJson } from '../transport/direct.ts'
 import { getPlatform } from '../platform/index.ts'
@@ -29,6 +31,8 @@ export interface ConnectionReport {
   reachable: boolean
   /** Wie sie heißt, wenn sie antwortet. */
   hostname?: string
+  /** Ihre Fassung, wenn sie eine nennt. */
+  version?: string
   /** Was sie kann. Leer heißt: sie sagt es nicht (älter als V4). */
   capabilities: string[]
   /** Welche Rechte dieses Gerät dort hat — `undefined`, wenn die Anmeldung scheiterte. */
@@ -54,10 +58,9 @@ export interface ConnectionReport {
  */
 export type Reverse =
   /**
-   * Die Kennung der Gegenseite steht nicht im Gerät. Dann lässt sich hier
-   * nichts nachsehen — die Gegenrichtung selbst kann trotzdem stehen. Das ist
-   * der Fall bei einer Kopplung von vor dem Steckbrief-Austausch und bei einer
-   * Gegenstelle, die ihren Ausweis nicht mitgeschickt hat.
+   * Die Kennung der Gegenseite steht nicht im Gerät, und auch unter ihrem Namen
+   * war nichts zu finden. Dann lässt sich hier nichts nachsehen — die
+   * Gegenrichtung selbst kann trotzdem stehen.
    */
   | { kind: 'unknown' }
   /** Die eigene Liste ließ sich nicht lesen. Eine Störung, kein Befund. */
@@ -66,6 +69,70 @@ export type Reverse =
   | { kind: 'missing' }
   /** Sie steht hier — mit diesen Rechten. Leer heißt: eingetragen und darf nichts. */
   | { kind: 'granted'; scopes: string[] }
+
+/**
+ * Welches Recht zu welcher Fähigkeit gehört.
+ *
+ * <p>
+ * **Der Grund, warum es diese Zuordnung gibt:** der Test zählte vorher alle
+ * Rechte auf, die dieses Gerät drüben hat. Damit stand bei einem Handy neben
+ * „Bild, Eingabe" nichts weiter — und ob das nun vollständig ist oder ob vier
+ * Rechte fehlen, war daraus nicht zu lesen. Ein Handy hat aber keine Medien,
+ * keine Energieverwaltung und keine Aktionen; sie dort als fehlend zu führen
+ * wäre eine Mängelliste über Dinge, die es nie gab.
+ * </p>
+ *
+ * <p>
+ * {@link Capability.keys}, {@link Capability.h264} und {@link Capability.files}
+ * stehen bewusst nicht darin: sie sagen etwas über das *Wie*, nicht über eine
+ * Erlaubnis. Für sie gibt es kein Recht, das jemand vergessen haben könnte.
+ * </p>
+ */
+const SCOPE_OF: Partial<Record<Capability, string>> = {
+  screen: 'screen',
+  input: 'input',
+  media: 'media',
+  power: 'power',
+  actions: 'actions',
+  wake: 'wake',
+}
+
+/** Was in der Oberfläche steht — die englischen Namen sind Protokoll. */
+const SCOPE_NAMES: Record<string, string> = {
+  screen: 'Bild',
+  input: 'Eingabe',
+  media: 'Medien',
+  power: 'Energie',
+  actions: 'Aktionen',
+  wake: 'Wecken',
+}
+
+export function scopeName(scope: string): string {
+  return SCOPE_NAMES[scope] ?? scope
+}
+
+/**
+ * Welche Rechte ein Gerät mit diesen Fähigkeiten überhaupt vergeben kann.
+ *
+ * Meldet es keine Fähigkeiten, ist es älter als V4 — dann gilt die Liste von
+ * damals, und die deckt sich mit der eines Windows-Agents.
+ */
+export function expectedScopes(capabilities: readonly string[]): string[] {
+  const abilities: readonly string[] =
+    capabilities.length === 0 ? LEGACY_CAPABILITIES : capabilities
+
+  return abilities
+    .map((capability) => SCOPE_OF[capability as Capability])
+    .filter((scope): scope is string => scope !== undefined)
+}
+
+/** Welche der erwarteten Rechte fehlen. */
+export function missingScopes(
+  capabilities: readonly string[],
+  granted: readonly string[],
+): string[] {
+  return expectedScopes(capabilities).filter((scope) => !granted.includes(scope))
+}
 
 export async function testConnection(device: Device): Promise<ConnectionReport> {
   const [there, reverse] = await Promise.all([outbound(device), inbound(device)])
@@ -81,11 +148,13 @@ async function outbound(
 ): Promise<Omit<ConnectionReport, 'reverse'>> {
   let capabilities: string[] = []
   let hostname: string | undefined
+  let version: string | undefined
 
   try {
     const info = await new AgentClient(device).getInfo()
 
     hostname = info.hostname
+    version = info.version
     capabilities = info.capabilities ?? []
   } catch (failure) {
     return {
@@ -98,6 +167,7 @@ async function outbound(
   return {
     reachable: true,
     ...(hostname === undefined ? {} : { hostname }),
+    ...(version === undefined ? {} : { version }),
     capabilities,
     ...(await scopesThere(device)),
   }
@@ -146,13 +216,17 @@ async function scopesThere(device: Device): Promise<{ scopesThere?: string[] }> 
 /**
  * Ob die Gegenseite hier steht — und mit welchen Rechten.
  *
- * Vier Ausgänge, und jeder sagt etwas anderes. Siehe {@link Reverse}.
+ * <p>
+ * **Gesucht wird zweimal.** Zuerst über die Kennung aus der Kopplung, dann über
+ * den Namen. Der zweite Weg ist kein Notbehelf, sondern der Grund, warum diese
+ * Auskunft überhaupt etwas taugt: eine Kopplung von vor dem Steckbrief-Austausch
+ * hat die Kennung nie mitbekommen, und der Test sagte daraufhin „nicht
+ * nachsehbar" über eine Gegenrichtung, die tadellos eingetragen dastand. Der
+ * Name ist der, den die Gegenseite beim Koppeln selbst angegeben hat; er steht
+ * genau deshalb in der eigenen Liste.
+ * </p>
  */
 async function inbound(device: Device): Promise<Reverse> {
-  if (device.peerClientId === undefined) {
-    return { kind: 'unknown' }
-  }
-
   let clients
 
   try {
@@ -164,18 +238,49 @@ async function inbound(device: Device): Promise<Reverse> {
     }
   }
 
-  const entry = clients.find((client) => client.id === device.peerClientId)
+  const entry =
+    (device.peerClientId === undefined
+      ? undefined
+      : clients.find((client) => client.id === device.peerClientId)) ?? byName(clients, device)
 
-  return entry === undefined ? { kind: 'missing' } : { kind: 'granted', scopes: entry.scopes }
+  if (entry !== undefined) {
+    return { kind: 'granted', scopes: entry.scopes }
+  }
+
+  // Ohne Kennung *und* ohne Namenstreffer lässt sich nichts behaupten: der
+  // Eintrag könnte unter einem dritten Namen dastehen. Mit Kennung dagegen ist
+  // nachgesehen und nichts gefunden — das ist ein Befund.
+  return device.peerClientId === undefined ? { kind: 'unknown' } : { kind: 'missing' }
+}
+
+/**
+ * Der Eintrag zum Namen dieses Geräts.
+ *
+ * Verglichen wird ohne Rücksicht auf Groß- und Kleinschreibung und Leerraum:
+ * der Name kommt aus einem Feld, in das ein Mensch getippt hat.
+ */
+function byName(
+  clients: readonly { id: string; label: string; scopes: string[] }[],
+  device: Device,
+): { id: string; label: string; scopes: string[] } | undefined {
+  const wanted = new Set(
+    [device.name, deviceLabel(device)].map((name) => name.trim().toLowerCase()),
+  )
+
+  return clients.find((client) => wanted.has(client.label.trim().toLowerCase()))
 }
 
 /**
  * Aus dem Bericht wird ein Satz, der weiterhilft.
  *
- * „Antwortet nicht" verschweigt, ob es am Netz, am Vertrauen oder an einer
- * fehlenden Freigabe liegt — und genau danach sucht man dann an der falschen
- * Stelle. Deshalb steht hier zu jeder Richtung genau eine Aussage, und zu jeder
- * Aussage der nächste Schritt.
+ * <p>
+ * **Es steht nur noch da, was fehlt.** Vorher zählte der Test alle Rechte auf,
+ * die dieses Gerät drüben hat — eine Liste, die man mit einer zweiten im Kopf
+ * vergleichen musste, um zu wissen, ob sie vollständig ist. Bei einem Handy war
+ * sie es immer, und trotzdem las sie sich wie ein Auszug. Jetzt steht dort
+ * entweder „alle Rechte" oder genau das, was fehlt — und zwar nur solche
+ * Rechte, die diese Art von Gerät überhaupt vergeben kann.
+ * </p>
  */
 export function describeReport(device: Device, report: ConnectionReport): string {
   const name = report.hostname ?? device.name
@@ -184,15 +289,27 @@ export function describeReport(device: Device, report: ConnectionReport): string
     ? `Nicht erreichbar: ${report.failure ?? 'kein Grund genannt'}`
     : report.scopesThere === undefined
       ? `${name} antwortet, kennt dieses Gerät aber nicht mehr. Neu koppeln.`
-      : `${name}: ${report.scopesThere.join(', ') || 'nichts erlaubt'}.`
+      : describeScopes(name, report)
 
   return `${hin} ${describeReverse(name, report.reverse)}`
+}
+
+function describeScopes(name: string, report: ConnectionReport): string {
+  const fehlend = missingScopes(report.capabilities, report.scopesThere ?? [])
+
+  if (fehlend.length === 0) {
+    return `${name}: alle Rechte verfügbar.`
+  }
+
+  return `${name}: es fehlt ${fehlend.map(scopeName).join(', ')}.`
 }
 
 function describeReverse(name: string, reverse: Reverse): string {
   switch (reverse.kind) {
     case 'granted':
-      return `Zurück: ${reverse.scopes.join(', ') || 'nichts erlaubt'}.`
+      return reverse.scopes.length === 0
+        ? `Zurück: ${name} ist eingetragen, darf aber nichts.`
+        : `Zurück: eingetragen (${reverse.scopes.map(scopeName).join(', ')}).`
 
     case 'missing':
       return `Zurück: ${name} steht hier nicht in der Liste — neu koppeln.`
@@ -201,12 +318,10 @@ function describeReverse(name: string, reverse: Reverse): string {
       return `Zurück: nicht nachsehbar (${reverse.failure}).`
 
     // Kein „neu koppeln": hier ist nichts kaputt, hier fehlt nur die Kennung,
-    // unter der nachzusehen wäre. Wer diese Richtung wirklich prüfen will,
-    // koppelt neu — aber wenn sie funktioniert, funktioniert sie.
+    // unter der nachzusehen wäre — und unter dem Namen stand ebenfalls nichts.
+    // Wer diese Richtung wirklich prüfen will, koppelt neu; aber wenn sie
+    // funktioniert, funktioniert sie.
     case 'unknown':
-      return (
-        `Zurück: nicht nachsehbar — dieses Gerät hat sich beim Koppeln nicht gemerkt, `
-        + `unter welcher Kennung ${name} hier steht. Ob es geht, sagt ein Versuch von dort aus.`
-      )
+      return `Zurück: nicht nachsehbar — hier steht kein Eintrag auf den Namen ${name}.`
   }
 }

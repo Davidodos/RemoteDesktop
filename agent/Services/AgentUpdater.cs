@@ -213,9 +213,20 @@ public sealed class AgentUpdater(
     }
 
     /// <summary>
-    /// Startet das Tausch-Skript und beendet sich. Wer den Agent gestartet hat —
+    /// Startet das Tausch-Skript und kehrt zurück. Wer den Agent gestartet hat —
     /// die Aufgabenplanung oder der Dienst — startet ihn danach wieder; das
     /// Skript hilft mit einem eigenen Startversuch nach.
+    ///
+    /// <para>
+    /// **Beendet wird hier nicht mehr.** Vorher stand am Ende ein
+    /// <c>Environment.Exit(0)</c> — mitten im Aufruf von
+    /// <see cref="CheckAsync"/>, also bevor die Antwort auf
+    /// <c>POST /api/update</c> überhaupt geschrieben war. Die App bekam keine
+    /// Auskunft, sondern eine abgebrochene Verbindung, und konnte danach nicht
+    /// unterscheiden, ob gerade aktualisiert wird oder der Rechner weg ist. Wer
+    /// beendet, ist jetzt der Aufrufer — nach der Antwort (siehe
+    /// <c>Api/UpdateEndpoints.cs</c>).
+    /// </para>
     /// </summary>
     private void Install(string current, string staged)
     {
@@ -243,14 +254,12 @@ public sealed class AgentUpdater(
             del "%~f0"
             """);
 
-        logger.LogInformation("Starte Tausch und beende mich.");
+        logger.LogInformation("Starte Tausch — beendet wird nach der Antwort.");
 
         Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{script}\"")
         {
             CreateNoWindow = true,
             UseShellExecute = false
         });
-
-        Environment.Exit(0);
     }
 }

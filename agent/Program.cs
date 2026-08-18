@@ -165,6 +165,11 @@ builder.Services.AddSingleton(provider => new AgentUpdater(
     provider.GetRequiredService<ManifestVerifier>(),
     settings.UpdateRepository,
     provider.GetRequiredService<ILogger<AgentUpdater>>()));
+builder.Services.AddSingleton(provider => new InstallerUpdate(
+    provider.GetRequiredService<IHttpClientFactory>(),
+    provider.GetRequiredService<ManifestVerifier>(),
+    settings.UpdateRepository,
+    provider.GetRequiredService<ILogger<InstallerUpdate>>()));
 builder.Services.AddHostedService<SelfUpdater>();
 
 // Wecken als Netz-Fähigkeit: ein wacher Rechner weckt den schlafenden im

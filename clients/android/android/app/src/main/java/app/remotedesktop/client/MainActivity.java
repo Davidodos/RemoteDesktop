@@ -25,6 +25,11 @@ public class MainActivity extends BridgeActivity {
 
         super.onCreate(savedInstanceState);
 
+        // Nach einem Update nichts Altes mehr zeigen. Muss nach super stehen:
+        // die Brücke und mit ihr die WebView entstehen erst dort.
+        UpgradeCleanup.runIfUpgraded(
+                this, getBridge() == null ? null : getBridge().getWebView());
+
         // Der Host läuft, solange die App offen ist — nicht länger.
         //
         // Vorher war er auf Dauerbetrieb ausgelegt: einmal eingeschaltet, lief

@@ -68,6 +68,49 @@ beim Start einmal nach einer neuen Fassung; die Android-Benachrichtigung nennt
 statt der eigenen Adresse, ob gerade jemand zusieht. Einzelheiten unter **31l**
 in `docs/TASKS-V4.md`.
 
+**31m bringt die Updates ans Ziel** (18.08.2026, am Gerät noch zu prüfen).
+Am Handy tat ein Update gar nichts: Android beantwortet eine
+Installer-Sitzung außerhalb von Google Play zuerst mit
+`STATUS_PENDING_USER_ACTION` und legt den Bestätigungsdialog als Absicht bei —
+starten muss ihn die App, und das tat niemand
+(`clients/android/.../InstallReceiver.java`). Dazu: die Zusage löst erst auf,
+wenn wirklich installiert ist; „Unbekannte Apps installieren" wird vorher
+geprüft; und `UpgradeCleanup` leert bei einem Fassungswechsel den
+WebView-Zwischenspeicher — das war der Grund, warum die APK jeder Änderung einen
+Start hinterherhinkte. Gesucht wird jetzt **bei jedem Start** (`AppUpdateView`
+als Band in `App`). Auf Windows wird beim Update gewartet, bis Agent und Fenster
+wirklich beendet sind, danach startet `schtasks /Run` den Agent wieder, und der
+Agent antwortet erst und beendet sich dann statt umgekehrt. Weg sind `.old`,
+`.new`, `.update` und der alte `app\`-Ordner; **es bleiben Zertifikate, die
+Antworten aus der Einrichtung und die gekoppelten Geräte.** Deinstallieren
+beendet erst beides und löscht dann `{app}` als Ganzes samt
+`%localappdata%\RemoteDesktop` in allen Profilen. Und: ein Rechner lässt sich
+**von einem gekoppelten Gerät aus** aktualisieren (`POST /api/update/app`,
+`agent/Services/InstallerUpdate.cs`) — ohne Rückfrage von Windows, weil der
+Agent ohnehin erhöht läuft, und deshalb nur gegen ein eigenes unterschriebenes
+Manifest (`installer.json`). Die Geräteliste zeigt je Gerät die Fassung und bei
+einem veralteten Rechner einen Knopf „Aktualisieren"; ein Handy zeigt sie
+ebenfalls, lässt sich aber nicht fernaktualisieren — Android verlangt dafür einen
+Systemdialog. Einzelheiten unter **31m** in `docs/TASKS-V4.md`.
+
+**31n räumt sieben falsche Meldungen weg** (18.08.2026, am Gerät noch zu
+prüfen): „gibt seinen Bildschirm noch nicht frei" kam, weil die Projektion erst
+ein bis zwei Sekunden nach dem „Zulassen" bereitsteht (`awaitSource` wartet
+jetzt); „das Sicherheitszertifikat ist abgelaufen" kam beim ersten von mehreren
+Verbindungsversuchen (gemeldet wird erst nach dreien, und nur wenn die
+Verbindung nie stand); ein zweiter Verbindungsversuch scheiterte, weil ein
+scheinbar geschlossener WebSocket seinen TCP-Socket offen ließ und den Arbeiter
+band — er wird jetzt mitgeschlossen, und ein neuer Socket löst den alten ab; der
+graue Platzhaltertext landete im Feld (`isShowingHintText`); Felder wie die
+Suche in YouTube nehmen Text jetzt über die Zwischenablage an; „Zurück: nicht
+nachsehbar" sucht zusätzlich über den Namen; und der Verbindungstest sagt „alle
+Rechte verfügbar" oder nennt nur die fehlenden — und nur solche, die diese Art
+Gerät überhaupt vergeben kann. Dazu drei Sachen an der Oberfläche: kein roter
+Balken um „Noch kein Gerät gekoppelt", „Dieses Gerät koppeln" statt „anbieten",
+und die eigene Adresse erscheint erst mit dem Code (QR oben, darunter
+„Alternativ:" Code und Adresse). Einzelheiten unter **31n** in
+`docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen

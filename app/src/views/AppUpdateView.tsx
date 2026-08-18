@@ -13,8 +13,25 @@ import { getPlatform, type UpdateInfo } from '../platform/index.ts'
  * die Plattform `selfUpdate: false`, weil ein Browser sich nicht selbst
  * austauscht und das Fenster über seinen eigenen Installer geht.
  */
-export function AppUpdateView({ asked = false }: { asked?: boolean } = {}):
-  React.JSX.Element | null {
+export function AppUpdateView({
+  asked = false,
+  placement = 'inline',
+}: {
+  asked?: boolean
+  /**
+   * `banner` legt den Bereich über die Seite statt in sie hinein.
+   *
+   * <p>
+   * **Wofür.** Die App soll bei jedem Start nachsehen, ob es etwas Neues gibt —
+   * nicht nur, wenn jemand die Einstellungen aufsucht. Wer nie dorthin geht,
+   * erfuhr sonst nie von einer neuen Fassung, und genau das ist der Fall, in dem
+   * eine alte App am längsten liegen bleibt. Zu sehen ist davon trotzdem nur
+   * dann etwas, wenn es etwas zu sagen gibt: bei „alles aktuell" bleibt der
+   * Bereich leer (siehe `describeAppUpdate`).
+   * </p>
+   */
+  placement?: 'inline' | 'banner'
+} = {}): React.JSX.Element | null {
   const platform = getPlatform()
   const [state, setState] = useState<AppUpdateState>({ kind: 'checking' })
   const [offer, setOffer] = useState<UpdateInfo | undefined>(undefined)
@@ -72,6 +89,14 @@ export function AppUpdateView({ asked = false }: { asked?: boolean } = {}):
 
     try {
       await platform.update.install(offer)
+
+      // Die Zusage löst jetzt erst auf, wenn Android die Installation
+      // abgeschlossen hat — vorher galt sie als erfüllt, sobald die Datei
+      // abgegeben war, und der Bereich blieb bei „fragt gleich nach" stehen,
+      // gleich ob jemand bestätigte oder ablehnte. Danach startet die App neu;
+      // dass hier noch etwas gezeichnet wird, ist die Ausnahme.
+      setOffer(undefined)
+      setState({ kind: 'current' })
     } catch (failure) {
       // Ein Abbruch im Systemdialog kommt hier ebenso an wie ein fehlerhafter
       // Download. Beides darf nicht still enden — sonst wartet jemand auf ein
@@ -84,7 +109,7 @@ export function AppUpdateView({ asked = false }: { asked?: boolean } = {}):
   }
 
   return (
-    <section className="agent-update">
+    <section className={placement === 'banner' ? 'agent-update banner' : 'agent-update'}>
       <p className="agent-update-note" role="status">
         {labels.text}
       </p>

@@ -130,13 +130,33 @@ Und auf den Geräten:
 
 | Wo | Was passiert |
 |---|---|
-| **Agent** | Prüft kurz nach jedem Start selbst und tauscht sich aus. Sofort geht es über *Energie → Auf Updates prüfen* in der App |
-| **Windows-Client** | Tray → *Einrichtung…* → *Updates* → *Nach Updates suchen*. Lädt den Installer und startet ihn; der stoppt den Dienst, ersetzt beide Teile und startet neu |
-| **Android-App** | Zeigt beim Öffnen von *Energie* selbst an, dass eine neue Fassung bereitliegt. Ein Knopf, dann der Systemdialog von Android |
+| **Agent** | Prüft kurz nach jedem Start selbst und tauscht seine eigene `.exe`. Sofort geht es über `POST /api/update` |
+| **Windows-Fenster** | *Übersicht → Updates → Nach Updates suchen*. Lädt den Installer und startet ihn; der beendet Agent und Fenster, ersetzt alles und startet den Agent wieder |
+| **Von einem gekoppelten Gerät aus** | Geräteliste → *⋯* → *Aktualisieren*. Der Knopf erscheint nur bei einem Rechner mit älterer Fassung. Windows fragt dabei nichts nach — der Agent läuft ohnehin erhöht |
+| **Android-App** | Sucht bei jedem Start und meldet sich mit einem Band, wenn es etwas gibt; sonst über *Einstellungen → Updates*. Ein Knopf, dann der Systemdialog von Android |
 
 Der Installer merkt sich an seiner AppId, welche Komponenten beim letzten Mal
 gewählt waren — ein Update installiert nichts nach, was jemand bewusst
 weggelassen hat.
+
+### Was ein Update stehen lässt und was nicht
+
+**Es bleibt:** der Ordner `{app}\data` (Zertifikate, private Schlüssel,
+`clients.json` mit den gekoppelten Geräten, `setup.json` mit den Antworten aus
+der Einrichtung, `devicename.txt`, `hotkey.txt`) und der `localStorage` des
+Fensters unter `%localappdata%\RemoteDesktop` — dort liegt seine Geräteliste.
+
+**Es geht weg:** die Rückstände des Agent-Selbst-Updates (`.old`, `.new`,
+`.update` — das `.old` ist eine startbare Programmdatei einer älteren Fassung),
+der Ordner `{app}\app` mit der alten Oberfläche, und die Code-Caches von
+WebView2. Am Handy räumt `UpgradeCleanup` beim ersten Start nach einem
+Fassungswechsel den WebView-Zwischenspeicher weg; Preferences, `localStorage`
+und der Ordner `host/` bleiben.
+
+**Beim Deinstallieren geht alles:** erst werden Agent und Fenster beendet, dann
+verschwinden `{app}` als Ganzes, `%localappdata%\RemoteDesktop` in allen
+Profilen, die geplante Aufgabe und der Dienst einer älteren Installation. Danach
+ist nichts mehr von Hand wegzuräumen.
 
 ---
 
@@ -150,7 +170,9 @@ weggelassen hat.
 | APK installiert, App-Details zeigen die neue Fassung, die Oberfläche ist die alte — beim zweiten Start ist sie da | Der Service Worker der PWA hatte sich auch in der APK angemeldet und beantwortete jeden Start aus seinem Zwischenspeicher von gestern. Behoben ab v1.3.6: dort meldet sich die App beim ersten Start selbst ab. Der Übergang dorthin kostet noch einmal genau diesen zweiten Start, danach nie wieder |
 | Windows-Client findet nichts | Das Release hat keinen Anhang, der mit `RemoteDesktop-Setup` beginnt. Der Installer-Job im Workflow ist fehlgeschlagen |
 | Ein Skript im CI endet mit „Permission denied" (Exit 126) | Das Ausführbar-Bit fehlt in Git. In diesem Repository gilt `core.fileMode=false` (CIFS-Mount), deshalb landet alles als 644 — und lokal sieht man es nicht, weil der Mount 777 zeigt. Heilung: `git update-index --chmod=+x <datei>` |
-| Update bricht mit Dateizugriffsfehler ab | Der Agent-Dienst lief noch. Der Installer stoppt ihn (`PrepareToInstall`); schlägt das fehl, hilft `sc stop RemoteDesktopAgent` von Hand |
+| Update bricht mit Dateizugriffsfehler ab | Der Agent lief noch. Der Installer beendet ihn und wartet auf sein Ende (`PrepareToInstall`); schlägt das fehl, hilft `schtasks /End /TN RemoteDesktopAgent` von Hand |
+| „Aktualisieren" am gekoppelten Gerät sagt „nicht gültig unterschrieben" | Das Release hat kein `installer.json` (+ `.sig`), oder es ist mit einem anderen Schlüssel unterschrieben. Der Installer-Job im Workflow signiert es; ohne `RELEASE_PRIVATE_KEY` bricht er ab |
+| Am Handy tut „Jetzt installieren" nichts | Bis v1.3.x: der Bestätigungsdialog wurde nie gestartet (siehe 31m in `TASKS-V4.md`). Danach: der Schalter „Unbekannte Apps installieren" fehlt — die App öffnet die Einstellung jetzt selbst und sagt es |
 
 Was zu tun ist, wenn der Release-Schlüssel abhandenkommt, steht in
 [`SICHERHEIT.md`](SICHERHEIT.md#wenn-der-release-schlüssel-verloren-geht).

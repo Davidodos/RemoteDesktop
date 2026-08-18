@@ -43,6 +43,15 @@ import type {
 export interface WebView2Host {
   /** `Environment.MachineName` des Rechners, auf dem das Fenster läuft. */
   machineName: string
+  /**
+   * Die Fassung, die dieses Fenster gerade ist.
+   *
+   * Sie steht hier und wird nicht erfragt, weil die Geräteliste sie beim ersten
+   * Rendern braucht: sie zeigt je Gerät, ob dort derselbe Stand läuft. Fehlt
+   * sie, ist das Wirtsprogramm älter als diese Anzeige — dann steht neben den
+   * Geräten nichts, statt etwas zu behaupten.
+   */
+  version?: string
 }
 
 declare global {
@@ -466,6 +475,14 @@ const clipboard: ClipboardAccess = {
   },
 }
 
+/**
+ * Das Fenster aktualisiert sich über seinen Installer, und den bedient die
+ * Übersichtsseite daneben — nicht diese App.
+ *
+ * `installed` beantwortet trotzdem etwas: die eigene Fassung. Sie kommt vom
+ * Wirtsprogramm und steht schon beim ersten Rendern bereit, weil die
+ * Geräteliste sie zum Vergleichen braucht.
+ */
 const update: UpdateService = {
   check(): Promise<UpdateInfo | undefined> {
     return Promise.resolve(undefined)
@@ -473,12 +490,16 @@ const update: UpdateService = {
 
   install(): Promise<void> {
     return Promise.reject(
-      new PlatformError('Das Windows-Fenster aktualisiert sich noch nicht selbst.'),
+      new PlatformError('Das Windows-Fenster aktualisiert sich über seinen Installer.'),
     )
   },
 
   installed(): Promise<string | undefined> {
-    return Promise.resolve(undefined)
+    const version = window.remoteDesktopHost?.version
+
+    return Promise.resolve(
+      typeof version === 'string' && version.length > 0 ? version : undefined,
+    )
   },
 }
 

@@ -38,6 +38,7 @@ import { ScreenView } from './views/ScreenView.tsx'
 import { SettingsView } from './views/SettingsView.tsx'
 import { ShareView } from './views/ShareView.tsx'
 import { ActionsView } from './views/ActionsView.tsx'
+import { AppUpdateView } from './views/AppUpdateView.tsx'
 import { ShortcutsView } from './views/ShortcutsView.tsx'
 import { Sidebar, pageAvailable, type Page } from './views/Sidebar.tsx'
 import { TakeoverSetup } from './views/TakeoverSetup.tsx'
@@ -51,12 +52,22 @@ import { MenuIcon } from './views/icons.tsx'
  * Ende wartet jemand, und die Frage läuft nach einer halben Minute ab. Eine
  * Karte, die man erst aufsuchen muss, wäre in den meisten Fällen abgelaufen,
  * bevor sie jemand sieht.
+ *
+ * <p>
+ * **Und daneben die Update-Prüfung — bei jedem Start.** Sie stand bis jetzt
+ * ausschließlich in den Einstellungen, also an einer Stelle, die man aufsuchen
+ * muss. Wer das nie tat, erfuhr nie von einer neuen Fassung; und weil sich am
+ * Handy nichts von allein aktualisiert, blieb die alte liegen, bis irgendetwas
+ * nicht mehr zusammenpasste. Zu sehen ist davon nur etwas, wenn es etwas gibt:
+ * bei „alles aktuell" zeichnet der Bereich nichts.
+ * </p>
  */
 export function App(): React.JSX.Element {
   return (
     <>
       <Shell />
       <ConnectionRequestView />
+      <AppUpdateView placement="banner" />
     </>
   )
 }
