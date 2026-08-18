@@ -90,6 +90,12 @@ export interface Device {
    * Rein lokal gemerkt und ausdrücklich nicht erfragt: die Gegenseite weiß
    * nicht, wann *dieses* Gerät sie zuletzt gesehen hat, und ihre eigene Uhr
    * hilft hier niemandem.
+   *
+   * **In der Geräteliste steht es nicht mehr** (19.08.2026). „Zuletzt verbunden
+   * vor drei Tagen" beantwortet keine Frage, die jemand vor der Liste hat: dort
+   * will man wissen, ob ein Gerät *jetzt* erreichbar ist, und das sagt der Punkt
+   * daneben. Gemerkt wird es weiterhin — es kostet nichts und beschreibt etwas,
+   * das später einmal jemand brauchen könnte.
    */
   lastConnectedAt?: number
 }

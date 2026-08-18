@@ -67,7 +67,8 @@ object ScreenCapture {
     private var projection: MediaProjection? = null
 
     /**
-     * Die laufende Quelle — **eine je Zustimmung, nicht eine je Verbindung**.
+     * Die laufende Quelle — **eine je Zustimmung**, und die endet mit dem
+     * letzten Zuschauer.
      *
      * <p>
      * **Der Befund dahinter (18.08.2026):** wer sich verband, trennte und es
@@ -85,6 +86,17 @@ object ScreenCapture {
      * Also gehört auch er der Zustimmung. Er entsteht einmal und wird von jeder
      * folgenden Verbindung weiterbenutzt; freigegeben wird er dort, wo auch die
      * Zustimmung endet — in [forget].
+     * </p>
+     *
+     * <p>
+     * **Und die endet mit dem letzten Zuschauer** (19.08.2026). Eine Zustimmung
+     * über das Verbindungsende hinaus war bequem, bis sie nicht mehr galt:
+     * Android nimmt eine Projektion nach einer Weile ohne Zuschauer von sich aus
+     * zurück, und zwar lautlos. Wer danach wieder verband, bekam kein Bild und
+     * auch keinen Dialog — das Gerät hielt sich für berechtigt und war es nicht.
+     * Ein Ende, das man selbst herbeiführt, ist verlässlicher als eins, von dem
+     * man nichts erfährt; der Preis ist ein Systemdialog je Sitzung, und der ist
+     * ehrlich.
      * </p>
      */
     @Volatile

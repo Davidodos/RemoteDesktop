@@ -443,11 +443,6 @@ input::placeholder {
   font-weight: 600;
 }
 
-.device-seen {
-  font-size: 0.75rem;
-  color: var(--text-dim);
-}
-
 /*
   Die Fassung des Geräts. Sie steht klein und blass da, solange sie mit der
   eigenen übereinstimmt: dann ist sie eine Bestätigung und kein Hinweis. Weicht
@@ -463,10 +458,23 @@ input::placeholder {
   color: var(--warn);
 }
 
-/* Rechtsbündig, egal wie lang der Name ist. */
-.device-state {
+/*
+  Zustand und Weckknopf übereinander, rechtsbündig.
+
+  Der Knopf gehört zu dem Wort über ihm — „offline" ist der Grund, warum es ihn
+  gibt. Nebeneinander schob er bei jedem schlafenden Gerät die Karte
+  auseinander, und die Liste sah bei jeder Zeile anders aus.
+*/
+.device-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.3rem;
   margin-left: auto;
   padding-left: 0.5rem;
+}
+
+.device-state {
   font-size: 0.8rem;
   color: var(--text-dim);
   white-space: nowrap;
@@ -826,31 +834,53 @@ button.danger:active:not(:disabled) {
 */
 .agent-update.banner {
   position: fixed;
-  left: 50%;
-  bottom: 1rem;
-  transform: translateX(-50%);
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
   z-index: 40;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  max-width: min(32rem, calc(100vw - 2rem));
-  padding: 0.6rem 0.9rem;
+  gap: 0.6rem;
+  /* Zentriert, aber nie breiter als der Bildschirm: `left: 50%` mit einem
+     Versatz ergab am Handy eine Karte, die halb aus dem Bild ragte. */
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 0.6rem 0.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
-  font-size: 0.85rem;
 }
 
+/* Der Satz nimmt den Platz, die Knöpfe nur ihren eigenen. Ohne `min-width: 0`
+   wächst ein Flex-Kind über seinen Anteil hinaus, sobald sein Text nicht
+   umbricht — dann schob der Satz die Knöpfe aus der Karte. */
 .agent-update.banner p {
-  margin: 0;
   flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
 }
 
 .agent-update.banner button {
   flex: none;
-  padding: 0.35rem 0.7rem;
+  width: auto;
+  margin: 0;
+  padding: 0.4rem 0.75rem;
   font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+/* Das × ist kein Knopf im Sinne der übrigen: es hat keinen Rand und keine
+   Fläche, weil es nichts auslöst, sondern etwas wegnimmt. */
+.agent-update.banner .agent-update-dismiss {
+  padding: 0.2rem 0.4rem;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .error-banner {

@@ -36,6 +36,19 @@ export function AppUpdateView({
   const [state, setState] = useState<AppUpdateState>({ kind: 'checking' })
   const [offer, setOffer] = useState<UpdateInfo | undefined>(undefined)
 
+  /**
+   * Ob das Band weggetippt wurde.
+   *
+   * <p>
+   * **Nur für dieses eine Angebot.** Ein Band, das man nicht loswird, ist keine
+   * Nachricht mehr, sondern ein Hindernis: es liegt über der Oberfläche, und
+   * wer gerade etwas anderes vorhat, kommt an ihm nicht vorbei. Beim nächsten
+   * Start steht es wieder da — vergessen wird das Angebot nicht, nur
+   * beiseitegeschoben.
+   * </p>
+   */
+  const [dismissed, setDismissed] = useState(false)
+
   const pruefen = useCallback(async (): Promise<void> => {
     setState({ kind: 'checking' })
 
@@ -75,7 +88,10 @@ export function AppUpdateView({
 
   const labels = describeAppUpdate(state, asked)
 
-  if (!labels.visible) {
+  // Beiseitegeschoben gilt nur für das Band. Auf der Einstellungsseite wurde
+  // ausdrücklich danach gefragt; dort etwas zu verstecken wäre eine Antwort,
+  // die niemand bekommt.
+  if (!labels.visible || (placement === 'banner' && dismissed)) {
     return null
   }
 
@@ -120,6 +136,20 @@ export function AppUpdateView({
           onClick={() => void (state.kind === 'offer' ? installieren() : pruefen())}
         >
           {labels.action}
+        </button>
+      )}
+
+      {/* Nur am Band, und nicht während der Installation: was dann läuft, lässt
+          sich nicht wegtippen, und ein Knopf, der so tut, wäre eine Lüge. */}
+      {placement === 'banner' && state.kind !== 'installing' && (
+        <button
+          type="button"
+          className="agent-update-dismiss"
+          aria-label="Hinweis ausblenden"
+          title="Ausblenden"
+          onClick={() => setDismissed(true)}
+        >
+          ×
         </button>
       )}
     </section>

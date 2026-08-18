@@ -15,7 +15,6 @@ import {
 } from '../lib/versions.ts'
 import { onlineIds, probeAll } from '../lib/reachability.ts'
 import { explainMissingCandidate, findWakeCandidate } from '../lib/wake.ts'
-import { lastSeen } from '../lib/lastSeen.ts'
 import { ComputerIcon, PencilIcon, PhoneIcon } from './icons.tsx'
 import type { Device, DeviceStatus } from '../lib/types.ts'
 
@@ -23,8 +22,18 @@ import type { Device, DeviceStatus } from '../lib/types.ts'
 const WAKE_POLL_INTERVAL_MS = 5000
 const WAKE_POLL_DURATION_MS = 90_000
 
-/** Normale Aktualisierung der Geräteliste. */
-const IDLE_POLL_INTERVAL_MS = 15_000
+/**
+ * Normale Aktualisierung der Geräteliste.
+ *
+ * <p>
+ * **Fünfzehn Sekunden waren zu lang.** Wer einen Rechner hochfährt und
+ * daneben in der Liste steht, wartet dabei bis zu einer Viertelminute auf einen
+ * Punkt, der grün wird — lange genug, um an der Liste zu zweifeln statt am
+ * Rechner. Die Abfrage selbst kostet je Gerät eine Anfrage an `/health` mit
+ * drei Sekunden Zeitlimit, und alle laufen nebeneinander.
+ * </p>
+ */
+const IDLE_POLL_INTERVAL_MS = 4000
 
 interface Props {
   devices: Device[]
@@ -244,10 +253,6 @@ export function DeviceListView({
         const erreichbar = isOnline(device.id)
         const kandidat = findWakeCandidate(device, devices, online)
 
-        // Nur, solange das Gerät nicht erreichbar ist. Steht daneben „online",
-        // ist „zuletzt verbunden: gerade eben" keine Auskunft, sondern Lärm.
-        const zuletzt = lastSeen(device.lastConnectedAt)
-
         const fassung = versions[device.id]
         const stand: VersionMatch = compareVersions(mine, fassung)
 
@@ -282,9 +287,6 @@ export function DeviceListView({
 
                 <span className="device-title">
                   <span className="device-name">{deviceLabel(device)}</span>
-                  {!erreichbar && zuletzt !== undefined && (
-                    <span className="device-seen">zuletzt verbunden {zuletzt}</span>
-                  )}
                   {/* Die Fassung nur, wenn sie etwas sagt. Steht dort dieselbe
                       wie hier, ist das die Antwort auf eine Frage, die niemand
                       gestellt hat — außer man hat gerade eine gestellt, weil
@@ -316,35 +318,42 @@ export function DeviceListView({
                 <PencilIcon size={14} />
               </button>
 
-              <span className="device-state">
-                {device.id === current?.id
-                  ? 'verbunden'
-                  : erreichbar
-                    ? device.waker === true
-                      ? 'Waker'
-                      : 'online'
-                    : waking === device.id
-                      ? 'startet…'
-                      : 'offline'}
-              </span>
+              {/* Zustand und Weckknopf übereinander und nicht nebeneinander:
+                  der Knopf gehört zu genau dem Wort über ihm — „offline" ist
+                  der Grund, warum es ihn gibt. Nebeneinander schob er bei jedem
+                  schlafenden Gerät die Karte auseinander, und die Liste sah bei
+                  jeder Zeile anders aus. */}
+              <span className="device-status">
+                <span className="device-state">
+                  {device.id === current?.id
+                    ? 'verbunden'
+                    : erreichbar
+                      ? device.waker === true
+                        ? 'Waker'
+                        : 'online'
+                      : waking === device.id
+                        ? 'startet…'
+                        : 'offline'}
+                </span>
 
-              {/* **Bei einem Handy gar nicht.** Ausgegraut heißt „geht gerade
-                  nicht" und lädt dazu ein, den Grund zu suchen; hier gibt es
-                  keinen zu finden: ein Handy hört im Schlaf auf kein Magic
-                  Packet, und daran ändert auch kein Netz etwas. */}
-              {!erreichbar && device.waker !== true && device.platform !== 'android' && (
-                <button
-                  type="button"
-                  className="wake-button"
-                  // Ausgegraut statt weg: der Knopf soll erklären, warum er
-                  // nicht geht, statt kommentarlos zu fehlen.
-                  disabled={waking === device.id || kandidat === undefined}
-                  title={kandidat === undefined ? explainMissingCandidate(device) : undefined}
-                  onClick={() => void wake(device)}
-                >
-                  {waking === device.id ? '…' : 'Wecken'}
-                </button>
-              )}
+                {/* **Bei einem Handy gar nicht.** Ausgegraut heißt „geht gerade
+                    nicht" und lädt dazu ein, den Grund zu suchen; hier gibt es
+                    keinen zu finden: ein Handy hört im Schlaf auf kein Magic
+                    Packet, und daran ändert auch kein Netz etwas. */}
+                {!erreichbar && device.waker !== true && device.platform !== 'android' && (
+                  <button
+                    type="button"
+                    className="wake-button"
+                    // Ausgegraut statt weg: der Knopf soll erklären, warum er
+                    // nicht geht, statt kommentarlos zu fehlen.
+                    disabled={waking === device.id || kandidat === undefined}
+                    title={kandidat === undefined ? explainMissingCandidate(device) : undefined}
+                    onClick={() => void wake(device)}
+                  >
+                    {waking === device.id ? '…' : 'Wecken'}
+                  </button>
+                )}
+              </span>
 
               <button
                 type="button"

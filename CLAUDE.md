@@ -130,6 +130,23 @@ ersten Start erfragt (ohne sie sieht niemand eine eingehende Anfrage), und in
 der Geräteliste steht „Version x.y.z" — der Zusatz „- Update verfügbar" nur bei
 einem veralteten Gerät. Einzelheiten unter **31o** in `docs/TASKS-V4.md`.
 
+**31p lässt die Aufnahme mit dem Zuschauer enden** (19.08.2026, am Gerät noch
+zu prüfen). Nach längerem Warten kam beim Wiederverbinden kein Bild und auch
+kein Dialog: Android nimmt eine Projektion ohne Zuschauer nach einer Weile von
+sich aus zurück, **lautlos** — zurück blieb eine Quelle, die nichts lieferte,
+und ein Gerät, das sich für berechtigt hielt. Jetzt ruft der letzte Bild-Socket
+`ScreenCapture.forget()`, und die nächste Verbindung fragt neu; der Preis ist
+ein Systemdialog je Sitzung. „Nimmt noch keine Eingaben an" kam auch nach dem
+Warten aus 31o, weil Android den Dienst zwischendurch neu bindet — `attempt`
+wartet jetzt und versucht ein zweites Mal, und erst danach steht dort etwas
+anderes. Dazu: das Update-Band am Handy lag halb außerhalb des Bildes und ließ
+sich nicht wegtippen (jetzt zwischen festen Rändern, mit ×, das für dieses eine
+Angebot gilt); die Geräteliste fragt alle **vier** statt fünfzehn Sekunden nach,
+„zuletzt verbunden" ist weg und der Weckknopf steht unter „offline"; und nach
+einem Fern-Update geht das Fenster wieder auf — über `explorer.exe`, weil
+`runasoriginaluser` es vom erhöhten Agent geerbt und damit in ein anderes
+WebView2-Profil gelegt hätte. Einzelheiten unter **31p** in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen

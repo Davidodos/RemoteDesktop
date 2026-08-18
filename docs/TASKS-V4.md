@@ -1564,6 +1564,84 @@ tippen.
 
 ---
 
+## Phase 31p — die Aufnahme endet mit dem Zuschauer ✅ (19.08.2026, am Gerät noch zu prüfen)
+
+### Nach längerem Warten kam kein Bild und auch kein Dialog
+
+Die Wiederverbindung ging — sofort danach. Wartete man eine Weile, stand man
+wieder vor einem schwarzen Bild, und Android fragte auch nicht mehr nach.
+
+Die Zustimmung galt über das Verbindungsende hinaus, und das ist bequem, bis sie
+nicht mehr gilt: **Android nimmt eine Projektion nach einer Weile ohne Zuschauer
+von sich aus zurück, und zwar lautlos.** Was blieb, war eine Quelle, die es zu
+geben behauptete und nichts lieferte, und ein Gerät, das nicht mehr fragte, weil
+es sich für berechtigt hielt.
+
+Jetzt endet die Aufnahme mit dem letzten Zuschauer: geht der letzte Bild-Socket,
+wird `ScreenCapture.forget()` gerufen, und die nächste Verbindung fragt neu. Der
+Preis ist ein Systemdialog je Sitzung — und der ist ehrlich. **Ein Ende, das man
+selbst herbeiführt, ist verlässlicher als eins, von dem man nichts erfährt.**
+
+### „Nimmt noch keine Eingaben an" — auch nach dem Warten
+
+`awaitInput()` aus 31o deckte nur den Anfang ab. Android bindet den Dienst aber
+auch zwischendurch neu, und in dieser Lücke antwortet `current()` mit nichts —
+besonders nach einem erneuten Verbinden.
+
+Der Satz behauptet etwas Prüfbares: dass jemand die Fernsteuerung einschalten
+möge. Ist sie eingeschaltet, ist er falsch, gleich aus welchem technischen
+Grund. Also wird jetzt gewartet und ein zweites Mal versucht (`attempt`), und
+wenn es dann immer noch nicht geht, steht dort etwas anderes: eingeschaltet, aber
+nicht gebunden — einmal aus und wieder ein.
+
+### Das Update-Band am Handy
+
+Es lag mit `left: 50%` und einem Versatz halb außerhalb des Bildes, und es ließ
+sich nicht wegtippen. Jetzt sitzt es zwischen zwei festen Rändern, der Satz
+bekommt `min-width: 0` (ohne das schiebt ein nicht umbrechender Text die Knöpfe
+aus der Karte), und daneben steht ein ×. **Weggetippt gilt für dieses eine
+Angebot:** beim nächsten Start steht es wieder da. Vergessen wird nichts, nur
+beiseitegeschoben — und während einer laufenden Installation gibt es das × gar
+nicht, denn die lässt sich nicht wegtippen.
+
+### Die Geräteliste
+
+- **Alle vier Sekunden statt alle fünfzehn.** Wer einen Rechner hochfährt und
+  daneben in der Liste steht, wartete bis zu einer Viertelminute auf einen Punkt,
+  der grün wird — lange genug, um an der Liste zu zweifeln statt am Rechner.
+- **„Zuletzt verbunden" ist weg.** Es beantwortet keine Frage, die jemand vor der
+  Liste hat: dort will man wissen, ob ein Gerät *jetzt* erreichbar ist, und das
+  sagt der Punkt daneben. Gemerkt wird es weiterhin.
+- **Der Weckknopf steht unter „offline"** statt daneben. Er gehört zu genau dem
+  Wort über ihm; nebeneinander schob er bei jedem schlafenden Gerät die Karte
+  auseinander, und die Liste sah bei jeder Zeile anders aus.
+
+### Nach einem Fern-Update blieb das Fenster zu
+
+`/NOLAUNCH` sollte es zulassen, weil bei einem Update vom Handy aus „niemand
+davorsitzt". Das stimmt nicht: der Agent läuft als geplante Aufgabe **in der
+Sitzung eines angemeldeten Benutzers**, also sitzt dort immer jemand — und der
+hatte vor dem Update ein Fenster offen.
+
+Der Agent gibt es nicht mehr mit. Gestartet wird über `explorer.exe`:
+`runasoriginaluser` allein genügt hier nicht, denn es benutzt den Token des
+Prozesses, der das Setup gestartet hat — und das war der Agent, der selbst schon
+erhöht läuft. Das Fenster wäre erhöht gestartet worden und hätte seinen
+WebView2-Speicher in ein anderes Profil gelegt: die Geräteliste wäre nach jedem
+Update leer. Der Explorer läuft dagegen immer als der angemeldete Benutzer und
+ohne Erhöhung.
+
+**Zum Agent:** er *wird* beendet — und danach von `schtasks /Run` wieder
+gestartet (seit 31m, weil ein stilles Update ihn sonst bis zur nächsten Anmeldung
+liegen ließ). Dass er nach dem Update läuft, ist deshalb kein Rückstand, sondern
+das Ziel.
+
+**Abnahme:** am echten Gerät noch zu prüfen — verbinden, trennen, eine Minute
+warten, erneut verbinden (der Systemdialog muss wiederkommen); ein Fern-Update
+auslösen und sehen, ob Fenster und Agent danach von allein wieder da sind.
+
+---
+
 ---
 
 # Teil B — Dateimanager

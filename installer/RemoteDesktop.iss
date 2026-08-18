@@ -180,18 +180,28 @@ Name: "{group}\RemoteDesktop deinstallieren"; Filename: "{uninstallexe}"
 Filename: "{sys}\schtasks.exe"; Parameters: "/Run /TN {#Service}"; \
     Check: AgentTaskExists; Flags: runhidden
 
-; Und das Fenster.
+; Und das Fenster — über den Explorer.
 ;
-; „runasoriginaluser", weil der Installer erhöht läuft: als Administrator
-; gestartet legte das Fenster seinen WebView2-Speicher in ein anderes Profil,
-; und die Geräteliste wäre nach jedem Update leer.
+; **Der Befund dahinter (19.08.2026):** nach einem Update, das von einem
+; gekoppelten Gerät aus angestoßen wurde, blieb das Fenster zu und musste von
+; Hand gestartet werden. Es war ausgeschlossen worden, weil bei einem Fernupdate
+; „niemand davorsitzt" — nur stimmt das nicht: der Agent läuft ausschließlich in
+; der Sitzung eines angemeldeten Benutzers, also sitzt dort immer jemand.
 ;
-; Ohne „skipifsilent", damit es auch nach einem Update aus der Oberfläche
-; wieder aufgeht — dort hat es sich ja gerade selbst beendet. Bei einem Update
-; von einem gekoppelten Gerät aus bleibt es zu: dort sitzt niemand, und dieser
-; Fall gibt „/NOLAUNCH" mit.
-Filename: "{app}\{#Exe}"; Description: "RemoteDesktop öffnen"; \
-    Check: ShouldOpenWindow; Flags: postinstall nowait runasoriginaluser
+; „runasoriginaluser" allein genügt dafür nicht. Es benutzt den Token des
+; Prozesses, der das Setup gestartet hat — und das war hier der Agent, der
+; selbst schon erhöht läuft. Das Fenster wäre also erhöht gestartet worden und
+; hätte seinen WebView2-Speicher in ein anderes Profil gelegt: die Geräteliste
+; wäre nach jedem Update leer.
+;
+; Der Explorer läuft dagegen immer als der angemeldete Benutzer und ohne
+; Erhöhung. Ein Programm, das er startet, erbt genau das.
+;
+; Ohne „skipifsilent", damit es auch nach einem stillen Update wieder aufgeht —
+; dort hat es sich ja gerade selbst beendet.
+Filename: "{sys}\explorer.exe"; Parameters: """{app}\{#Exe}"""; \
+    Description: "RemoteDesktop öffnen"; \
+    Check: ShouldOpenWindow; Flags: postinstall nowait
 
 [UninstallRun]
 ; Erst anhalten, was läuft.
@@ -237,10 +247,12 @@ end;
 
 { Ob nach der Installation das Fenster aufgehen soll.
 
-  Es soll — außer, wenn das Update von einem gekoppelten Gerät aus angestoßen
-  wurde. Dann sitzt vor diesem Rechner niemand, und ein Fenster, das von allein
-  aufgeht, wäre das einzige Zeichen eines Vorgangs, den jemand anderes ausgelöst
-  hat. Der Agent gibt dafür /NOLAUNCH mit (siehe agent/Services/InstallerUpdate.cs). }
+  Es soll — auch nach einem Update von einem gekoppelten Gerät aus: der Agent
+  läuft in der Sitzung eines angemeldeten Benutzers, also sitzt vor diesem
+  Rechner immer jemand, und der hatte vor dem Update ein Fenster offen.
+
+  /NOLAUNCH bleibt trotzdem, für den Fall, dass jemand von Hand still
+  installieren will. Der Agent gibt es nicht mehr mit. }
 function ShouldOpenWindow: Boolean;
 var
   Index: Integer;

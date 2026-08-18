@@ -65,13 +65,20 @@ public sealed class InstallerUpdate(
     /// <para>
     /// <c>/VERYSILENT</c> und nicht <c>/SILENT</c>: hier sieht niemand hin, und
     /// ein Fortschrittsbalken auf einem fremden Bildschirm ist keine Auskunft,
-    /// sondern eine Überraschung. <c>/NOLAUNCH</c> hält das Fenster zu — es
-    /// aufgehen zu lassen wäre das einzige Zeichen eines Vorgangs, den jemand
-    /// anderes ausgelöst hat.
+    /// sondern eine Überraschung.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Kein <c>/NOLAUNCH</c> mehr</b> (19.08.2026). Es sollte das Fenster
+    /// zulassen, weil bei einem Fernupdate „niemand davorsitzt" — nur stimmt
+    /// das nicht: dieser Agent läuft als geplante Aufgabe in der Sitzung eines
+    /// angemeldeten Benutzers, also sitzt dort immer jemand, und der hatte vor
+    /// dem Update ein Fenster offen. Es blieb danach zu und musste von Hand
+    /// gestartet werden.
     /// </para>
     /// </summary>
     private static readonly string[] Arguments =
-        ["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES", "/NOLAUNCH"];
+        ["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"];
 
     /// <summary>
     /// Wartezeit im Startskript, bis Agent und Fenster wirklich weg sind.

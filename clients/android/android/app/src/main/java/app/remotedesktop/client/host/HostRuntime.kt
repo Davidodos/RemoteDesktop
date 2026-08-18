@@ -232,6 +232,11 @@ class HostRuntime private constructor(
             // frischen Verbindung hinein.
             inputEnabled = { RemoteInputService.isEnabled(context) },
             inputReady = { RemoteInputService.current() != null },
+            // Die Aufnahme endet mit dem letzten Zuschauer — samt Zustimmung.
+            // Die nächste Verbindung fragt neu, und das ist der einzige Weg, der
+            // verlässlich bleibt: Android nimmt eine ungenutzte Projektion von
+            // sich aus zurück, ohne es jemandem zu sagen.
+            releaseScreen = ScreenCapture::forget,
         )
 
         server.live.onChange = { count -> onConnectionsChanged?.invoke(count) }

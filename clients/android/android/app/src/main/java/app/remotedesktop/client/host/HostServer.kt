@@ -86,6 +86,21 @@ class HostServer(
     private val inputEnabled: () -> Boolean = { true },
     /** Ob sie gebunden ist und Befehle annimmt. Siehe [awaitInput]. */
     private val inputReady: () -> Boolean = { true },
+    /**
+     * Beendet die Bildschirmaufnahme samt Zustimmung.
+     *
+     * <p>
+     * **Gerufen, wenn der letzte Zuschauer geht.** Eine Zustimmung, die über
+     * das Ende der Verbindung hinaus gilt, klingt bequem und ist es auch — bis
+     * sie nicht mehr gilt: Android nimmt eine Projektion nach einer Weile ohne
+     * Zuschauer von sich aus zurück, und zwar lautlos. Was dann blieb, war eine
+     * Quelle, die es zu geben behauptete und nichts lieferte, und ein Gerät, das
+     * beim nächsten Verbinden nicht mehr fragte, weil es sich für berechtigt
+     * hielt. Ein Ende, das man selbst herbeiführt, ist verlässlicher als eins,
+     * von dem man nichts erfährt.
+     * </p>
+     */
+    private val releaseScreen: () -> Unit = {},
 ) {
 
     companion object {
@@ -116,6 +131,14 @@ class HostServer(
 
         /** Wenn der vorgelegte Ausweis zu keiner Sitzung gehört. */
         const val NOT_SIGNED_IN = "Nicht angemeldet."
+
+        /**
+         * Eingeschaltet, aber Android bindet sie nicht. Etwas anderes als
+         * [NO_INPUT] — dort ist etwas zu tun, hier ist etwas kaputt.
+         */
+        const val INPUT_STALLED =
+            "Die Fernsteuerung ist eingeschaltet, Android hat sie aber nicht " +
+                "gebunden. In den Bedienungshilfen einmal aus- und wieder einschalten."
 
         /**
          * Was der Client hört, wenn wirklich niemand die Aufnahme bestätigt
@@ -323,6 +346,40 @@ class HostServer(
     }
 
     /**
+     * Führt einen Befehl aus — und gibt der Bedienungshilfe eine zweite Chance.
+     *
+     * <p>
+     * **Der Befund dahinter (19.08.2026):** „Dieses Gerät nimmt noch keine
+     * Eingaben an" stand auch dann da, wenn die Fernsteuerung eingeschaltet war
+     * und die Steuerung nachweislich lief — besonders nach einem erneuten
+     * Verbinden. Android bindet den Dienst zwischendurch neu, und in dieser
+     * Lücke antwortet `RemoteInputService.current()` mit nichts. Warten vor dem
+     * ersten Befehl (siehe [awaitInput]) deckt das nicht ab: die Lücke kann auch
+     * später auftreten.
+     * </p>
+     *
+     * <p>
+     * Der Satz behauptet etwas Prüfbares — dass jemand die Fernsteuerung
+     * einschalten möge. Ist sie eingeschaltet, ist er falsch, gleich aus welchem
+     * technischen Grund. Also wird gewartet und ein zweites Mal versucht, und
+     * erst danach steht dort etwas, das dann auch stimmt.
+     * </p>
+     */
+    private fun attempt(command: InputCommand): String? {
+        val failure = input(command)
+
+        if (failure != NO_INPUT || !inputEnabled()) {
+            return failure
+        }
+
+        awaitInput()
+
+        // Immer noch nichts, obwohl eingeschaltet: dann ist es keine Lücke,
+        // sondern ein Dienst, den Android nicht bindet. Der Satz sagt das.
+        return input(command)?.let { if (it == NO_INPUT) INPUT_STALLED else it }
+    }
+
+    /**
      * Wartet, bis die Bedienungshilfe gebunden ist — höchstens
      * {@link SOURCE_WAIT_MS} lang.
      *
@@ -407,6 +464,12 @@ class HostServer(
                 socket.close()
                 sender.join(2000)
                 release()
+
+                // Der letzte Zuschauer geht: die Aufnahme endet mit ihm, und
+                // die nächste Verbindung fragt neu. Siehe [releaseScreen].
+                if (live.countOf(LiveConnections.Kind.SCREEN) == 0) {
+                    releaseScreen()
+                }
             }
         }
 
@@ -452,7 +515,7 @@ class HostServer(
             try {
                 socket.listen(onText = { message ->
                     val command = InputCommands.parse(message) ?: return@listen
-                    val failure = input(command)
+                    val failure = attempt(command)
 
                     if (failure != null && reported.add(failure)) {
                         socket.sendText(
@@ -805,6 +868,11 @@ class LiveConnections {
 
     /** Wie viele Sockets gerade offen sind — über alle Clients. */
     val count: Int get() = synchronized(gate) { open.values.sumOf { it.size } }
+
+    /** Wie viele davon dieser Art sind — über alle Clients. */
+    fun countOf(kind: Kind): Int = synchronized(gate) {
+        open.values.sumOf { list -> list.count { it.kind == kind } }
+    }
 
     /**
      * Meldet eine Verbindung an — und trennt dabei die vorige derselben Art
