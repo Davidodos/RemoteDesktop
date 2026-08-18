@@ -111,6 +111,25 @@ und die eigene Adresse erscheint erst mit dem Code (QR oben, darunter
 „Alternativ:" Code und Adresse). Einzelheiten unter **31n** in
 `docs/TASKS-V4.md`.
 
+**31o repariert, was 31n nur verdeckt hatte** (18.08.2026, am Gerät noch zu
+prüfen): kein Bild beim zweiten Verbinden, weil eine `MediaProjection` seit
+Android 14 **einmalig** ist — nach dem ersten `createVirtualDisplay` wirft jeder
+weitere Aufruf. 31l hatte die Projektion vom Socket gelöst, der virtuelle
+Bildschirm hing aber weiter daran; jetzt hält `ScreenCapture` **eine** Quelle,
+jede folgende Verbindung benutzt sie weiter, und `close()` auf dem Strom tut
+nichts. „Nimmt noch keine Eingaben an" kam, weil Android die Bedienungshilfe
+erst ein bis zwei Sekunden nach dem Einschalten bindet (`awaitInput` wartet
+jetzt). Text in YouTube und Spotify ging nicht, weil `findFocus` bei einer
+Suchleiste den **Rahmen** liefert und nicht das Feld — gesucht wird jetzt im
+Teilbaum nach `isEditable`. **Und die Rückfrage „darf dieses Gerät jetzt
+verbinden?" hängt nicht mehr an der Anmeldung**, sondern am ersten Bild- oder
+Eingabe-Socket (`HostSession.confirmOnce`): über die Anmeldung liest die
+Geräteliste seit 31m die Fassung ab, und deshalb stand die Karte bei jedem
+Start der App drüben auf dem Bildschirm. Dazu: Benachrichtigungen werden beim
+ersten Start erfragt (ohne sie sieht niemand eine eingehende Anfrage), und in
+der Geräteliste steht „Version x.y.z" — der Zusatz „- Update verfügbar" nur bei
+einem veralteten Gerät. Einzelheiten unter **31o** in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen

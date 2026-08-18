@@ -66,6 +66,30 @@ object ScreenCapture {
     @Volatile
     private var projection: MediaProjection? = null
 
+    /**
+     * Die laufende Quelle — **eine je Zustimmung, nicht eine je Verbindung**.
+     *
+     * <p>
+     * **Der Befund dahinter (18.08.2026):** wer sich verband, trennte und es
+     * gleich noch einmal versuchte, bekam Eingaben durch, aber kein Bild — und
+     * auch keinen neuen Systemdialog. Der Grund steht in Androids Regeln seit
+     * Fassung 14: eine `MediaProjection` ist **einmalig**. Nach dem ersten
+     * `createVirtualDisplay` wirft jeder weitere Aufruf, und zwar auch dann,
+     * wenn der erste Bildschirm längst freigegeben wurde. 31l hatte die
+     * Projektion richtigerweise vom einzelnen Socket gelöst — der virtuelle
+     * Bildschirm darunter hing aber weiter daran, und mit ihm der einzige
+     * Versuch, den es gibt.
+     * </p>
+     *
+     * <p>
+     * Also gehört auch er der Zustimmung. Er entsteht einmal und wird von jeder
+     * folgenden Verbindung weiterbenutzt; freigegeben wird er dort, wo auch die
+     * Zustimmung endet — in [forget].
+     * </p>
+     */
+    @Volatile
+    private var source: ProjectionSource? = null
+
     /** Ob jemand die Aufnahme bereits bestätigt hat. */
     val isPermitted: Boolean get() = permission != null
 
@@ -76,8 +100,10 @@ object ScreenCapture {
      * `getMediaProjection` nichts heraus, gleich, was sonst stimmt.
      */
     fun remember(resultCode: Int, data: Intent) {
-        // Eine neue Zustimmung ersetzt die alte Projektion; die alte gehört zu
-        // einem Token, das niemand mehr benutzt.
+        // Eine neue Zustimmung ersetzt die alte Projektion samt ihrem
+        // virtuellen Bildschirm; die alte gehört zu einem Token, das niemand
+        // mehr benutzt.
+        releaseSource()
         stopProjection()
 
         this.resultCode = resultCode
@@ -87,6 +113,7 @@ object ScreenCapture {
     fun forget() {
         permission = null
         resultCode = 0
+        releaseSource()
         stopProjection()
     }
 
@@ -99,11 +126,21 @@ object ScreenCapture {
      */
     @Synchronized
     fun open(context: Context, display: HostServer.Screen): FrameSource? {
+        // Die vorhandene, solange sie trägt. Eine zweite zu bauen ginge nicht:
+        // die Projektion darunter hat genau einen virtuellen Bildschirm zu
+        // vergeben — siehe [source].
+        source?.takeIf { it.isRunning }?.let { return it }
+
+        // Sie trägt nicht mehr: aufräumen, bevor eine neue entsteht. Sonst
+        // bleibt ein ImageReader liegen, den niemand mehr liest.
+        releaseSource()
+
         val running = projection ?: start(context) ?: return null
 
         return runCatching { ProjectionSource(context, running, display) }
             .onFailure { Log.e(TAG, "Aufnahme lässt sich nicht öffnen.", it) }
             .getOrNull()
+            ?.also { source = it }
     }
 
     /** Holt die Projektion zur verwahrten Zustimmung — einmal je Zustimmung. */
@@ -137,6 +174,20 @@ object ScreenCapture {
         projection = fresh
 
         return fresh
+    }
+
+    /**
+     * Gibt den virtuellen Bildschirm frei.
+     *
+     * Nur von hier aus, nie vom Bild-Strom: der endet mit jedem Trennen, die
+     * Zustimmung nicht. Siehe [source].
+     */
+    private fun releaseSource() {
+        val running = source ?: return
+
+        source = null
+
+        runCatching { running.release() }
     }
 
     private fun stopProjection() {
@@ -256,15 +307,26 @@ object ScreenCapture {
         }
 
         /**
-         * Nur der eigene Strom — **die Projektion bleibt**.
+         * **Tut nichts** — und das ist der Punkt.
          *
-         * Sie gehört der Zustimmung und nicht diesem WebSocket. Sie hier zu
-         * stoppen war der Grund, warum nach jedem Verbindungsabbruch jemand die
-         * Freigabe von Hand erneut erteilen musste: `stop()` löst `onStop` aus,
-         * und das wirft die Erlaubnis weg. Beendet wird sie dort, wo sie auch
-         * erteilt wurde — in [ScreenCapture.forget].
+         * <p>
+         * Der Bild-Strom ruft das am Ende jeder Verbindung. Er darf hier nichts
+         * freigeben: die Projektion darunter hat genau einen virtuellen
+         * Bildschirm zu vergeben, und wer ihn zurückgibt, bekommt keinen
+         * zweiten. Genau das war der Grund, warum eine zweite Verbindung ohne
+         * Bild dastand — mit funktionierender Eingabe daneben, was die Suche
+         * lange in die falsche Richtung schickte.
+         * </p>
+         *
+         * <p>
+         * Aufgeräumt wird in [release], und gerufen wird das nur von
+         * [ScreenCapture]: dort, wo auch die Zustimmung endet.
+         * </p>
          */
-        override fun close() {
+        override fun close() = Unit
+
+        /** Das wirkliche Aufräumen. Siehe [close]. */
+        fun release() {
             runCatching { virtualDisplay?.release() }
             virtualDisplay = null
 

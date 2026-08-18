@@ -1,5 +1,8 @@
 package app.remotedesktop.client;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 
 import com.getcapacitor.BridgeActivity;
@@ -30,6 +33,8 @@ public class MainActivity extends BridgeActivity {
         UpgradeCleanup.runIfUpgraded(
                 this, getBridge() == null ? null : getBridge().getWebView());
 
+        askForNotifications();
+
         // Der Host läuft, solange die App offen ist — nicht länger.
         //
         // Vorher war er auf Dauerbetrieb ausgelegt: einmal eingeschaltet, lief
@@ -39,6 +44,40 @@ public class MainActivity extends BridgeActivity {
         if (HostPreference.INSTANCE.isEnabled(this)) {
             HostService.Companion.start(this);
         }
+    }
+
+    /**
+     * Fragt beim Start nach der Erlaubnis für Benachrichtigungen.
+     *
+     * <p>
+     * <b>Warum sofort und nicht bei der ersten Benachrichtigung.</b> Sie ist
+     * hier keine Beigabe: über sie läuft die Rückfrage „darf dieses Gerät jetzt
+     * verbinden?", und die kommt womöglich, bevor dieses Handy jemals selbst
+     * etwas gesteuert hat. Wer sie nicht erteilt hat, sieht eine Anfrage nur,
+     * wenn er die App gerade offen vor sich hat — und eine Anfrage, die niemand
+     * sieht, gilt nach einer halben Minute als abgelehnt. Der Vordergrunddienst
+     * braucht sie ebenfalls: ohne sie zeigt Android seine Benachrichtigung
+     * nicht, und dann läuft der Host sichtbar für niemanden.
+     * </p>
+     *
+     * <p>
+     * Vor Android 13 gibt es die Erlaubnis nicht — dort sind Benachrichtigungen
+     * von vornherein erlaubt. Abgelehnt wird nicht nachgefasst: Android zeigt
+     * die Frage ohnehin kein zweites Mal, und eine App, die bei jedem Start
+     * dasselbe verlangt, bekommt sie erst recht nicht.
+     * </p>
+     */
+    private void askForNotifications() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return;
+        }
+
+        if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
     }
 
     /**

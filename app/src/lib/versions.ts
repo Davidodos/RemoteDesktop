@@ -151,19 +151,29 @@ export function canUpdateRemotely(device: Device, match: VersionMatch): boolean 
   return device.platform !== 'android' && device.waker !== true && match === 'older'
 }
 
-/** Ein Satz für die Zeile unter dem Gerätenamen. */
+/**
+ * Die Zeile unter dem Gerätenamen.
+ *
+ * <p>
+ * **Der Zusatz steht nur da, wenn es etwas zu tun gibt.** Vorher stand hinter
+ * jeder Fassung ein Vergleich — „wie hier", „neuer als hier" —, und damit
+ * verlangte eine Zeile, die meistens nichts zu melden hat, jedes Mal gelesen zu
+ * werden. Ein Gerät auf demselben Stand nennt seine Fassung und sonst nichts;
+ * nur ein veraltetes sagt dazu, dass es eins gibt.
+ * </p>
+ *
+ * <p>
+ * Ein neueres Gerät bekommt den Zusatz ausdrücklich nicht: dort ist nichts zu
+ * tun. Zu aktualisieren wäre dann dieses Gerät hier, und dafür gibt es den
+ * Update-Bereich in den Einstellungen — er weiß auch, woher.
+ * </p>
+ */
 export function describeMatch(match: VersionMatch, version: string | undefined): string {
-  switch (match) {
-    case 'same':
-      return `Fassung ${version} — wie hier`
-
-    case 'older':
-      return `Fassung ${version} — älter als hier`
-
-    case 'newer':
-      return `Fassung ${version} — neuer als hier`
-
-    case 'unknown':
-      return version === undefined ? '' : `Fassung ${version}`
+  if (version === undefined) {
+    return ''
   }
+
+  return match === 'older'
+    ? `Version ${version} - Update verfügbar`
+    : `Version ${version}`
 }

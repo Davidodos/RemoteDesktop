@@ -226,6 +226,12 @@ class HostRuntime private constructor(
                 RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
             },
             confirm = connections::ask,
+            // Zwei verschiedene Fragen: ob der Mensch sie eingeschaltet hat,
+            // und ob Android sie schon gebunden hat. Zwischen beidem liegen ein
+            // bis zwei Sekunden — und genau dort fiel der erste Befehl einer
+            // frischen Verbindung hinein.
+            inputEnabled = { RemoteInputService.isEnabled(context) },
+            inputReady = { RemoteInputService.current() != null },
         )
 
         server.live.onChange = { count -> onConnectionsChanged?.invoke(count) }

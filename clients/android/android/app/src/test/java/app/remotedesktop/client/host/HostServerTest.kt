@@ -308,29 +308,46 @@ class HostServerTest {
         assertEquals(0, peers.list().size)
     }
 
+    /**
+     * **Der Befund dahinter (18.08.2026):** gefragt wurde beim Anmelden. Damit
+     * hing die Rückfrage an etwas, das noch gar nichts sieht und nichts steuert
+     * — die Geräteliste der Gegenseite meldet sich an, um die Fassung
+     * abzulesen, und am Handy stand eine Karte „möchte den Bildschirm sehen und
+     * es bedienen". Bei jedem Start der App drüben, ohne dass jemand etwas
+     * vorhatte. Eine Frage, die man mehrmals täglich grundlos gestellt bekommt,
+     * wird ohne Hinsehen weggetippt.
+     */
     @Test
-    fun `ohne Zustimmung am Geraet gibt es keine Sitzung`() {
+    fun `die Anmeldung fragt nicht am Geraet nach`() {
         val clientId = pairOnly()
 
         zugestimmt = false
 
         val (status, body) = openSession(clientId)
 
-        // 403 und nicht 401: die Anmeldung war in Ordnung, es hat nur niemand
-        // zugestimmt. Der Satz dazu sagt, wo man nachsehen muss.
-        assertEquals(403, status)
-        assertEquals(false, JSONObject(body).getString("error").isEmpty())
+        assertEquals(200, status)
+
+        // Und die Auskunft steht ohne jede Rückfrage bereit — genau dafür wird
+        // sie geholt.
+        val token = JSONObject(body).getString("token")
+        val (infoStatus, info) = get("/api/info", token)
+
+        assertEquals(200, infoStatus)
+        assertEquals("1.9.0", JSONObject(info).getString("version"))
     }
 
+    /**
+     * Gefragt wird beim ersten Bild- oder Eingabe-Socket, und die Antwort gilt
+     * für die Sitzung — siehe `HostSessionTest`. Hier steht nur, dass die
+     * Kopplung davon unberührt bleibt: sie sagt, *wer* fragen darf.
+     */
     @Test
-    fun `bestaetigt wird jede Verbindung, nicht die Kopplung`() {
+    fun `eine Kopplung ueberlebt eine abgelehnte Verbindung`() {
         val clientId = pairOnly()
 
         zugestimmt = false
-        assertEquals(403, openSession(clientId).first)
+        assertEquals(200, openSession(clientId).first)
 
-        // Dieselbe Kopplung, ein zweiter Versuch — diesmal mit Zustimmung. Die
-        // Kopplung bleibt bestehen; entschieden wird je Verbindung.
         zugestimmt = true
 
         val token = JSONObject(openSession(clientId).second).getString("token")

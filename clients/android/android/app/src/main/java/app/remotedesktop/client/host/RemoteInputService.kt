@@ -31,6 +31,20 @@ import android.view.accessibility.AccessibilityNodeInfo
 class RemoteInputService : AccessibilityService() {
 
     companion object {
+        /**
+         * So viele Knoten werden beim Suchen nach einem Eingabefeld
+         * durchgegangen. Hier wird der Baum einer fremden App durchlaufen — eine
+         * Liste mit tausenden Einträgen darf keinen Tastendruck aufhalten.
+         */
+        private const val MAX_NODES = 400
+
+        /**
+         * Der letzte Ausweg an Meldung — wenn ein Feld weder Text annimmt noch
+         * etwas einfügen lässt. Er steht hier und nicht dreimal im Text, damit
+         * er auch dreimal derselbe bleibt.
+         */
+        private const val NO_TEXT = "Dieses Feld nimmt keinen Text von außen an." 
+
         @Volatile
         private var instance: RemoteInputService? = null
 
@@ -429,6 +443,11 @@ class RemoteInputService : AccessibilityService() {
      * </p>
      */
     private fun set(node: AccessibilityNodeInfo, value: String): String? {
+        // Ein Feld, das den Fokus nicht hat, nimmt weder das eine noch das
+        // andere an. Der Rückgabewert ist dabei uninteressant: hat es ihn
+        // schon, meldet Android hier `false` und alles ist in Ordnung.
+        node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+
         val arguments = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
         }
@@ -452,35 +471,43 @@ class RemoteInputService : AccessibilityService() {
      */
     private fun paste(node: AccessibilityNodeInfo, value: String): String? {
         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-            ?: return "Dieses Feld nimmt keinen Text von außen an."
+            ?: return NO_TEXT
 
         val stored = runCatching {
             clipboard.setPrimaryClip(ClipData.newPlainText("RemoteDesktop", value))
         }.isSuccess
 
         if (!stored) {
-            return "Dieses Feld nimmt keinen Text von außen an."
+            return "Die Zwischenablage dieses Geräts ließ sich nicht beschreiben."
         }
 
-        selectAll(node)
-
-        return if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
-            null
-        } else {
-            "Dieses Feld nimmt keinen Text von außen an."
+        // **Der Reihe nach, und jeder Schritt einzeln.** Vorher stand hier ein
+        // `selectAll` ohne Prüfung, gefolgt von einem `PASTE`. Schlug das
+        // Markieren still fehl, fügte das Einfügen an die Cursorposition an —
+        // und weil jeder Anschlag den *ganzen* Feldinhalt schickt, wurde aus
+        // „ab" ein „aab". Ging auch das Einfügen nicht, stand dieselbe Meldung
+        // da wie bei einem Feld, das gar nichts annimmt.
+        if (!selectAll(node)) {
+            // Nicht markierbar, aber vielleicht ersetzbar: manche Felder bieten
+            // ausschließlich `PASTE` an und ersetzen dabei ihren Inhalt.
+            return if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) null else NO_TEXT
         }
+
+        return if (node.performAction(AccessibilityNodeInfo.ACTION_PASTE)) null else NO_TEXT
     }
 
-    private fun selectAll(node: AccessibilityNodeInfo) {
+    private fun selectAll(node: AccessibilityNodeInfo): Boolean {
+        // Über den wirklichen Inhalt und nicht über `node.text`: bei einem
+        // leeren Feld steht dort der Hinweistext, und dessen Länge zu markieren
+        // hieße, über das Ende hinaus zu greifen.
+        val length = contentOf(node).length
+
         val arguments = Bundle().apply {
             putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 0)
-            putInt(
-                AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,
-                node.text?.length ?: 0,
-            )
+            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, length)
         }
 
-        node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
+        return node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
     }
 
     private fun moveCaretToEnd(node: AccessibilityNodeInfo, position: Int) {
@@ -492,6 +519,78 @@ class RemoteInputService : AccessibilityService() {
         node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, arguments)
     }
 
-    private fun focused(): AccessibilityNodeInfo? =
-        runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+    /**
+     * Das Feld, in das getippt werden soll.
+     *
+     * <p>
+     * **Warum das mehr ist als ein Aufruf.** `findFocus(FOCUS_INPUT)` liefert
+     * den Knoten mit dem Eingabefokus — bei einem gewöhnlichen `EditText` ist
+     * das genau das Feld. Bei allem, was seinen Text nicht selbst hält, ist es
+     * ein Container: die Suchleiste von YouTube meldet den Rahmen, das Feld
+     * darin ist sein Kind. `ACTION_SET_TEXT` auf dem Rahmen scheitert
+     * zwangsläufig, und die Meldung darüber — „nimmt keinen Text von außen an" —
+     * beschrieb einen Knoten, den niemand gemeint hatte.
+     * </p>
+     *
+     * <p>
+     * Also wird nachgesehen: erst der fokussierte Knoten selbst, dann sein
+     * Teilbaum, zuletzt das ganze aktive Fenster. Gesucht wird nach
+     * `isEditable` — das ist die Eigenschaft, an der auch Android entscheidet,
+     * ob ein Knoten Text annimmt.
+     * </p>
+     */
+    private fun focused(): AccessibilityNodeInfo? {
+        val focus = runCatching { findFocus(AccessibilityNodeInfo.FOCUS_INPUT) }.getOrNull()
+
+        if (focus != null && focus.isEditable) {
+            return focus
+        }
+
+        focus?.let(::editableWithin)?.let { return it }
+
+        val root = runCatching { rootInActiveWindow }.getOrNull()
+
+        // Im ganzen Fenster: bevorzugt das fokussierte Feld, sonst das einzige
+        // editierbare. Der Rückfall auf `focus` bleibt, damit die Meldung
+        // weiterhin „kein Eingabefeld" lautet und nicht ins Leere zeigt.
+        return root?.let(::editableWithin) ?: focus
+    }
+
+    /**
+     * Sucht im Teilbaum nach einem Feld, das Text annimmt.
+     *
+     * Ein fokussiertes gewinnt: in einem Formular mit mehreren Feldern ist das
+     * das gemeinte. Sonst das erste — bei einer Suchleiste gibt es ohnehin nur
+     * eins.
+     */
+    private fun editableWithin(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        var fallback: AccessibilityNodeInfo? = null
+        val queue = ArrayDeque<AccessibilityNodeInfo>().apply { add(node) }
+        var seen = 0
+
+        // Eine Obergrenze, weil hier der Baum einer fremden App durchlaufen
+        // wird: eine Liste mit tausenden Einträgen soll keinen Tastendruck
+        // aufhalten.
+        while (queue.isNotEmpty() && seen < MAX_NODES) {
+            val current = queue.removeFirst()
+
+            seen += 1
+
+            if (current.isEditable) {
+                if (current.isFocused) {
+                    return current
+                }
+
+                if (fallback == null) {
+                    fallback = current
+                }
+            }
+
+            for (index in 0 until current.childCount) {
+                current.getChild(index)?.let(queue::addLast)
+            }
+        }
+
+        return fallback
+    }
 }

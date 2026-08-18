@@ -78,6 +78,14 @@ class HostServer(
      * Anmeldeweg an einer Frage hängen bliebe, die niemand beantwortet.
      */
     private val confirm: (String) -> Boolean = { true },
+    /**
+     * Ob die Bedienungshilfe in den Systemeinstellungen eingeschaltet ist.
+     * Etwas anderes als [inputReady]: eingeschaltet heißt „sie kommt", gebunden
+     * heißt „sie ist da".
+     */
+    private val inputEnabled: () -> Boolean = { true },
+    /** Ob sie gebunden ist und Befehle annimmt. Siehe [awaitInput]. */
+    private val inputReady: () -> Boolean = { true },
 ) {
 
     companion object {
@@ -100,6 +108,14 @@ class HostServer(
         const val NO_INPUT =
             "Dieses Gerät nimmt noch keine Eingaben an. Am Handy unter " +
                 "„Dieses Gerät freigeben\" die Fernsteuerung einschalten."
+
+        /** Wenn am Gerät niemand zugestimmt hat. */
+        const val NOT_CONFIRMED =
+            "Am anderen Gerät hat niemand zugestimmt. Jede Verbindung wird dort " +
+                "einzeln bestätigt — die App muss offen sein."
+
+        /** Wenn der vorgelegte Ausweis zu keiner Sitzung gehört. */
+        const val NOT_SIGNED_IN = "Nicht angemeldet."
 
         /**
          * Was der Client hört, wenn wirklich niemand die Aufnahme bestätigt
@@ -307,6 +323,31 @@ class HostServer(
     }
 
     /**
+     * Wartet, bis die Bedienungshilfe gebunden ist — höchstens
+     * {@link SOURCE_WAIT_MS} lang.
+     *
+     * Nicht gewartet wird, wenn sie gar nicht eingeschaltet ist: dann gibt es
+     * nichts, worauf man warten könnte, und der Satz darf beim ersten Befehl
+     * hinaus.
+     */
+    private fun awaitInput() {
+        if (!inputEnabled()) {
+            return
+        }
+
+        val deadline = System.currentTimeMillis() + SOURCE_WAIT_MS
+
+        while (!inputReady() && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(SOURCE_POLL_MS)
+            } catch (interrupted: InterruptedException) {
+                Thread.currentThread().interrupt()
+                return
+            }
+        }
+    }
+
+    /**
      * Der Bild-Stream.
      *
      * Die Aufnahme wird hier geöffnet und nicht vorgehalten: sie kostet einen
@@ -315,6 +356,18 @@ class HostServer(
      */
     private fun screenSocket(request: HttpServer.Request): HttpServer.Response =
         HttpServer.Response(101) { socket ->
+            // Erst die Zustimmung, dann die Aufnahme. Andersherum stünde am
+            // Handy ein Systemdialog, bevor jemand überhaupt zugestimmt hat,
+            // dass dieses Gerät zusehen darf.
+            requireConfirmation(request)?.let { failure ->
+                socket.sendText(
+                    JSONObject().put("t", "error").put("message", failure).toString(),
+                )
+
+                socket.close()
+                return@Response
+            }
+
             val source = awaitSource()
 
             if (source == null) {
@@ -366,6 +419,27 @@ class HostServer(
      */
     private fun inputSocket(request: HttpServer.Request): HttpServer.Response =
         HttpServer.Response(101) { socket ->
+            requireConfirmation(request)?.let { failure ->
+                socket.sendText(
+                    JSONObject().put("t", "error").put("message", failure).toString(),
+                )
+
+                socket.close()
+                return@Response
+            }
+
+            // Auf die Bedienungshilfe warten, bevor der erste Befehl kommt.
+            //
+            // **Der Befund dahinter (18.08.2026):** „Dieses Gerät nimmt noch
+            // keine Eingaben an" stand da, obwohl die Steuerung tadellos lief.
+            // Android bindet die Bedienungshilfe erst, wenn es soweit ist —
+            // eingeschaltet ist sie längst, aber `RemoteInputService.current()`
+            // gibt für ein bis zwei Sekunden noch nichts heraus. Genau in dieses
+            // Fenster fiel der erste Befehl der frischen Verbindung, die Meldung
+            // ging hinaus und blieb in der Statuszeile stehen — während alles
+            // Folgende ankam.
+            awaitInput()
+
             val release = live.register(clientOf(request), LiveConnections.Kind.INPUT) {
                 socket.close()
             }
@@ -399,6 +473,25 @@ class HostServer(
      */
     private fun clientOf(request: HttpServer.Request): String? =
         credentialOf(request)?.let { sessions.find(it)?.clientId }
+
+    private fun sessionOf(request: HttpServer.Request): HostSession? =
+        credentialOf(request)?.let(sessions::find)
+
+    /**
+     * Die Zustimmung des Menschen am Gerät, einmal je Sitzung.
+     *
+     * @return `null`, wenn zugestimmt wurde; sonst der Satz für die Gegenseite.
+     */
+    private fun requireConfirmation(request: HttpServer.Request): String? {
+        val session = sessionOf(request) ?: return NOT_SIGNED_IN
+
+        val label = pairing.listClients()
+            .find { it.id == session.clientId }
+            ?.label
+            ?: "Ein gekoppeltes Gerät"
+
+        return if (session.confirmOnce { confirm(label) }) null else NOT_CONFIRMED
+    }
 
     /**
      * Was dieses Gerät ist und kann.
@@ -555,19 +648,12 @@ class HostServer(
             return HttpServer.Response.error(401, "Anmeldung fehlgeschlagen.")
         }
 
-        // Erst prüfen, dann fragen: wer nicht gekoppelt ist, soll am Handy
-        // keine Karte auslösen können. Eine Kopplung sagt, *wer* fragen darf —
-        // dass jetzt gerade jemand zusehen darf, sagt nur ein Mensch.
-        if (!confirm(result.client?.label ?: "Ein gekoppeltes Gerät")) {
-            sessions.close(result.token)
-
-            return HttpServer.Response.error(
-                403,
-                "Am anderen Gerät hat niemand zugestimmt. Jede Verbindung wird " +
-                    "dort einzeln bestätigt — die App muss offen sein.",
-            )
-        }
-
+        // **Hier wird nicht mehr gefragt.** Eine Anmeldung sieht nichts und
+        // steuert nichts — sie ist auch der Weg, auf dem die Gegenseite die
+        // Fassung dieses Geräts abliest. Die Rückfrage stand damit bei jedem
+        // Start der App drüben auf dem Bildschirm, ohne dass jemand etwas
+        // vorhatte. Gefragt wird beim ersten Bild- oder Eingabe-Socket dieser
+        // Sitzung, siehe [HostSession.confirmOnce].
         val json = JSONObject()
             .put("token", result.token)
             .put("scopes", JSONArray(result.client?.scopes.orEmpty()))

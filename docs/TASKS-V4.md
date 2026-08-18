@@ -1471,6 +1471,99 @@ wäre eine Mängelliste über Dinge, die es nie gab. Die Sollmenge kommt aus
 trennen, erneut verbinden; in ein YouTube-Suchfeld tippen; ein Update am Handy
 und eines vom Handy aus auf den Rechner.
 
+## Phase 31o — der zweite Durchgang ✅ (18.08.2026, am Gerät noch zu prüfen)
+
+Vier der Reparaturen aus 31n griffen nicht, und alle vier aus demselben Grund:
+sie behandelten das Symptom an der Stelle, an der es sichtbar wurde, statt dort,
+wo es entstand.
+
+### Kein Bild beim zweiten Verbinden — und der Grund war nicht der Socket
+
+Verbinden, trennen, wieder verbinden: Eingaben kamen an, die Benachrichtigung
+am Handy wechselte korrekt auf „wird gerade ferngesteuert", ein Bild kam nicht,
+und ein neuer Systemdialog auch nicht.
+
+**Eine `MediaProjection` ist seit Android 14 einmalig.** Nach dem ersten
+`createVirtualDisplay` wirft jeder weitere Aufruf — auch dann, wenn der erste
+Bildschirm längst freigegeben wurde. 31l hatte die Projektion richtigerweise vom
+einzelnen Socket gelöst; der virtuelle Bildschirm darunter hing aber weiter am
+Socket, und mit ihm der eine Versuch, den es gibt. Das Ergebnis war eine
+Ausnahme, die in `runCatching` verschwand, ein `null` aus `open()`, und danach
+sechs Sekunden Warten in `awaitSource` — ohne Bild und ohne Erklärung.
+
+Jetzt gehört auch der virtuelle Bildschirm der Zustimmung: `ScreenCapture` hält
+**eine** Quelle, jede folgende Verbindung benutzt sie weiter, und `close()` auf
+dem Strom tut nichts. Freigegeben wird sie dort, wo auch die Zustimmung endet.
+
+### „Nimmt noch keine Eingaben an" — bei laufender Steuerung
+
+Android bindet eine Bedienungshilfe erst, wenn es soweit ist. Eingeschaltet ist
+sie längst; `RemoteInputService.current()` gibt trotzdem ein bis zwei Sekunden
+lang nichts heraus. Genau in dieses Fenster fiel der erste Befehl einer frischen
+Verbindung — die Meldung ging hinaus und blieb in der Statuszeile stehen,
+während alles Folgende ankam.
+
+`awaitInput()` wartet jetzt, bevor der Socket Befehle annimmt. Nicht gewartet
+wird, wenn die Bedienungshilfe gar nicht eingeschaltet ist: dann gibt es nichts,
+worauf man warten könnte. Der Unterschied ist der zwischen „sie kommt" und „sie
+ist da", und dafür stehen zwei getrennte Fragen im Server.
+
+### Text in YouTube und Spotify
+
+Der Weg über die Zwischenablage aus 31n war richtig und griff trotzdem nicht:
+er wurde auf dem falschen Knoten versucht. `findFocus(FOCUS_INPUT)` liefert den
+Knoten mit dem Eingabefokus — bei einem gewöhnlichen `EditText` ist das das
+Feld, bei einer Suchleiste der Rahmen darum. Weder `ACTION_SET_TEXT` noch
+`ACTION_PASTE` konnten darauf wirken, und die Meldung beschrieb einen Knoten,
+den niemand gemeint hatte.
+
+Jetzt wird gesucht: erst der fokussierte Knoten, dann sein Teilbaum, zuletzt das
+aktive Fenster — nach `isEditable`, mit einer Obergrenze von 400 Knoten, weil
+hier der Baum einer fremden App durchlaufen wird. Dazu drei Kleinigkeiten, die
+einzeln nichts und zusammen viel ausmachen: `ACTION_FOCUS` vor dem Schreiben,
+ein geprüftes Markieren statt eines blinden (ohne das wurde aus „ab" ein „aab",
+weil jeder Anschlag den ganzen Feldinhalt schickt), und eine Meldung, die
+zwischen „nimmt keinen Text an" und „Zwischenablage ließ sich nicht
+beschreiben" unterscheidet.
+
+### Die Rückfrage kam bei jedem Start der App drüben
+
+Gefragt wurde beim **Anmelden**. Damit hing sie an etwas, das noch gar nichts
+sieht und nichts steuert — und was noch schwerer wiegt: die Anmeldung ist auch
+der Weg, auf dem die Geräteliste der Gegenseite seit 31m die Fassung abliest.
+Am Handy stand deshalb bei jedem Start der App drüben eine Karte „möchte den
+Bildschirm sehen und es bedienen", ohne dass jemand etwas vorhatte. **Eine
+Frage, die man mehrmals täglich grundlos gestellt bekommt, wird ohne Hinsehen
+weggetippt — und ist damit nichts mehr wert.**
+
+Gefragt wird jetzt beim ersten Bild- oder Eingabe-Socket einer Sitzung
+(`HostSession.confirmOnce`). Bild und Eingabe gehen fast gleichzeitig auf,
+deshalb ist die Stelle gesperrt: der zweite wartet auf die Antwort des ersten,
+statt eine zweite Karte auszulösen. Ein „nein" wird nicht gemerkt — wer beim
+nächsten Versuch zustimmen will, soll gefragt werden.
+
+### Benachrichtigungen werden beim Start erfragt
+
+Sie sind hier keine Beigabe: über sie läuft die Rückfrage „darf dieses Gerät
+jetzt verbinden?", und die kommt womöglich, bevor dieses Handy jemals selbst
+etwas gesteuert hat. Ohne die Erlaubnis sieht man eine Anfrage nur bei offener
+App — und eine Anfrage, die niemand sieht, gilt nach einer halben Minute als
+abgelehnt.
+
+### Die Fassung in der Geräteliste
+
+„Version 1.3.4", und **nur** bei einem veralteten Gerät „Version 1.3.4 - Update
+verfügbar". Der Vergleich hinter jeder Fassung verlangte, eine Zeile zu lesen,
+die meistens nichts zu melden hat. Ein neueres Gerät bekommt den Zusatz
+ausdrücklich nicht: dort ist nichts zu tun.
+
+**Abnahme:** am echten Gerät noch zu prüfen — die App am Handy starten, während
+der Rechner seine Geräteliste offen hat (es darf keine Karte kommen); verbinden,
+trennen, erneut verbinden (Bild muss wiederkommen); in ein YouTube-Suchfeld
+tippen.
+
+---
+
 ---
 
 # Teil B — Dateimanager

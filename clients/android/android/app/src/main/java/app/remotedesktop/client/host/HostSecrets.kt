@@ -171,7 +171,50 @@ class ChallengeStore(private val now: Clock = System::currentTimeMillis) {
 
 /** Eine offene Sitzung: wer sie hat und was er damit darf. */
 data class HostSession(val clientId: String, val scopes: List<String>) {
+
     fun allows(scope: String?): Boolean = scope == null || scopes.contains(scope)
+
+    /** Wer diese Sitzung ist und ob am Gerät schon jemand zugestimmt hat. */
+    private val gate = Any()
+
+    @Volatile
+    private var approved = false
+
+    /**
+     * Holt die Zustimmung des Menschen am Gerät — **einmal je Sitzung**.
+     *
+     * <p>
+     * **Der Befund dahinter (18.08.2026):** gefragt wurde beim Anmelden. Damit
+     * hing die Rückfrage an etwas, das noch gar nichts sieht und nichts steuert:
+     * die Geräteliste der Gegenseite meldet sich an, um die Fassung abzulesen,
+     * und schon stand am Handy eine Karte „möchte den Bildschirm sehen und es
+     * bedienen" — bei jedem Start der App drüben, ohne dass jemand etwas
+     * vorhatte. Eine Frage, die man mehrmals täglich grundlos gestellt bekommt,
+     * wird irgendwann ohne Hinsehen weggetippt, und dann ist sie nichts mehr
+     * wert.
+     * </p>
+     *
+     * <p>
+     * Gefragt wird jetzt dort, wo wirklich etwas passiert: beim ersten Bild-
+     * oder Eingabe-Socket dieser Sitzung. Eine Anmeldung allein sieht nichts.
+     * </p>
+     *
+     * <p>
+     * Gesperrt, weil Bild und Eingabe fast gleichzeitig aufgehen: der zweite
+     * wartet auf die Antwort des ersten, statt eine zweite Karte auszulösen.
+     * Ein „nein" wird nicht gemerkt — wer beim nächsten Versuch zustimmen will,
+     * soll gefragt werden.
+     * </p>
+     */
+    fun confirmOnce(ask: () -> Boolean): Boolean = synchronized(gate) {
+        if (approved) {
+            return@synchronized true
+        }
+
+        approved = ask()
+
+        approved
+    }
 }
 
 /**

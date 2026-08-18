@@ -172,6 +172,11 @@ class ScreenStream(
             }
         }
 
+        // Meldet nur ab, räumt nichts weg: die Quelle gehört der Zustimmung
+        // und nicht dieser Verbindung. Sie hier freizugeben hieße, den einen
+        // virtuellen Bildschirm zurückzugeben, den die Projektion zu vergeben
+        // hat — und einen zweiten gibt Android nicht heraus. Siehe
+        // `ScreenCapture.source`.
         source.close()
     }
 

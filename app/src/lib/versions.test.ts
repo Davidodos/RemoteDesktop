@@ -91,9 +91,21 @@ describe('canUpdateRemotely', () => {
 })
 
 describe('describeMatch', () => {
-  it('sagt, wie der Stand zum eigenen steht', () => {
-    expect(describeMatch('same', '1.3.4')).toBe('Fassung 1.3.4 — wie hier')
-    expect(describeMatch('older', '1.3.0')).toBe('Fassung 1.3.0 — älter als hier')
+  /**
+   * Der Zusatz steht nur da, wenn es etwas zu tun gibt. Ein Vergleich hinter
+   * jeder Fassung verlangt, eine Zeile zu lesen, die meistens nichts meldet.
+   */
+  it('nennt bei gleichem Stand nur die Fassung', () => {
+    expect(describeMatch('same', '1.3.4')).toBe('Version 1.3.4')
+  })
+
+  it('nur ein veraltetes Gerät bekommt den Zusatz', () => {
+    expect(describeMatch('older', '1.3.0')).toBe('Version 1.3.0 - Update verfügbar')
+  })
+
+  /** Dort ist nichts zu tun — zu aktualisieren wäre dieses Gerät hier. */
+  it('ein neueres Gerät nicht', () => {
+    expect(describeMatch('newer', '1.4.0')).toBe('Version 1.4.0')
   })
 
   it('ohne Fassung steht dort nichts', () => {
