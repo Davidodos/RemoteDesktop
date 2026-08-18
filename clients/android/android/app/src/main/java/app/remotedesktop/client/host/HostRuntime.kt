@@ -222,8 +222,20 @@ class HostRuntime private constructor(
             // laufenden Betrieb änderbar, und der Server wird dafür nicht neu
             // gebaut.
             screenAllowed = { HostPreference.isScreenAllowed(context) },
+            // **`null` heißt hier Erfolg — und genau daran hing es.**
+            //
+            // Der Befund (19.08.2026): hier stand
+            // `current()?.execute(command) ?: NO_INPUT`. Der Elvis-Operator
+            // greift bei jedem `null`, und `execute` liefert `null`, wenn ein
+            // Befehl *durchgelaufen* ist. Also meldete jeder gelungene
+            // Tastendruck „Dieses Gerät nimmt noch keine Eingaben an" — während
+            // die Steuerung tadellos lief. Zwei Anläufe haben um diesen Fehler
+            // herumgebaut (warten, ein zweiter Versuch), ohne ihn zu berühren;
+            // er stand die ganze Zeit in dieser einen Zeile.
             input = { command ->
-                RemoteInputService.current()?.execute(command) ?: HostServer.NO_INPUT
+                val service = RemoteInputService.current()
+
+                if (service == null) HostServer.NO_INPUT else service.execute(command)
             },
             confirm = connections::ask,
             // Zwei verschiedene Fragen: ob der Mensch sie eingeschaltet hat,

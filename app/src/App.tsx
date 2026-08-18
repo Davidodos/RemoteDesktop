@@ -20,6 +20,7 @@ import {
 import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
 import { useIdentity } from './lib/ownName.ts'
 import { InputChannel } from './lib/inputChannel.ts'
+import { useNotice } from './lib/notice.ts'
 import { protocolMismatch } from './lib/protocol.ts'
 import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
 import { buildSurfaceBoard } from './lib/surfaceBoard.ts'
@@ -87,7 +88,14 @@ function Shell(): React.JSX.Element {
   const [page, setPage] = useState<Page>('devices')
   const [menuOpen, setMenuOpen] = useState(false)
   const [connection, setConnection] = useState<ConnectionState>('disconnected')
-  const [error, setError] = useState<string | undefined>(undefined)
+
+  /**
+   * Die Meldung über allem — und sie geht von allein wieder.
+   *
+   * Was sie beschreibt, ist fast immer ein Augenblick; steht sie länger als er,
+   * behauptet sie ein Problem, das es nicht mehr gibt. Siehe `lib/notice.ts`.
+   */
+  const { message: error, report: setError, clear: clearError } = useNotice()
 
   /**
    * Der eigene Name und der Erststart. Beide liegen nativ — siehe
@@ -283,6 +291,36 @@ function Shell(): React.JSX.Element {
     }
   }, [])
 
+  /**
+   * Zwei Augenblicke, in denen eine Meldung nachweislich nichts mehr
+   * beschreibt.
+   *
+   * <p>
+   * **Die Verbindung steht wieder.** Fast alles, was hier gemeldet wird, hängt
+   * daran — ein Kanal, der nicht zustande kam, ein Recht, das gerade fehlte, ein
+   * Gerät, das nicht antwortete. Kommt die Verbindung zurück, ist der Satz
+   * darüber Geschichte.
+   * </p>
+   *
+   * <p>
+   * **Das Gerät wechselt oder wird verlassen.** Eine Meldung sprach über *ein*
+   * Gerät; wer ein anderes wählt oder die Sitzung beendet, hat nichts mehr
+   * davon, sie weiter zu lesen.
+   * </p>
+   */
+  useEffect(() => {
+    if (connection === 'connected') {
+      clearError()
+    }
+  }, [connection, clearError])
+
+  useEffect(() => {
+    clearError()
+    // Beim Wechsel *und* beim Verlassen: `selected` ist dann `undefined`, und
+    // genau dieser Fall — trennen, während eine Meldung dasteht — war der, den
+    // man am häufigsten sah.
+  }, [selected, clearError])
+
   // Eingabe-Socket an das gewählte Gerät binden.
   useEffect(() => {
     if (selected === undefined) {
@@ -437,7 +475,13 @@ function Shell(): React.JSX.Element {
       setDevices(saveLocalDevice(aktuell))
     }
 
-    setError(protocolMismatch(probe, device.name))
+    // `undefined` heißt: die Fassungen passen zueinander, und dann gibt es
+    // nichts zu melden.
+    const abweichung = protocolMismatch(probe, device.name)
+
+    if (abweichung !== undefined) {
+      setError(abweichung)
+    }
     storage.setLastDevice(aktuell.id)
     setSelected(aktuell)
   }, [])
@@ -628,7 +672,12 @@ function Shell(): React.JSX.Element {
         onPaired={(all, paired, warnung) => {
           setDevices(all)
           setPairing(false)
-          setError(warnung)
+
+          // Nur, wenn die Gegenrichtung nicht zustande kam. Sonst hat die
+          // Kopplung geklappt, und dazu gibt es nichts zu sagen.
+          if (warnung !== undefined) {
+            setError(warnung)
+          }
 
           // Der Name kommt aus `/api/info` des frisch gekoppelten Agents —
           // eine zweite Anfrage braucht es hier nicht.
@@ -743,7 +792,7 @@ function Shell(): React.JSX.Element {
         )}
       </header>
 
-      <ErrorBanner message={error} onDismiss={() => setError(undefined)} />
+      <ErrorBanner message={error} onDismiss={clearError} />
 
       <main className={view === 'screen' ? 'app-body screen' : 'app-body'}>
         {/* Die Bildschirmansicht bleibt auch auf den anderen Seiten bestehen,

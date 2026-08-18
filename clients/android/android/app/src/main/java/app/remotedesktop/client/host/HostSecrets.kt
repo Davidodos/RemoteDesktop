@@ -215,6 +215,30 @@ data class HostSession(val clientId: String, val scopes: List<String>) {
 
         approved
     }
+
+    /**
+     * Vergisst die Zustimmung — gerufen, wenn die letzte Verbindung dieser
+     * Sitzung endet.
+     *
+     * <p>
+     * **Der Befund dahinter (19.08.2026):** „einmal je Sitzung" war zu weit
+     * gefasst. Ein Sitzungstoken gilt zwölf Stunden und überlebt jedes Trennen;
+     * wer sich also einmal am Tag verband, wurde einmal am Tag gefragt und
+     * danach nicht mehr. Damit fiel auch der Systemdialog für die
+     * Bildschirmaufnahme aus, denn den löst die Karte aus — beim
+     * Wiederverbinden blieb das Bild schwarz, und niemand konnte etwas dagegen
+     * tun.
+     * </p>
+     *
+     * <p>
+     * Gemeint war „einmal je zusammenhängender Verbindung": Bild und Eingabe
+     * gehen zusammen auf und sollen eine Frage ergeben, nicht zwei. Endet die
+     * letzte, ist die nächste eine neue.
+     * </p>
+     */
+    fun forget() = synchronized(gate) {
+        approved = false
+    }
 }
 
 /**

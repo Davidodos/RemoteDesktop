@@ -346,6 +346,35 @@ class HostServer(
     }
 
     /**
+     * Räumt auf, wenn eine Verbindung endet.
+     *
+     * <p>
+     * **Zwei Dinge, und beide hängen am selben Augenblick.** Geht der letzte
+     * Zuschauer, endet die Bildschirmaufnahme samt Zustimmung — Android nimmt
+     * eine ungenutzte Projektion ohnehin lautlos zurück, und ein Ende, das man
+     * selbst herbeiführt, ist verlässlicher. Geht die letzte Verbindung dieses
+     * Geräts überhaupt, wird auch die Zustimmung des Menschen vergessen: sie
+     * galt dieser Verbindung und nicht dem Sitzungstoken, das zwölf Stunden
+     * lebt.
+     * </p>
+     *
+     * <p>
+     * Beim Ablösen — ein neuer Socket verdrängt den alten — läuft dieses
+     * `finally` erst *nach* der Registrierung des Nachfolgers. Dann ist der
+     * Zähler nicht null, und es passiert richtigerweise nichts.
+     * </p>
+     */
+    private fun partOver(request: HttpServer.Request) {
+        if (live.countOf(LiveConnections.Kind.SCREEN) == 0) {
+            releaseScreen()
+        }
+
+        if (live.countFor(clientOf(request)) == 0) {
+            sessionOf(request)?.forget()
+        }
+    }
+
+    /**
      * Führt einen Befehl aus — und gibt der Bedienungshilfe eine zweite Chance.
      *
      * <p>
@@ -464,12 +493,7 @@ class HostServer(
                 socket.close()
                 sender.join(2000)
                 release()
-
-                // Der letzte Zuschauer geht: die Aufnahme endet mit ihm, und
-                // die nächste Verbindung fragt neu. Siehe [releaseScreen].
-                if (live.countOf(LiveConnections.Kind.SCREEN) == 0) {
-                    releaseScreen()
-                }
+                partOver(request)
             }
         }
 
@@ -526,6 +550,7 @@ class HostServer(
             } finally {
                 socket.close()
                 release()
+                partOver(request)
             }
         }
 
@@ -872,6 +897,11 @@ class LiveConnections {
     /** Wie viele davon dieser Art sind — über alle Clients. */
     fun countOf(kind: Kind): Int = synchronized(gate) {
         open.values.sumOf { list -> list.count { it.kind == kind } }
+    }
+
+    /** Wie viele Verbindungen dieses eine Gerät offen hat — Bild und Eingabe. */
+    fun countFor(clientId: String?): Int = synchronized(gate) {
+        if (clientId == null) 0 else open[clientId]?.size ?: 0
     }
 
     /**

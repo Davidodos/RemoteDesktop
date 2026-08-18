@@ -147,6 +147,21 @@ einem Fern-Update geht das Fenster wieder auf — über `explorer.exe`, weil
 `runasoriginaluser` es vom erhöhten Agent geerbt und damit in ein anderes
 WebView2-Profil gelegt hätte. Einzelheiten unter **31p** in `docs/TASKS-V4.md`.
 
+**31q findet die Zeile, um die drei Anläufe herumgebaut hatten** (19.08.2026,
+am Gerät noch zu prüfen). „Dieses Gerät nimmt noch keine Eingaben an" kam von
+`current()?.execute(command) ?: NO_INPUT` in `HostRuntime`: `execute` gibt bei
+**Erfolg** `null` zurück, und der Elvis-Operator griff genau dann — jeder
+gelungene Befehl meldete einen Fehler. Die Vorkehrungen aus 31o und 31p bleiben
+(der Bind-Verzug ist real), der Fehler war er nicht. Beim Wiederverbinden kam
+kein Systemdialog, weil die **Zustimmung** an der zwölf Stunden gültigen Sitzung
+hing statt an der Verbindung; sie wird jetzt vergessen, sobald die letzte
+Verbindung eines Geräts endet (`HostSession.forget` aus `partOver`) — und mit ihr
+kommt der Aufnahmedialog zurück. Dazu: Fehlerbänder verschwinden von allein
+(`lib/notice.ts` — Frist von zwölf Sekunden, wiederhergestellte Verbindung,
+Verlassen des Geräts), und „online"/„offline"/„Wecken" stehen in einer Spalte
+fester Breite, damit die Liste nicht bei jeder Zeile springt. Einzelheiten unter
+**31q** in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen

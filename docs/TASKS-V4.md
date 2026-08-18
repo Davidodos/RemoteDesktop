@@ -1642,6 +1642,70 @@ auslösen und sehen, ob Fenster und Agent danach von allein wieder da sind.
 
 ---
 
+## Phase 31q — eine Zeile, drei Anläufe ✅ (19.08.2026, am Gerät noch zu prüfen)
+
+### „Dieses Gerät nimmt noch keine Eingaben an" — der eigentliche Grund
+
+Er stand die ganze Zeit in einer einzigen Zeile in `HostRuntime`:
+
+```kotlin
+input = { command -> RemoteInputService.current()?.execute(command) ?: NO_INPUT }
+```
+
+`execute` liefert `String?`, und **`null` heißt dort: hat geklappt**. Der
+Elvis-Operator greift aber bei jedem `null` — also meldete *jeder gelungene
+Befehl* „Dieses Gerät nimmt noch keine Eingaben an". Genau das war zu sehen:
+eine Fehlermeldung neben einer Steuerung, die tadellos lief.
+
+Zwei Anläufe (31o: warten, bis die Bedienungshilfe gebunden ist; 31p: ein
+zweiter Versuch) haben um diesen Fehler herumgebaut, ohne ihn zu berühren — und
+31p machte ihn sogar sichtbarer, weil aus der einen Meldung eine zweite wurde.
+Beide Vorkehrungen bleiben: der Bind-Verzug ist real. Der Fehler war er nicht.
+
+### Kein neuer Systemdialog beim Wiederverbinden
+
+31p ließ die Aufnahme mit dem letzten Zuschauer enden — richtig, aber wirkungslos,
+weil die **Zustimmung des Menschen** weiter galt. Sie hing seit 31o an der
+Sitzung, und ein Sitzungstoken lebt zwölf Stunden: wer sich einmal am Tag
+verband, wurde einmal am Tag gefragt. Der Systemdialog für die Aufnahme hängt
+aber genau an dieser Karte — ohne sie kein Dialog, und damit kein Bild.
+
+„Einmal je Sitzung" war zu weit gefasst; gemeint war „einmal je
+zusammenhängender Verbindung". Endet die letzte Verbindung eines Geräts, wird
+die Zustimmung vergessen (`HostSession.forget`, gerufen aus `partOver`). Beim
+Ablösen — ein neuer Socket verdrängt den alten — läuft das `finally` erst nach
+der Registrierung des Nachfolgers; dann ist der Zähler nicht null, und es
+passiert richtigerweise nichts.
+
+### Meldungen gehen von allein
+
+Ein Fehlerband blieb stehen, bis jemand es wegtippte. Das klingt nach Sorgfalt
+und ist das Gegenteil: die meisten Meldungen beschreiben einen Augenblick — die
+Verbindung wackelte, ein Recht fehlte gerade, ein Gerät antwortete nicht. Ist
+der Augenblick vorbei, beschreibt der Satz nichts mehr, steht aber weiter über
+der Oberfläche. Wer ihn liest, sucht nach etwas, das es nicht mehr gibt; wer ihn
+zweimal gelesen hat, liest ihn beim dritten Mal nicht mehr — und übersieht dann
+den einen, auf den es ankommt.
+
+Drei Wege hinaus, und nur einer ist der Finger: eine Frist von zwölf Sekunden,
+die wiederhergestellte Verbindung, und das Verlassen des Geräts, über das die
+Meldung sprach. Die Uhr steht in `lib/notice.ts` und nicht in der Ansicht —
+damit prüfbar bleibt, dass eine zweite Meldung die Frist zurücksetzt und ein
+aufgelöster Zeitgeber nicht nachfeuert.
+
+### Die Zustandsspalte
+
+„online", „offline" und der Weckknopf stehen jetzt in einer Spalte fester
+Breite, zentriert. Vorher richtete sie sich nach dem Inhalt: „online" allein ist
+schmaler als „offline" mit einem Knopf darunter, und die Liste sprang bei jeder
+Zeile.
+
+**Abnahme:** am echten Gerät noch zu prüfen — steuern, ohne dass eine Meldung
+kommt; trennen und erneut verbinden (Karte *und* Systemdialog müssen wieder
+kommen); eine Meldung auslösen und sie stehen lassen.
+
+---
+
 ---
 
 # Teil B — Dateimanager
