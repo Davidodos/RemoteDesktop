@@ -851,7 +851,16 @@ button.danger:active:not(:disabled) {
   position: fixed;
   left: 0.75rem;
   right: 0.75rem;
-  bottom: 0.75rem;
+  /*
+    Über der Navigationsleiste, nicht darunter.
+
+    Android blendet seine Gestenleiste oder die drei Tasten unten ein und legt
+    sie über die Seite; eine Karte, die dort endet, wird zur Hälfte verdeckt.
+    `env(safe-area-inset-bottom)` ist die Höhe, die das System dafür meldet —
+    auf einem Gerät ohne solche Leiste ist sie null, und der Abstand bleibt der
+    gewohnte.
+  */
+  bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
   z-index: 40;
   display: flex;
   align-items: center;

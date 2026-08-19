@@ -162,6 +162,20 @@ Verlassen des Geräts), und „online"/„offline"/„Wecken" stehen in einer Sp
 fester Breite, damit die Liste nicht bei jeder Zeile springt. Einzelheiten unter
 **31q** in `docs/TASKS-V4.md`.
 
+**31r lässt warten, statt vor einer schwarzen Fläche zu sitzen** (19.08.2026,
+am Gerät noch zu prüfen). Wer ein Handy anklickte, landete sofort in der
+Bildschirmansicht, während drüben erst jemand gefragt wurde — der WebSocket
+steht nämlich schon, bevor die Karte aufgeht. Der Host schickt jetzt vorher ein
+`{"t":"awaiting"}`, und daraus wird „Warte auf Bestätigung am Gerät…"; ein
+Windows-Agent schickt es nicht, dort fragt niemand. Dazu: das Update-Band am
+Handy sagt „Version x.y.z ist verfügbar" mit dem Knopf „Jetzt aktualisieren" und
+sitzt über der Navigationsleiste (`env(safe-area-inset-bottom)`); Fassung und
+„Auf Updates prüfen" sind aus der Power-Ansicht weg, weil beides seit 31m in der
+Geräteliste steht; und das Fenster kommt nach einem Fern-Update wieder — der
+`[Run]`-Eintrag trug `postinstall`, und ein solcher Eintrag ist eine
+Ankreuzfläche auf der Abschlussseite, die es bei `/VERYSILENT` nicht gibt.
+Einzelheiten unter **31r** in `docs/TASKS-V4.md`.
+
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
 Zweitliste ist weg, „Netz" steht unter den Einstellungen. Je Gerät stehen

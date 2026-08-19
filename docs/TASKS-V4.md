@@ -1706,6 +1706,51 @@ kommen); eine Meldung auslösen und sie stehen lassen.
 
 ---
 
+## Phase 31r — warten, statt vor einer schwarzen Fläche zu sitzen ✅ (19.08.2026, am Gerät noch zu prüfen)
+
+### „Warte auf Bestätigung am Gerät…"
+
+Wer ein Handy zum Verbinden anklickte, landete sofort in der Bildschirmansicht —
+und dort vor einer schwarzen Fläche, während drüben jemand gefragt wurde. Das
+sah aus wie eine hängende Verbindung, und man wusste weder, ob man warten noch
+was man tun soll.
+
+Der Grund liegt in der Reihenfolge: **der WebSocket steht bereits, wenn drüben
+die Karte aufgeht.** Das Aufrüsten passiert vor der Rückfrage, also sieht diese
+Seite keinen Unterschied zwischen „wird gerade gefragt" und „liefert gleich
+Bilder". Der Host schickt jetzt vor dem Warten ein `{"t":"awaiting"}`; die
+Ansicht macht daraus einen Satz und räumt ihn weg, sobald das erste Bild kommt
+oder eine Absage. Ein Windows-Agent schickt die Nachricht nicht — dort fragt
+niemand, und dort bleibt es beim Verhalten von vorher.
+
+### Das Update-Band am Handy
+
+„Version x.y.z ist verfügbar", der Knopf heißt „Jetzt aktualisieren". Und es
+sitzt über der Navigationsleiste statt darunter:
+`env(safe-area-inset-bottom)` ist die Höhe, die Android für seine Gestenleiste
+meldet — auf einem Gerät ohne solche Leiste ist sie null.
+
+### Fassung und Update-Knopf sind aus der Power-Ansicht weg
+
+Sie standen dort, weil ein Update den Agent neu startet — dasselbe Ergebnis wie
+die Knöpfe darüber. Diese Verwandtschaft ist eine technische und keine, die
+jemand vor dem Bildschirm hat: wer die Fassung eines Geräts sucht, sucht sie in
+der Geräteliste, und dort steht sie seit 31m samt einem Knopf, der es
+aktualisiert. **Zwei Orte für dieselbe Sache heißen, dass einer davon irgendwann
+etwas anderes sagt.**
+
+### Das Fenster nach einem Fern-Update
+
+Der Eintrag trug `postinstall` — und ein Eintrag mit diesem Flag ist eine
+Ankreuzfläche auf der Abschlussseite des Assistenten. Die gibt es bei
+`/VERYSILENT` nicht. Ohne das Flag läuft er einfach, still wie laut.
+
+**Abnahme:** am echten Gerät noch zu prüfen — ein Handy anklicken und den
+Wartesatz sehen; ein Fern-Update auslösen und sehen, ob das Fenster von allein
+wiederkommt.
+
+---
+
 ---
 
 # Teil B — Dateimanager

@@ -442,6 +442,18 @@ class HostServer(
      */
     private fun screenSocket(request: HttpServer.Request): HttpServer.Response =
         HttpServer.Response(101) { socket ->
+            // **Erst sagen, dass gewartet wird.** Der WebSocket steht in
+            // diesem Augenblick schon — das Aufrüsten passiert, bevor dieser
+            // Rückruf läuft. Für die Gegenseite sieht eine Verbindung, an der
+            // gerade jemand um Zustimmung gebeten wird, deshalb genauso aus wie
+            // eine, die gleich Bilder liefert: sie öffnet ihre
+            // Bildschirmansicht und wartet dort vor einer schwarzen Fläche.
+            // Diese eine Zeile macht daraus ein „Warte auf Bestätigung".
+            //
+            // Eine ältere Gegenstelle kennt die Nachricht nicht und wirft sie
+            // weg — dann bleibt es beim Verhalten von vorher.
+            socket.sendText(JSONObject().put("t", "awaiting").toString())
+
             // Erst die Zustimmung, dann die Aufnahme. Andersherum stünde am
             // Handy ein Systemdialog, bevor jemand überhaupt zugestimmt hat,
             // dass dieses Gerät zusehen darf.

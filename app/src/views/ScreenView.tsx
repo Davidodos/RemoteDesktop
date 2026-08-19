@@ -191,6 +191,16 @@ export function ScreenView({
   const [showStats, setShowStats] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [unavailable, setUnavailable] = useState<string | undefined>(undefined)
+
+  /**
+   * Ob drüben gerade jemand gefragt wird, ob diese Verbindung zustande kommen
+   * darf.
+   *
+   * Solange das läuft, gibt es nichts zu sehen und nichts zu tun — und ohne
+   * diesen Zustand sah das genauso aus wie eine hängende Verbindung. Siehe
+   * `ScreenCallbacks.onAwaiting`.
+   */
+  const [awaiting, setAwaiting] = useState(false)
   const [viewport, setViewport] = useState<Viewport>(RESET_VIEWPORT)
   const [quality, setQuality] = useState<QualityMode>('auto')
   const [chosenTransport, setTransport] = useState<Transport>(
@@ -341,16 +351,25 @@ export function ScreenView({
     }
 
     setUnavailable(undefined)
+    setAwaiting(false)
     updateViewport(RESET_VIEWPORT)
 
     const channel = new ScreenChannel(device, active, {
+      onAwaiting: () => setAwaiting(true),
       onMeta: (meta) => {
+        // Das erste Bild kommt: gefragt wurde, und die Antwort war ja.
+        setAwaiting(false)
         setUnavailable(undefined)
         setMonitorCount(meta.count)
       },
       onStats: setStats,
       onState: setConnection,
-      onError,
+      onError: (message) => {
+        // Eine Absage beendet das Warten ebenso wie eine Zusage — nur steht
+        // danach der Grund da statt eines Bildes.
+        setAwaiting(false)
+        onError(message)
+      },
       onAvailability: (available, reason) =>
         setUnavailable(available ? undefined : (reason ?? 'Bildschirm nicht verfügbar.')),
     })
@@ -906,10 +925,20 @@ export function ScreenView({
           </p>
         )}
 
-        {transport === 'jpeg' && connection !== 'connected' && (
-          <p className="screen-overlay">
-            {connection === 'connecting' ? 'Verbinde…' : 'Getrennt — versuche erneut…'}
+        {/* Die Rückfrage drüben geht vor. Sie ist der Grund, warum hier
+            gerade nichts passiert, und ohne sie sah das aus wie eine
+            hängende Verbindung. */}
+        {awaiting ? (
+          <p className="screen-overlay" role="status">
+            Warte auf Bestätigung am Gerät…
           </p>
+        ) : (
+          transport === 'jpeg' &&
+          connection !== 'connected' && (
+            <p className="screen-overlay">
+              {connection === 'connecting' ? 'Verbinde…' : 'Getrennt — versuche erneut…'}
+            </p>
+          )
         )}
 
         {unavailable !== undefined && <p className="screen-overlay">{unavailable}</p>}

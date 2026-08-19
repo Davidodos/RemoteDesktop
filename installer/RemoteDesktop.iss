@@ -197,11 +197,15 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Run /TN {#Service}"; \
 ; Der Explorer läuft dagegen immer als der angemeldete Benutzer und ohne
 ; Erhöhung. Ein Programm, das er startet, erbt genau das.
 ;
-; Ohne „skipifsilent", damit es auch nach einem stillen Update wieder aufgeht —
-; dort hat es sich ja gerade selbst beendet.
+; **Und ohne „postinstall"** (19.08.2026). Das war der Grund, warum das Fenster
+; nach einem Fern-Update zublieb: ein Eintrag mit diesem Flag ist eine
+; Ankreuzfläche auf der Abschlussseite des Assistenten — und die gibt es bei
+; „/VERYSILENT" nicht. Ohne das Flag läuft er einfach, still wie laut.
+;
+; „runasoriginaluser" bleibt daneben stehen: bei einer Installation von Hand
+; genügt es allein, und es schadet nicht, wo es nichts ausrichtet.
 Filename: "{sys}\explorer.exe"; Parameters: """{app}\{#Exe}"""; \
-    Description: "RemoteDesktop öffnen"; \
-    Check: ShouldOpenWindow; Flags: postinstall nowait
+    Check: ShouldOpenWindow; Flags: nowait runasoriginaluser
 
 [UninstallRun]
 ; Erst anhalten, was läuft.

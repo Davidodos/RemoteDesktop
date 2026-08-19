@@ -50,8 +50,8 @@ export function describeAppUpdate(state: AppUpdateState, asked = false): AppUpda
 
     case 'offer':
       return {
-        text: `Fassung ${state.version} der App liegt bereit.`,
-        action: 'Jetzt installieren',
+        text: `Version ${state.version} ist verfügbar`,
+        action: 'Jetzt aktualisieren',
         visible: true,
       }
 

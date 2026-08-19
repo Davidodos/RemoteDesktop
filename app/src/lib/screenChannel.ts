@@ -32,6 +32,25 @@ const STALL_CHECK_MS = 2000
 const ATTEMPTS_BEFORE_COMPLAINING = 3
 
 interface ScreenCallbacks {
+  /**
+   * Die Gegenseite fragt gerade jemanden, ob diese Verbindung zustande kommen
+   * darf.
+   *
+   * <p>
+   * **Warum das eine eigene Nachricht braucht.** Der WebSocket steht bereits,
+   * wenn drüben die Karte aufgeht: das Aufrüsten passiert vor der Rückfrage.
+   * Für diese Seite sah eine Verbindung, an der gerade jemand um Zustimmung
+   * gebeten wird, deshalb genauso aus wie eine, die gleich Bilder liefert — man
+   * saß vor einer schwarzen Fläche und wusste nicht, ob man warten oder etwas
+   * tun soll.
+   * </p>
+   *
+   * <p>
+   * Ein Windows-Agent schickt sie nicht: dort fragt niemand. Bleibt sie aus,
+   * bleibt auch der Wartezustand aus.
+   * </p>
+   */
+  onAwaiting: () => void
   onMeta: (meta: ScreenMeta) => void
   onStats: (stats: ScreenStats) => void
   onState: (state: ConnectionState) => void
@@ -184,6 +203,10 @@ export class ScreenChannel {
       const message = JSON.parse(raw) as Record<string, unknown>
 
       switch (message['t']) {
+        case 'awaiting':
+          this.callbacks.onAwaiting()
+          break
+
         case 'meta':
           this.applyMeta(message as unknown as ScreenMeta)
           break
