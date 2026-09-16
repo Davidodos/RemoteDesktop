@@ -111,7 +111,9 @@ public sealed class OverviewPage : PageView
 
         foreach (var part in Inventory.For(machine, profile).Where(p => Shown.Contains(p.Title)))
         {
-            Body.Add(PartCard(part));
+            Body.Add(part.Title == Inventory.NetworkTitle
+                ? NetworkCard(part, profile)
+                : PartCard(part, part.State, text: null));
         }
 
         Body.Add(UpdateCard());
@@ -123,12 +125,30 @@ public sealed class OverviewPage : PageView
         _shown = state;
     }
 
-    private Card PartCard(Part part)
+    /// <summary>
+    /// Das Netz: im Text nur die Art der Verbindung, am Zustandspunkt nur, ob
+    /// dieser Rechner erreichbar ist (16.09.2026). Was im Einzelnen fehlt,
+    /// sagen die Knöpfe darunter.
+    /// </summary>
+    private Card NetworkCard(Part part, NetworkProfile profile)
+    {
+        var state = part.Ok && profile.AdvertisedAddress is { } address
+            ? $"Erreichbar als {address}"
+            : "Nicht verbunden";
+
+        return PartCard(part, state, profile.Name());
+    }
+
+    private Card PartCard(Part part, string state, string? text)
     {
         var card = new Card(part.Title);
 
-        card.ShowState(part.State, part.Ok ? Theme.Online : part.Missing ? Theme.TextDim : Theme.Danger);
-        card.Body.Add(new TextBlock(part.Purpose));
+        card.ShowState(state, part.Ok ? Theme.Online : part.Missing ? Theme.TextDim : Theme.Danger);
+
+        if (text is not null)
+        {
+            card.Body.Add(new TextBlock(text));
+        }
 
         if (part.Actions.Count == 0)
         {

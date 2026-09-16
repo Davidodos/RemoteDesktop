@@ -222,6 +222,12 @@ input::placeholder {
   margin: 0;
 }
 
+.guide-link {
+  color: var(--accent);
+  font-size: 0.9rem;
+  margin-top: -0.5rem;
+}
+
 .error-text {
   color: var(--danger) !important;
 }

@@ -22,18 +22,6 @@ public sealed class NetworkPage : PageView
     private readonly ChoiceGroup<NetworkKind> _kinds = new();
     private readonly ThemedTextBox _address = new("z. B. 192.168.178.33");
     private readonly TextBlock _addressHint = new(string.Empty);
-    private readonly ThemedTextBox _coordinator = new(Coordinator.Default.Address);
-
-    /// <summary>
-    /// Die Zeile über dem Koordinator-Feld. Sie wird zusammen mit ihm
-    /// ausgeblendet — eine Beschriftung ohne Feld wäre die schlechtere Hälfte.
-    /// </summary>
-    private readonly TextBlock _coordinatorHint = new(
-        "Die Adresse deines Headscale-Servers — dorthin meldet sich der "
-        + "Tailscale-Client an.", Theme.Body, Theme.TextDim);
-
-    /// <summary>Der Stapel, in dem beide stecken — er blendet sie aus.</summary>
-    private Stack? _addressBody;
     private readonly ThemedTextBox _trustHost = new("Adresse des anderen Rechners");
     private readonly ThemedButton _suggest = new("Vorschlag");
     private readonly TextBlock _explanation = new(string.Empty);
@@ -64,14 +52,9 @@ public sealed class NetworkPage : PageView
             "Auch von unterwegs. Braucht das Programm Tailscale auf beiden Seiten.");
 
         _kinds.Add(
-            NetworkKind.Headscale,
-            "Headscale",
-            "Derselbe Tailscale-Client, aber an deinem eigenen Koordinator.");
-
-        _kinds.Add(
             NetworkKind.Vpn,
             "Anderer VPN-Anbieter",
-            "Du hast schon eins — WireGuard auf der Fritzbox oder etwas Ähnliches.");
+            "Du hast schon eins — WireGuard, Headscale oder etwas Ähnliches.");
 
         _kinds.Chosen += Choose;
         _suggest.Click += async (_, _) => await SuggestAsync();
@@ -85,10 +68,11 @@ public sealed class NetworkPage : PageView
     {
         var profile = NetworkStore.Read();
 
-        _chosen = profile.Kind;
-        _kinds.Select(profile.Kind);
+        // Headscale steht nicht mehr zur Wahl — RemoteDesktop braucht dort nur
+        // die Adresse, und das ist „Anderer VPN-Anbieter".
+        _chosen = profile.Kind == NetworkKind.Headscale ? NetworkKind.Vpn : profile.Kind;
+        _kinds.Select(_chosen);
         _address.Value = profile.Address;
-        _coordinator.Value = profile.Coordinator.Address;
 
         ApplyMode();
 
@@ -118,11 +102,7 @@ public sealed class NetworkPage : PageView
 
         card.Body.Add(_addressHint);
         card.Body.Add(Row.Fill(_address, _suggest));
-        card.Body.Add(_coordinatorHint);
-        card.Body.Add(_coordinator);
         card.Body.Add(Row.Buttons(save));
-
-        _addressBody = card.Body;
 
         return card;
     }
@@ -170,22 +150,13 @@ public sealed class NetworkPage : PageView
         // abzufragen gibt — im fremden VPN weiß RemoteDesktop nichts.
         _suggest.Enabled = _chosen != NetworkKind.Vpn;
 
-        // Ausgeblendet und nicht gesperrt: ein graues Feld sieht aus wie etwas,
-        // das man gleich ausfüllen muss, und lässt die Frage offen, warum es
-        // nicht geht. Der eigene Koordinator gehört zu Headscale und zu sonst
-        // nichts.
-        var ownCoordinator = _chosen == NetworkKind.Headscale;
-
-        _addressBody?.Toggle(_coordinatorHint, ownCoordinator);
-        _addressBody?.Toggle(_coordinator, ownCoordinator);
-
-        _address.Placeholder = _chosen is NetworkKind.Tailscale or NetworkKind.Headscale
+        _address.Placeholder = _chosen == NetworkKind.Tailscale
             ? "z. B. pc.tailnet-1234.ts.net"
             : "z. B. 192.168.178.33";
 
         _addressHint.Retext(_chosen switch
         {
-            NetworkKind.Tailscale or NetworkKind.Headscale =>
+            NetworkKind.Tailscale =>
                 "Der Name dieses Rechners im Tailnet. Genau er steht später im QR-Code, "
                 + "und genau ihn muss das Handy auflösen können. „Vorschlag“ liest ihn "
                 + "aus Tailscale aus.",
@@ -214,7 +185,7 @@ public sealed class NetworkPage : PageView
     /// </summary>
     private async Task SuggestAsync()
     {
-        if (_chosen is NetworkKind.Tailscale or NetworkKind.Headscale)
+        if (_chosen == NetworkKind.Tailscale)
         {
             // Der Aufruf von tailscale.exe darf das Fenster nicht anhalten.
             _probe.Forget();
@@ -252,12 +223,7 @@ public sealed class NetworkPage : PageView
 
     private void Save()
     {
-        var profile = new NetworkProfile(
-            _chosen,
-            _address.Value,
-            _chosen == NetworkKind.Headscale
-                ? Coordinator.From(_coordinator.Value)
-                : Coordinator.Default).Normalized();
+        var profile = new NetworkProfile(_chosen, _address.Value, Coordinator.Default).Normalized();
 
         if (profile.Rejection is { } rejection)
         {

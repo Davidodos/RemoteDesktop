@@ -37,6 +37,9 @@ AppPublisher={#Publisher}
 AppPublisherURL={#Url}
 DefaultDirName={autopf}\{#Name}
 DefaultGroupName={#Name}
+; Keine eigene Seite für den Ordnernamen — ob es ihn gibt, entscheidet die
+; Aufgabe „startmenu" weiter unten.
+DisableProgramGroupPage=yes
 OutputBaseFilename=RemoteDesktop-Setup-{#Version}
 Compression=lzma2
 SolidCompression=yes
@@ -55,7 +58,7 @@ LicenseFile=..\LICENSE
 [Languages]
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 
-; Keine Aufgaben mehr.
+; Keine Aufgaben mehr, die etwas einrichten.
 ;
 ; **Der Befund dahinter:** hier standen bis v1.2.0 vier Häkchen — Dienst
 ; eintragen, Agent beim Hochfahren starten, Fenster beim Anmelden starten,
@@ -67,6 +70,12 @@ Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 ; soll.
 ;
 ; Der Installer legt Dateien ab. Mehr nicht.
+;
+; Die eine Ausnahme ist kosmetisch und ändert nichts an dem, was läuft: ein
+; Ordner im Startmenü. Standardmäßig aus (16.09.2026) — RemoteDesktop ist über
+; die Suche und den Infobereich ohnehin zu finden.
+[Tasks]
+Name: "startmenu"; Description: "Ordner im Startmenü anlegen"; Flags: unchecked
 
 [Files]
 ; Alles nebeneinander in einem Ordner. Die Oberfläche sucht die Programmdatei des
@@ -80,6 +89,10 @@ Source: "..\agent\appsettings.json"; DestDir: "{app}"; Flags: onlyifdoesntexist
 ; liegen, startet nach einem Update womöglich die alte Fassung aus dem
 ; Autostart — und niemand sieht, warum sich nichts geändert hat.
 Type: filesandordirs; Name: "{app}\client"
+
+; Der Startmenü-Ordner, wenn er diesmal nicht gewollt ist. Bis v1.x wurde er
+; immer angelegt — ein Update ohne das Häkchen räumt ihn deshalb weg.
+Type: filesandordirs; Name: "{group}"; Tasks: not startmenu
 
 ; Die Weboberfläche wird geleert und nicht überschrieben.
 ;
@@ -165,8 +178,8 @@ Type: filesandordirs; Name: "{app}"
 Type: filesandordirs; Name: "{localappdata}\RemoteDesktop"
 
 [Icons]
-Name: "{group}\RemoteDesktop"; Filename: "{app}\{#Exe}"
-Name: "{group}\RemoteDesktop deinstallieren"; Filename: "{uninstallexe}"
+Name: "{group}\RemoteDesktop"; Filename: "{app}\{#Exe}"; Tasks: startmenu
+Name: "{group}\RemoteDesktop deinstallieren"; Filename: "{uninstallexe}"; Tasks: startmenu
 
 [Run]
 ; Der Agent lief vor dem Kopieren und soll danach wieder laufen.

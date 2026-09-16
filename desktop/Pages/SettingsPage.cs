@@ -28,16 +28,11 @@ public sealed class SettingsPage : PageView
     private readonly ClientUpdate _update = new();
 
     /// <summary>
-    /// Zwei Ja/Nein-Fragen statt vier gleichrangiger Modi — dieselben wie in der
-    /// Einrichtung, siehe <see cref="AutostartModes.From"/>. Die zweite kommt
-    /// nur, wenn die erste ein Ja war; sonst gibt es nichts zu entscheiden.
+    /// Eine Ja/Nein-Frage — dieselbe wie in der Einrichtung. Der Agent startet
+    /// mit, wenn er eingerichtet ist; ohne ihn bleibt es beim Fenster, siehe
+    /// <see cref="IAutostartHost.SetServiceStart"/>.
     /// </summary>
     private readonly ChoiceGroup<bool> _withWindows = new();
-    private readonly ChoiceGroup<bool> _withAgent = new();
-    private readonly TextBlock _agentQuestion = new("Soll der Agent auch automatisch starten?");
-
-    /// <summary>Der Stapel, in dem die zweite Frage steckt — er blendet sie aus.</summary>
-    private Stack? _autostartBody;
 
     /// <summary>
     /// Ob gerade der gespeicherte Stand eingelesen wird. Ohne diese Sperre löste
@@ -64,7 +59,7 @@ public sealed class SettingsPage : PageView
     private bool _catchingHotkey;
 
     public SettingsPage(IAutostartHost autostart, Action openSetup, Action openNetwork)
-        : base("Einstellungen", "Start, Aktualisierung und was sonst selten gebraucht wird.")
+        : base("Einstellungen", string.Empty)
     {
         _autostart = autostart;
         _openSetup = openSetup;
@@ -75,29 +70,10 @@ public sealed class SettingsPage : PageView
         // dass es noch keine gab.
         _updateState = new TextBlock("Noch nicht nachgesehen.");
 
-        _withWindows.Add(
-            true,
-            "Ja",
-            "Das Fenster wartet nach dem Anmelden im Infobereich, ohne sich in den "
-            + "Vordergrund zu drängen.");
-
-        _withWindows.Add(
-            false,
-            "Nein",
-            "Nichts startet von allein. Du öffnest RemoteDesktop, wenn du es brauchst.");
-
-        _withAgent.Add(
-            true,
-            "Ja",
-            "Dieser Rechner ist erreichbar, sobald du angemeldet bist.");
-
-        _withAgent.Add(
-            false,
-            "Nein",
-            "Den Agent startest du selbst — hier oder aus dem Infobereich.");
+        _withWindows.Add(true, "Ja", "RemoteDesktop startet im Hintergrund automatisch.");
+        _withWindows.Add(false, "Nein", string.Empty);
 
         _withWindows.Chosen += _ => Apply();
-        _withAgent.Chosen += _ => Apply();
 
         _updateAct.Click += async (_, _) => await UpdateStepAsync();
 
@@ -177,7 +153,7 @@ public sealed class SettingsPage : PageView
     }
 
     /// <summary>
-    /// Das Kürzel für den Vollzugriff auf einen anderen Rechner.
+    /// Das Kürzel, das zwischen eigenem Desktop und entferntem Rechner umschaltet.
     ///
     /// <para>
     /// Vergeben wird es beim ersten Verbinden, in der Fernsteuerung selbst —
@@ -193,8 +169,8 @@ public sealed class SettingsPage : PageView
     /// </summary>
     private Card HotkeyCard()
     {
-        var card = new Card("Vollzugriff auf einen anderen Rechner");
-        var change = new ThemedButton("Kürzel ändern");
+        var card = new Card("Toggle für Remote Windows-Steuerung");
+        var change = new ThemedButton(ChangeLabel);
 
         _hotkeyBox.ReadOnly = true;
         _hotkeyBox.Value = Beschreibe(AgentData.Hotkey());
@@ -213,7 +189,7 @@ public sealed class SettingsPage : PageView
                 return;
             }
 
-            change.Relabel("Kürzel ändern");
+            change.Relabel(ChangeLabel);
             _hotkeyBox.Value = Beschreibe(AgentData.Hotkey());
             Report("Unverändert.");
         };
@@ -240,9 +216,9 @@ public sealed class SettingsPage : PageView
             {
                 AgentData.SetHotkey(HotkeyKeys.Serialize(combination));
                 _catchingHotkey = false;
-                change.Relabel("Kürzel ändern");
+                change.Relabel(ChangeLabel);
                 _hotkeyBox.Value = HotkeyKeys.Describe(combination);
-                Report($"Der Vollzugriff schaltet jetzt mit {_hotkeyBox.Value}.", Tone.Good);
+                Report($"Umgeschaltet wird jetzt mit {_hotkeyBox.Value}.", Tone.Good);
             }
             catch (Exception failure)
             {
@@ -250,21 +226,20 @@ public sealed class SettingsPage : PageView
             }
         };
 
-        card.Body.Add(new TextBlock(
-            "Während des Vollzugriffs gehen Maus und Tastatur vollständig auf den anderen "
-            + "Rechner. Dieses Kürzel schaltet ihn ein und wieder aus — es ist das Einzige, "
-            + "was hier bleibt."));
+        card.Body.Add(new TextBlock("Schaltet zwischen eigenem Desktop und Remote Host um."));
 
         card.Body.Add(Row.Fill(_hotkeyBox, change));
 
         return card;
     }
 
+    private const string ChangeLabel = "Shortcut ändern";
+
     /// <summary>Was in dem Feld steht, solange niemand daran dreht.</summary>
     private static string Beschreibe(string? stored) =>
         HotkeyKeys.Parse(stored) is { } combination
             ? HotkeyKeys.Describe(combination)
-            : "Noch keins — wird beim ersten Verbinden vergeben.";
+            : "Nicht belegt";
 
     private void Show(AutostartMode mode)
     {
@@ -273,12 +248,6 @@ public sealed class SettingsPage : PageView
         try
         {
             _withWindows.Select(mode.WithWindows());
-            _withAgent.Select(mode.Starts(AutostartMode.Agent));
-
-            // Die zweite Frage ist ausgeblendet und nicht gesperrt: eine graue
-            // Auswahl sieht aus wie etwas, das klemmt, und lässt offen, warum.
-            _autostartBody?.Toggle(_agentQuestion, mode.WithWindows());
-            _autostartBody?.Toggle(_withAgent, mode.WithWindows());
         }
         finally
         {
@@ -288,14 +257,10 @@ public sealed class SettingsPage : PageView
 
     private Card AutostartCard()
     {
-        var card = new Card("Beim Anmelden starten");
+        var card = new Card("Autostart");
 
         card.Body.Add(new TextBlock("Soll RemoteDesktop mit Windows starten?"));
         card.Body.Add(_withWindows);
-        card.Body.Add(_agentQuestion);
-        card.Body.Add(_withAgent);
-
-        _autostartBody = card.Body;
 
         return card;
     }
@@ -320,7 +285,7 @@ public sealed class SettingsPage : PageView
         open.Click += (_, _) => _openNetwork();
 
         card.Body.Add(new TextBlock(
-            "Adresse und Netzmodus — Heimnetz, Tailscale, Headscale oder eigenes VPN."));
+            "Adresse und Netzmodus — Heimnetz, Tailscale oder anderer VPN-Anbieter."));
 
         card.Body.Add(Row.Buttons(open));
 
@@ -405,7 +370,9 @@ public sealed class SettingsPage : PageView
             return;
         }
 
-        var mode = AutostartModes.From(_withWindows.Selected, _withAgent.Selected);
+        // Der Agent immer mit: ist er nicht eingerichtet, gibt es nichts zu
+        // starten, und SetServiceStart lässt ihn in Ruhe.
+        var mode = AutostartModes.From(_withWindows.Selected, withAgent: true);
 
         try
         {

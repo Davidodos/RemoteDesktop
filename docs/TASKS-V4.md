@@ -1751,6 +1751,46 @@ wiederkommt.
 
 ---
 
+## Phase 31s — kürzere Texte, eine Autostart-Frage, kein Headscale ✅ (16.09.2026, am Gerät noch zu prüfen)
+
+**Handy, Erststart:** die Seite heißt „Freigaben", ohne Absatz darunter. Reihenfolge
+Bildschirm → Eingaben (mit Link zur Anleitung) → Fertig. Die Anleitung gibt es
+noch nicht; der Link (`INPUT_GUIDE` in `FirstRunView.tsx`) zeigt bis dahin auf
+die Projektseite, `#bedienungshilfe`.
+
+**Installer:** der Startmenü-Ordner ist eine Aufgabe (`startmenu`), standardmäßig
+aus. Ein Update ohne das Häkchen räumt einen alten Ordner weg.
+
+**Einrichtung:** kein Untertitel, die Schrittkarte zeigt nur „Schritt x von 6".
+Die neuen Texte stehen in `SetupPage.cs`. Tailscale hat unter der Auswahl einen
+Knopf zur Anleitung (`TailscaleGuide`, ebenfalls noch Projektseite
+`#tailscale`); im Detailschritt stehen das Feld „Name dieses Geräts im tailnet",
+darunter „Erkannt: …" mit „Neu prüfen" und „Übernehmen", und ein Satz zum
+Zertifikat nur, wenn es fehlt. **Die beiden Autostart-Fragen sind eine:** mit
+„Ja" startet der Agent mit, sobald er eingerichtet wird. Die Zusammenfassung
+nennt Name, Agent, Verbindung, Adresse, Zertifikat und Autostart; der Satz zur
+Aufgabenplanung steht nur da, wenn der Agent mitstartet — ohne Agent gibt es
+keinen solchen Eintrag, nur den im Autostart des Benutzers.
+
+**Headscale steht nicht mehr zur Wahl** — weder in der Einrichtung noch unter
+„Netz". RemoteDesktop brauchte dort nur die Adresse; das Anmelden am eigenen
+Server erledigt der Tailscale-Client, und ein Zertifikat von Tailscale gibt es
+bei Headscale ohnehin nicht. Das ist genau „Anderer VPN-Anbieter", ein
+Zusatzfeld braucht es nicht. `NetworkKind.Headscale` bleibt lesbar; eine alte
+Einrichtung erscheint in der Oberfläche als „Anderer VPN-Anbieter" und wird
+beim nächsten Speichern so geschrieben.
+
+**Übersicht:** Agent ohne Satz; Netz zeigt nur die Art der Verbindung, am Punkt
+„Erreichbar als …" oder „Nicht verbunden". Die Knöpfe bleiben.
+
+**Einstellungen:** kein Untertitel; Autostart wie in der Einrichtung; die
+Kürzel-Karte heißt „Toggle für Remote Windows-Steuerung", das leere Feld
+„Nicht belegt", der Knopf „Shortcut ändern".
+
+**Abnahme:** am echten Gerät noch zu prüfen.
+
+---
+
 ---
 
 # Teil B — Dateimanager

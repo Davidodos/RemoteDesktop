@@ -229,8 +229,9 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
 
 ## Konventionen
 
-- Netzwerk: **vier Modi, keine Fallunterscheidung im Code** (`setup/NetworkProfile.cs`
-  — Heimnetz · Tailscale · Headscale · anderer VPN-Anbieter). Die Adresse ist in
+- Netzwerk: **drei Modi zur Wahl, keine Fallunterscheidung im Code** (`setup/NetworkProfile.cs`
+  — Heimnetz · Tailscale · anderer VPN-Anbieter; Headscale läuft seit 31s über
+  „anderer VPN-Anbieter" und ist nur noch lesbar). Die Adresse ist in
   jedem Modus Pflicht. Keine Adresse steht im Quelltext; sie
   kommt aus `setup.json`. Kein Port-Forwarding, keine Sonderbehandlung
   „zuhause vs. unterwegs" — der Modus entscheidet, nicht der Ort. Anleitung:

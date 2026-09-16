@@ -39,12 +39,18 @@ namespace RemoteDesktopClient.Pages;
 /// </summary>
 public sealed class SetupPage : PageView
 {
+    /// <summary>
+    /// Die Anleitung zu Tailscale. Den Abschnitt auf der Projektseite gibt es
+    /// noch nicht — bis dahin landet der Knopf auf der Projektseite selbst.
+    /// </summary>
+    private const string TailscaleGuide = "https://github.com/Davidodos/RemoteDesktop#tailscale";
+
     private enum Step
     {
         /// <summary>Wie dieser Rechner heißt — der Name, den fremde Listen zeigen.</summary>
         Name,
 
-        /// <summary>Was dieser Rechner können soll.</summary>
+        /// <summary>Was installiert werden soll.</summary>
         Parts,
 
         /// <summary>Auf welchem Weg — und **nur** das.</summary>
@@ -53,11 +59,12 @@ public sealed class SetupPage : PageView
         /// <summary>Was dieser eine Weg braucht.</summary>
         Details,
 
-        /// <summary>Startet RemoteDesktop mit Windows?</summary>
-        Windows,
-
-        /// <summary>Und der Agent auch? Nur, wenn das Vorige ein Ja war.</summary>
-        AgentStart,
+        /// <summary>
+        /// Startet RemoteDesktop mit Windows? Der Agent kommt mit, wenn er
+        /// eingerichtet wird — eine eigene Frage dafür gibt es seit 16.09.2026
+        /// nicht mehr.
+        /// </summary>
+        Autostart,
 
         /// <summary>Nachsehen und abschließen.</summary>
         Summary
@@ -72,9 +79,7 @@ public sealed class SetupPage : PageView
     private bool _withAgent = true;
     private NetworkKind _kind = NetworkKind.Lan;
     private string _address = string.Empty;
-    private string _coordinator = string.Empty;
     private bool _withWindows = true;
-    private bool _agentWithWindows = true;
     private bool _busy;
 
     /// <summary>
@@ -84,7 +89,6 @@ public sealed class SetupPage : PageView
     /// Fenster. Was jemand hineingetippt hat, wird deshalb vorher abgeholt.
     /// </summary>
     private ThemedTextBox? _addressBox;
-    private ThemedTextBox? _coordinatorBox;
     private ThemedTextBox? _nameBox;
 
     /// <summary>
@@ -111,7 +115,7 @@ public sealed class SetupPage : PageView
     private bool _tailscaleConnected;
 
     public SetupPage(WindowsProbe probe, IAutostartHost autostart, Func<Task> finished)
-        : base("Einrichtung", "Ein paar Fragen, dann ist dieser Rechner fertig eingerichtet.")
+        : base("Einrichtung", string.Empty)
     {
         _probe = probe;
         _autostartHost = autostart;
@@ -129,20 +133,18 @@ public sealed class SetupPage : PageView
             _deviceName = AgentData.DeviceName();
 
             var profile = NetworkStore.Read();
-            var autostart = Autostart.Read(_autostartHost);
 
-            _kind = profile.Kind;
+            // Headscale wird nicht mehr eigens angeboten: RemoteDesktop benutzt
+            // dort nur die Adresse, und genau das ist „Anderer VPN-Anbieter".
+            // Eine ältere Einrichtung mit Headscale landet deshalb dort.
+            _kind = profile.Kind == NetworkKind.Headscale ? NetworkKind.Vpn : profile.Kind;
             _address = profile.Address;
-            _coordinator = profile.Kind == NetworkKind.Headscale
-                ? profile.Coordinator.Address
-                : string.Empty;
 
             // Auch der alte Dienst zählt: wer aktualisiert, hat den Agent
             // gewollt und soll ihn nicht abwählen müssen, um ihn zu behalten.
             _withAgent = AgentService.Installed || AgentService.LegacyService || !SetupState.Done;
 
-            _withWindows = autostart.WithWindows();
-            _agentWithWindows = autostart.Starts(AutostartMode.Agent);
+            _withWindows = Autostart.Read(_autostartHost).WithWindows();
         }
 
         Draw();
@@ -157,27 +159,7 @@ public sealed class SetupPage : PageView
         Forget();
     }
 
-    /// <summary>
-    /// Welche Schritte es diesmal gibt. Die Liste hängt an den Antworten: wer
-    /// nichts mit Windows starten lässt, bekommt die Anschlussfrage nicht
-    /// gestellt, und wer keinen Agent einrichtet, erst recht nicht.
-    /// </summary>
-    private List<Step> Steps()
-    {
-        var steps = new List<Step>
-        {
-            Step.Name, Step.Parts, Step.Kind, Step.Details, Step.Windows
-        };
-
-        if (_withWindows && _withAgent)
-        {
-            steps.Add(Step.AgentStart);
-        }
-
-        steps.Add(Step.Summary);
-
-        return steps;
-    }
+    private static readonly Step[] Steps = Enum.GetValues<Step>();
 
     // ---- Zeichnen ----------------------------------------------------------
 
@@ -188,7 +170,7 @@ public sealed class SetupPage : PageView
         Body.Clear();
         Forget();
 
-        Body.Add(ProgressCard());
+        Body.Add(new Card($"Schritt {Array.IndexOf(Steps, _step) + 1} von {Steps.Length}"));
 
         Body.Add(_step switch
         {
@@ -196,8 +178,7 @@ public sealed class SetupPage : PageView
             Step.Parts => PartsCard(),
             Step.Kind => KindCard(),
             Step.Details => DetailsCard(),
-            Step.Windows => WindowsCard(),
-            Step.AgentStart => AgentStartCard(),
+            Step.Autostart => AutostartCard(),
             _ => SummaryCard()
         });
     }
@@ -214,40 +195,15 @@ public sealed class SetupPage : PageView
         {
             _address = _addressBox.Value;
         }
-
-        if (_coordinatorBox is { IsDisposed: false })
-        {
-            _coordinator = _coordinatorBox.Value;
-        }
     }
 
     /// <summary>Die Verweise auf entsorgte Steuerelemente fallen lassen.</summary>
     private void Forget()
     {
         _addressBox = null;
-        _coordinatorBox = null;
         _nameBox = null;
         _forward = null;
         _blocker = null;
-    }
-
-    private Card ProgressCard()
-    {
-        var steps = Steps();
-        var card = new Card($"Schritt {steps.IndexOf(_step) + 1} von {steps.Count}");
-
-        card.Body.Add(new TextBlock(_step switch
-        {
-            Step.Name => "Wie dieser Rechner heißt.",
-            Step.Parts => "Was dieser Rechner können soll.",
-            Step.Kind => "Auf welchem Weg dein Handy ihn findet.",
-            Step.Details => $"Was für „{Profile().Name()}“ nötig ist.",
-            Step.Windows => "Ob RemoteDesktop mit Windows startet.",
-            Step.AgentStart => "Ob der Agent dabei mitkommt.",
-            _ => "Nachsehen und abschließen."
-        }));
-
-        return card;
     }
 
     /// <summary>
@@ -295,20 +251,18 @@ public sealed class SetupPage : PageView
 
     private Card PartsCard()
     {
-        var card = new Card("Was soll dieser Rechner können?");
+        var card = new Card("Was soll installiert werden?");
         var choice = new ChoiceGroup<bool>();
 
         choice.Add(
             true,
-            "Steuern und gesteuert werden",
-            "Der Agent wird eingerichtet: du kannst diesen Rechner vom Handy aus "
-            + "bedienen, und von hier aus andere.");
+            "Client und Agent",
+            "Dieses Gerät kann ferngesteuert werden und andere Geräte fernsteuern.");
 
         choice.Add(
             false,
-            "Nur andere steuern",
-            "Kein Agent, nichts, was lauscht. Dieser Rechner bleibt für das Handy "
-            + "unsichtbar.");
+            "Nur Client",
+            "Nur Fernsteuerung von anderen Geräten.");
 
         choice.Select(_withAgent);
         choice.Chosen += value => _withAgent = value;
@@ -322,41 +276,46 @@ public sealed class SetupPage : PageView
     /// <summary>
     /// Der Netzschritt fragt **nur** nach dem Weg. Alles, was dazugehört, kommt
     /// im nächsten Schritt — und dort dann vollständig.
+    ///
+    /// <para>
+    /// Headscale steht hier nicht (16.09.2026). Wer es betreibt, meldet den
+    /// Tailscale-Client selbst an seinem Server an und wählt „Anderer
+    /// VPN-Anbieter": RemoteDesktop braucht davon nur die Adresse, und ein
+    /// Zertifikat von Tailscale gibt es bei Headscale ohnehin nicht.
+    /// </para>
     /// </summary>
     private Card KindCard()
     {
-        var card = new Card("Wie findet dein Handy diesen Rechner?");
+        var card = new Card("Wie soll dieses Gerät erreichbar sein?");
         var kinds = new ChoiceGroup<NetworkKind>();
 
         kinds.Add(
             NetworkKind.Lan,
             "Heimnetz",
-            "Handy und Rechner hängen am selben Router. Nichts zu installieren, dafür "
-            + "geht es von unterwegs nicht.");
+            "Beide Geräte sind im selben Netzwerk, funktioniert nur lokal.");
 
         kinds.Add(
             NetworkKind.Tailscale,
             "Tailscale",
-            "Auch von unterwegs. Braucht das Programm Tailscale auf beiden Seiten — "
-            + "dafür gibt es ein echtes Zertifikat und auf dem Handy nichts zu "
-            + "bestätigen.");
+            "Ermöglicht Remote-Zugriff. Beide Geräte müssen im selben tailnet sein.");
 
-        kinds.Add(
-            NetworkKind.Headscale,
-            "Headscale",
-            "Derselbe Tailscale-Client, aber an deinem eigenen Koordinator statt an "
-            + "dem der Firma.");
+        kinds.Add(NetworkKind.Vpn, "Anderer VPN-Anbieter", string.Empty);
 
-        kinds.Add(
-            NetworkKind.Vpn,
-            "Anderer VPN-Anbieter",
-            "Du hast schon eins — WireGuard auf der Fritzbox, OpenVPN, ZeroTier. "
-            + "RemoteDesktop benutzt nur die Adresse, die dort gilt.");
+        var guide = new ThemedButton("Anleitung: Tailscale einrichten");
+        var guideRow = Row.Buttons(guide);
+
+        guide.Click += (_, _) => OverviewPage.Open(TailscaleGuide);
 
         kinds.Select(_kind);
-        kinds.Chosen += kind => _kind = kind;
+        kinds.Chosen += kind =>
+        {
+            _kind = kind;
+            card.Body.Toggle(guideRow, kind == NetworkKind.Tailscale);
+        };
 
         card.Body.Add(kinds);
+        card.Body.Add(guideRow);
+        card.Body.Toggle(guideRow, _kind == NetworkKind.Tailscale);
         card.Body.Add(Navigation(back: true, next: Forward));
 
         return card;
@@ -379,39 +338,27 @@ public sealed class SetupPage : PageView
         {
             NetworkKind.Lan => "Adresse im Heimnetz",
             NetworkKind.Tailscale => "Tailscale einrichten",
-            NetworkKind.Headscale => "Headscale einrichten",
             _ => "Adresse in deinem VPN"
         });
 
-        if (_kind == NetworkKind.Headscale)
-        {
-            AddCoordinator(card);
-        }
-
-        if (Profile().NeedsTailscale)
-        {
-            AddTailscale(card);
-        }
-
-        AddAddress(card);
-
         if (_kind == NetworkKind.Tailscale)
         {
+            AddTailscale(card);
             AddCertificate(card);
         }
-        else if (_withAgent)
+        else
         {
-            card.Body.Add(new TextBlock(
-                _kind == NetworkKind.Headscale
-                    ? "Zertifikate stellt der Dienst von Tailscale aus; ein Headscale-Server "
-                      + "bringt diese Stelle nicht mit. Der Agent stellt sich deshalb selbst "
-                      + "eins aus, und dein Handy bestätigt es einmal beim Koppeln — danach "
-                      + "nie wieder."
-                    : "Für diese Adresse stellt keine öffentliche Stelle ein Zertifikat aus. "
-                      + "Der Agent stellt sich deshalb selbst eins aus, und dein Handy "
-                      + "bestätigt es einmal beim Koppeln — danach nie wieder.",
-                Theme.Body,
-                Theme.TextDim));
+            AddAddress(card);
+
+            if (_withAgent)
+            {
+                card.Body.Add(new TextBlock(
+                    "Für diese Adresse stellt keine öffentliche Stelle ein Zertifikat aus. "
+                    + "Der Agent stellt sich deshalb selbst eins aus, und dein Handy "
+                    + "bestätigt es einmal beim Koppeln — danach nie wieder.",
+                    Theme.Body,
+                    Theme.TextDim));
+            }
         }
 
         _blocker = new TextBlock(string.Empty, Theme.Body, Theme.Warn);
@@ -424,51 +371,17 @@ public sealed class SetupPage : PageView
         return card;
     }
 
-    private void AddCoordinator(Card card)
-    {
-        card.Body.Add(new TextBlock(
-            "Die Adresse deines Headscale-Servers. Genau dorthin meldet sich der "
-            + "Tailscale-Client an, statt an den Dienst von Tailscale."));
-
-        _coordinatorBox = new ThemedTextBox("z. B. https://headscale.example.org")
-        {
-            Value = _coordinator
-        };
-
-        _coordinatorBox.ValueChanged += (_, _) =>
-        {
-            _coordinator = _coordinatorBox.Value;
-            UpdateGate();
-        };
-
-        card.Body.Add(_coordinatorBox);
-    }
-
     /// <summary>
-    /// Die fremden Schritte: Tailscale installieren und anmelden. RemoteDesktop
-    /// stößt sie an und prüft danach, was daraus geworden ist — mehr ist bei
-    /// einem fremden Programm nicht ehrlich möglich.
+    /// Tailscale: erst das Programm und die Anmeldung — fremde Schritte, die
+    /// RemoteDesktop nur anstößt und danach prüft —, dann der Name im tailnet.
+    /// Die Zeile über dem Feld steht nur da, solange etwas davon fehlt.
     /// </summary>
     private void AddTailscale(Card card)
     {
         _tailscaleInstalled = _probe.HasTailscale;
         _tailscaleConnected = _tailscaleInstalled && _probe.IsConnected;
 
-        var installed = _tailscaleInstalled;
-        var connected = _tailscaleConnected;
-
-        card.Body.Add(new TextBlock(
-            !installed
-                ? "Der Tailscale-Client ist auf diesem Rechner noch nicht installiert."
-                : !connected
-                    ? "Tailscale ist installiert, dieser Rechner ist aber noch nicht angemeldet."
-                    : $"Angemeldet als {_probe.TailnetName}.",
-            Theme.Body,
-            connected ? Theme.Text : Theme.TextDim));
-
-        var buttons = new List<Control>();
-
-        if (!installed)
+        if (!_tailscaleInstalled)
         {
             var download = new ThemedButton("Tailscale herunterladen", ButtonTone.Primary);
 
@@ -478,9 +391,11 @@ public sealed class SetupPage : PageView
                 Report("Tailscale öffnet sich im Browser. Danach hier auf „Neu prüfen“.");
             };
 
-            buttons.Add(download);
+            card.Body.Add(new TextBlock(
+                "Der Tailscale-Client ist auf diesem Rechner noch nicht installiert."));
+            card.Body.Add(Row.Buttons(download));
         }
-        else if (!connected)
+        else if (!_tailscaleConnected)
         {
             var signIn = new ThemedButton("Jetzt anmelden", ButtonTone.Primary);
 
@@ -488,58 +403,70 @@ public sealed class SetupPage : PageView
                 "Tailscale meldet diesen Rechner an…",
                 () => ProcessRunner.Run(
                     Tailscale.Executable,
-                    Profile().Coordinator.UpArguments(),
+                    Coordinator.Default.UpArguments(),
                     TimeSpan.FromMinutes(3)));
 
-            buttons.Add(signIn);
+            card.Body.Add(new TextBlock(
+                "Tailscale ist installiert, dieser Rechner ist aber noch nicht angemeldet."));
+            card.Body.Add(Row.Buttons(signIn));
         }
 
+        var detected = _tailscaleConnected ? _probe.TailnetName : string.Empty;
+
+        card.Body.Add(new TextBlock("Name dieses Geräts im tailnet", Theme.BodyStrong, Theme.Text));
+
+        _addressBox = AddressBox();
+        card.Body.Add(_addressBox);
+
+        card.Body.Add(new TextBlock(
+            $"Erkannt: {(detected.Length > 0 ? detected : "—")}", Theme.Body, Theme.TextDim));
+
         var recheck = new ThemedButton("Neu prüfen");
+        var take = new ThemedButton("Übernehmen", ButtonTone.Primary) { Enabled = detected.Length > 0 };
 
         recheck.Click += (_, _) =>
         {
             _probe.Forget();
-
-            // Der Name im Tailscale-Netz ist genau das, was gleich in den QR-Code geht.
-            // Steht er noch nicht da, kommt er hier von allein hinein.
-            if (_address.Trim().Length == 0)
-            {
-                _address = _probe.TailnetName;
-            }
-
             Draw();
         };
 
-        buttons.Add(recheck);
+        take.Click += (_, _) =>
+        {
+            if (_addressBox is { IsDisposed: false } box)
+            {
+                box.Value = detected;
+            }
+        };
 
-        card.Body.Add(Row.Buttons([.. buttons]));
+        card.Body.Add(Row.Buttons(recheck, take));
     }
 
-    private void AddAddress(Card card)
+    private ThemedTextBox AddressBox()
     {
-        card.Body.Add(new TextBlock(_kind switch
-        {
-            NetworkKind.Tailscale or NetworkKind.Headscale =>
-                "Der Name dieses Rechners im Tailscale-Netz. Genau er steht später im QR-Code, "
-                + "und genau ihn muss das Handy auflösen können.",
-            NetworkKind.Vpn =>
-                "Die Adresse, unter der dieser Rechner in deinem VPN erreichbar ist.",
-            _ =>
-                "Die Adresse, unter der dieser Rechner im Heimnetz erreichbar ist. "
-                + "Meistens steht sie schon da — du musst sie nur bestätigen."
-        }));
-
-        _addressBox = new ThemedTextBox(
-            Profile().NeedsTailscale ? "z. B. pc.tailnet-1234.ts.net" : "z. B. 192.168.178.33")
+        var box = new ThemedTextBox(
+            _kind == NetworkKind.Tailscale ? "z. B. pc.tailnet-1234.ts.net" : "z. B. 192.168.178.33")
         {
             Value = _address
         };
 
-        _addressBox.ValueChanged += (_, _) =>
+        box.ValueChanged += (_, _) =>
         {
-            _address = _addressBox.Value;
+            _address = box.Value;
             UpdateGate();
         };
+
+        return box;
+    }
+
+    /// <summary>Heimnetz und fremdes VPN: nur die Adresse.</summary>
+    private void AddAddress(Card card)
+    {
+        card.Body.Add(new TextBlock(_kind == NetworkKind.Vpn
+            ? "Die Adresse, unter der dieser Rechner in deinem VPN erreichbar ist."
+            : "Die Adresse, unter der dieser Rechner im Heimnetz erreichbar ist. "
+              + "Meistens steht sie schon da — du musst sie nur bestätigen."));
+
+        _addressBox = AddressBox();
 
         if (_kind == NetworkKind.Vpn)
         {
@@ -548,32 +475,19 @@ public sealed class SetupPage : PageView
             return;
         }
 
+        var box = _addressBox;
         var suggest = new ThemedButton("Vorschlag");
 
-        suggest.Click += async (_, _) =>
+        suggest.Click += (_, _) =>
         {
-            var found = Profile().NeedsTailscale
-                ? await Task.Run(() =>
-                {
-                    _probe.Forget();
-
-                    return _probe.TailnetName;
-                })
-                : NetworkStore.Guess() ?? string.Empty;
-
-            if (found.Length == 0)
+            if (NetworkStore.Guess() is not { } found)
             {
-                Report(
-                    Profile().NeedsTailscale
-                        ? "Tailscale meldet für diesen Rechner keinen Namen — läuft es, und "
-                          + "ist dieser Rechner angemeldet?"
-                        : "Hier ist gerade keine Netzwerkverbindung zu finden.",
-                    Tone.Bad);
+                Report("Hier ist gerade keine Netzwerkverbindung zu finden.", Tone.Bad);
 
                 return;
             }
 
-            _addressBox.Value = found;
+            box.Value = found;
             Report($"Gefunden: {found}.", Tone.Good);
         };
 
@@ -583,6 +497,7 @@ public sealed class SetupPage : PageView
     /// <summary>
     /// Das Zertifikat von Tailscale — der Schritt, an dem am echten Gerät alles
     /// hing, und der einzige in diesem Assistenten, der wirklich blockiert.
+    /// Liegt es passend da, steht hier nichts: das sagt die Zusammenfassung.
     /// </summary>
     private void AddCertificate(Card card)
     {
@@ -595,27 +510,23 @@ public sealed class SetupPage : PageView
 
         var wanted = Profile().Normalized().AdvertisedAddress;
         var certificate = _probe.Certificate;
-        var fits = wanted is not null && _probe.CertificateCovers(wanted);
+
+        if (wanted is not null && _probe.CertificateCovers(wanted))
+        {
+            return;
+        }
 
         card.Body.Add(new TextBlock(
-            fits
-                ? $"Das Zertifikat von Tailscale liegt bereit — ausgestellt auf {wanted}."
-                : certificate is null
-                    ? "Das Zertifikat von Tailscale fehlt noch. Ohne es stellt der Agent sich "
-                      + "selbst eins aus, und jedes Handy muss die ausstellende Stelle "
-                      + "bestätigen."
-                    : !certificate.IsValidAt(DateTimeOffset.UtcNow)
-                        ? "Hier liegt ein abgelaufenes Zertifikat. Es muss neu geholt werden — "
-                          + "der Agent zeigt es sonst vor, und jede Verbindung scheitert daran."
-                        : $"Das Zertifikat hier lautet auf {string.Join(", ", certificate.Names)} "
-                          + $"und nicht auf {wanted}. Unter dem eingetragenen Namen käme keine "
-                          + "Verbindung zustande.",
+            certificate is null
+                ? "Das Zertifikat von Tailscale fehlt noch."
+                : !certificate.IsValidAt(DateTimeOffset.UtcNow)
+                    ? "Hier liegt ein abgelaufenes Zertifikat. Es muss neu geholt werden."
+                    : $"Das Zertifikat hier lautet auf {string.Join(", ", certificate.Names)} "
+                      + $"und nicht auf {wanted ?? "den eingetragenen Namen"}.",
             Theme.Body,
-            fits ? Theme.Text : Theme.TextDim));
+            Theme.TextDim));
 
-        var fetch = new ThemedButton(
-            fits ? "Zertifikat neu holen" : "Zertifikat holen",
-            fits ? ButtonTone.Secondary : ButtonTone.Primary);
+        var fetch = new ThemedButton("Zertifikat holen", ButtonTone.Primary);
 
         fetch.Click += async (_, _) => await FetchCertificateAsync();
 
@@ -636,7 +547,7 @@ public sealed class SetupPage : PageView
 
         if (target is null)
         {
-            Report("Trage zuerst den Namen dieses Rechners im Tailscale-Netz ein.", Tone.Bad);
+            Report("Trage zuerst den Namen dieses Rechners im tailnet ein.", Tone.Bad);
 
             return;
         }
@@ -705,21 +616,19 @@ public sealed class SetupPage : PageView
 
     // ---- Autostart ---------------------------------------------------------
 
-    private Card WindowsCard()
+    /// <summary>
+    /// Eine Frage statt zwei (16.09.2026). Ob der Agent mitstartet, war eine
+    /// Frage, auf die fast jeder dasselbe antwortete wie auf die erste — wer
+    /// den Agent einrichtet und RemoteDesktop mit Windows starten lässt, will
+    /// erreichbar sein.
+    /// </summary>
+    private Card AutostartCard()
     {
         var card = new Card("Soll RemoteDesktop mit Windows starten?");
         var choice = new ChoiceGroup<bool>();
 
-        choice.Add(
-            true,
-            "Ja",
-            "Das Fenster wartet nach dem Anmelden im Infobereich, ohne sich in den "
-            + "Vordergrund zu drängen.");
-
-        choice.Add(
-            false,
-            "Nein",
-            "Nichts startet von allein. Du öffnest RemoteDesktop, wenn du es brauchst.");
+        choice.Add(true, "Ja", "RemoteDesktop startet im Hintergrund automatisch.");
+        choice.Add(false, "Nein", string.Empty);
 
         choice.Select(_withWindows);
         choice.Chosen += value => _withWindows = value;
@@ -730,73 +639,37 @@ public sealed class SetupPage : PageView
         return card;
     }
 
-    private Card AgentStartCard()
-    {
-        var card = new Card("Soll der Agent auch automatisch starten?");
-        var choice = new ChoiceGroup<bool>();
-
-        choice.Add(
-            true,
-            "Ja",
-            "Dieser Rechner ist erreichbar, sobald du angemeldet bist — ohne dass "
-            + "jemand hier etwas anklickt.");
-
-        choice.Add(
-            false,
-            "Nein",
-            "Den Agent startest du selbst, hier im Fenster oder aus dem Infobereich.");
-
-        choice.Select(_agentWithWindows);
-        choice.Chosen += value => _agentWithWindows = value;
-
-        card.Body.Add(choice);
-
-        card.Body.Add(new TextBlock(
-            "Der Agent läuft in deiner Sitzung und startet mit deiner Anmeldung; ohne "
-            + "angemeldeten Benutzer ist dieser Rechner nicht erreichbar.",
-            Theme.Body,
-            Theme.TextDim));
-
-        card.Body.Add(Navigation(back: true, next: Forward));
-
-        return card;
-    }
-
-    // ---- Übersicht ---------------------------------------------------------
+    // ---- Zusammenfassung ---------------------------------------------------
 
     private Card SummaryCard()
     {
         var profile = Profile().Normalized();
-        var card = new Card("Nachsehen und abschließen");
+        var card = new Card("Zusammenfassung");
 
         var lines = new List<string>
         {
             $"Name: {DeviceNameFile.Sanitize(_deviceName) ?? Environment.MachineName}",
-            $"Dieser Rechner: {(_withAgent ? "steuert und wird gesteuert" : "steuert nur")}",
+            $"Agent: {OnOff(_withAgent)}",
             $"Verbindung: {profile.Name()}",
             $"Adresse: {profile.AdvertisedAddress ?? "—"}"
         };
-
-        if (profile.Kind == NetworkKind.Headscale)
-        {
-            lines.Add($"Koordinator: {profile.Coordinator.Address}");
-        }
 
         if (_withAgent)
         {
             lines.Add($"Zertifikat: {DescribeCertificate(profile)}");
         }
 
-        lines.Add($"Beim Hochfahren: {Mode().Describe()}");
+        lines.Add($"Autostart: {OnOff(_withWindows)}");
 
         card.Body.Add(new TextBlock(string.Join("\n", lines), Theme.Body, Theme.Text));
 
-        if (_withAgent)
+        // Der Eintrag in der Aufgabenplanung gehört dem Agent. Ohne ihn startet
+        // nur das Fenster, und das steht im Autostart des Benutzers.
+        if (Mode().Starts(AutostartMode.Agent))
         {
             card.Body.Add(new TextBlock(
-                "Windows fragt gleich einmal nach Administratorrechten — für den Eintrag in "
-                + "die Aufgabenplanung. Danach nicht mehr. Anschließend startet der Agent "
-                + "mit genau diesen Einstellungen.",
+                "Es wird ein Eintrag in der Aufgabenplanung für den Autostart von "
+                + "RemoteDesktop erstellt.",
                 Theme.Body,
                 Theme.TextDim));
         }
@@ -812,16 +685,18 @@ public sealed class SetupPage : PageView
         return card;
     }
 
+    private static string OnOff(bool on) => on ? "aktiviert" : "nicht aktiviert";
+
     private string DescribeCertificate(NetworkProfile profile)
     {
         if (_probe.CertificateCovers(profile.AdvertisedAddress))
         {
-            return "von Tailscale — auf dem Handy gibt es nichts zu bestätigen";
+            return "von Tailscale ausgestellt";
         }
 
         return profile.CanFetchCertificate
             ? "wird beim Abschließen von Tailscale geholt"
-            : "vom Agent selbst ausgestellt — das Handy bestätigt es einmal beim Koppeln";
+            : "selbst ausgestellt";
     }
 
     // ---- Navigation --------------------------------------------------------
@@ -865,12 +740,11 @@ public sealed class SetupPage : PageView
             }
         }
 
-        var steps = Steps();
-        var index = steps.IndexOf(_step);
+        var index = Array.IndexOf(Steps, _step);
 
-        if (index >= 0 && index + 1 < steps.Count)
+        if (index >= 0 && index + 1 < Steps.Length)
         {
-            _step = steps[index + 1];
+            _step = Steps[index + 1];
         }
 
         Draw();
@@ -880,23 +754,20 @@ public sealed class SetupPage : PageView
     {
         Remember();
 
-        var steps = Steps();
-        var index = steps.IndexOf(_step);
+        var index = Array.IndexOf(Steps, _step);
 
         if (index > 0)
         {
-            _step = steps[index - 1];
+            _step = Steps[index - 1];
         }
 
         Draw();
     }
 
-    private NetworkProfile Profile() =>
-        new(_kind, _address, _kind == NetworkKind.Headscale
-            ? Coordinator.From(_coordinator)
-            : Coordinator.Default);
+    private NetworkProfile Profile() => new(_kind, _address, Coordinator.Default);
 
-    private AutostartMode Mode() => AutostartModes.From(_withWindows, _withAgent && _agentWithWindows);
+    /// <summary>Der Agent startet mit, sobald er eingerichtet wird.</summary>
+    private AutostartMode Mode() => AutostartModes.From(_withWindows, _withAgent);
 
     // ---- Ausführen ---------------------------------------------------------
 
