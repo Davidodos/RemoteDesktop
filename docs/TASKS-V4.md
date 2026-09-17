@@ -1856,6 +1856,34 @@ schieben.
 
 ---
 
+## Gewünschte Features — noch nicht umgesetzt
+
+### Regler für die Maus-Empfindlichkeit am Handy (17.09.2026)
+
+Wer vom Handy aus einen Windows-PC steuert, wischt über die Fläche und der
+Zeiger drüben geht mit. Wie weit er dabei geht, steht fest: `movePointer` in
+`app/src/lib/screenGestures.ts` rechnet den Wischweg gegen die Größe des Bildes
+(`dx / (media.width * scale)`) — ein Faktor dazwischen gibt es nicht. Auf einem
+großen Bildschirm ist das zu träge, nach dem Hineinzoomen zu fahrig.
+
+Gewünscht ist ein **Regler**, mit dem sich genau dieser Faktor einstellen lässt.
+Gedacht ist an:
+
+- einen Faktor in `movePointer`, der Wischweg und Zeigerweg entkoppelt —
+  die einzige Stelle, an der gerechnet wird, bleibt damit die einzige
+- den Regler dort, wo die anderen Einstellungen einer Sitzung stehen:
+  `app/src/views/screen/StreamSettings.tsx`
+- den Wert einmal vergeben und behalten, nicht je Sitzung neu — und **je
+  Gerät**, weil ein Laptopbildschirm und ein 4K-Monitor nicht dieselbe
+  Empfindlichkeit brauchen
+- nur am Handy: am Rechner geht die Maus seit 31j eins zu eins hinaus
+  (`PointerPad.tsx`), und dort wäre ein zweiter Faktor über dem der
+  Windows-Einstellungen eine Empfindlichkeit, die niemand mehr zuordnen kann
+
+**Noch nicht umgesetzt** — hier steht nur der Wunsch.
+
+---
+
 ## Offene Risiken
 
 - **APK-Größe.** Die WebRTC-Bibliothek bringt rund 10 MB mit. Vertretbar, aber
