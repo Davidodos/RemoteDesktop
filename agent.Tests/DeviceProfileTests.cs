@@ -36,6 +36,12 @@ public class DeviceProfileTests
     {
         Assert.Null(DeviceProfile.Sanitize("  ", 8443, "PC", null, null, null));
         Assert.Null(DeviceProfile.Sanitize(new string('x', 256), 8443, "PC", null, null, null));
+
+        // Leerzeichen und Pfade sind keine Adressen — dieselbe Regel wie beim
+        // Eintragen der eigenen (NetworkProfile.RejectAddress).
+        Assert.Null(DeviceProfile.Sanitize("pc example", 8443, "PC", null, null, null));
+        Assert.Null(DeviceProfile.Sanitize("pc.example/agent", 8443, "PC", null, null, null));
+        Assert.Null(DeviceProfile.Sanitize("https://pc.example", 8443, "PC", null, null, null));
     }
 
     [Theory]

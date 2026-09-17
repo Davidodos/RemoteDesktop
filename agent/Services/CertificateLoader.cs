@@ -21,7 +21,12 @@ public static class CertificateLoader
     /// Dann kennt jeder Browser den Aussteller schon, und es gibt nichts zu
     /// bestätigen.
     /// </param>
-    public sealed record Chosen(X509Certificate2 Certificate, X509Certificate2? Authority)
+    /// <param name="Note">
+    /// Ein Satz für das Log, wenn die Wahl anders ausfiel als erwartet — etwa
+    /// weil das Zertifikat von Tailscale abgelaufen war.
+    /// </param>
+    public sealed record Chosen(
+        X509Certificate2 Certificate, X509Certificate2? Authority, string? Note = null)
     {
         public bool SelfIssued => Authority is not null;
     }
@@ -42,19 +47,37 @@ public static class CertificateLoader
         string? keyPath,
         CertificateVault vault,
         string machineName,
-        IReadOnlyList<string> names)
+        IReadOnlyList<string> names,
+        TimeProvider? time = null)
     {
+        string? note = null;
+
         if (!string.IsNullOrWhiteSpace(certificatePath) &&
             !string.IsNullOrWhiteSpace(keyPath) &&
             File.Exists(certificatePath) &&
             File.Exists(keyPath))
         {
-            return new Chosen(Load(certificatePath, keyPath), null);
+            var fromTailscale = Load(certificatePath, keyPath);
+
+            // Ein abgelaufenes Zertifikat vorzuzeigen hieße, dass jede
+            // Verbindung scheitert und die App „Zertifikat abgelaufen" rät.
+            // Das selbst ausgestellte ist dann die bessere Wahl — die Clients
+            // müssen es einmal bestätigen, aber sie kommen durch. Erneuert wird
+            // das von Tailscale trotzdem (CertificateRenewal); beim nächsten
+            // Start gewinnt es wieder.
+            if ((time ?? TimeProvider.System).GetUtcNow() < fromTailscale.NotAfter)
+            {
+                return new Chosen(fromTailscale, null);
+            }
+
+            note = $"Das Zertifikat von Tailscale ist am {fromTailscale.NotAfter:d} abgelaufen — "
+                   + "bis es erneuert ist, gilt das selbst ausgestellte.";
+            fromTailscale.Dispose();
         }
 
         var authority = vault.Authority(machineName, names);
 
-        return new Chosen(vault.Server(authority, names), authority);
+        return new Chosen(vault.Server(authority, names), authority, note);
     }
 
     /// <summary>

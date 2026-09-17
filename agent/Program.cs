@@ -69,15 +69,23 @@ var profile = RemoteDesktopSetup.NetworkConfig.Read(
 // Einmal geladen und dann dreifach gebraucht: Kestrel zeigt es vor, der QR-Code
 // der Kopplung liest den Namen daraus, und die eigene CA — falls es eine gibt —
 // wird zum Abholen bereitgelegt.
+var vault = new CertificateVault(settings.SecretDirectory, publicDirectory: settings.DataDirectory);
+
+IReadOnlyList<string> CurrentNames() => CertificateLoader.Names(
+    profile.AdvertisedAddress, Environment.MachineName, LocalAddresses.List());
+
 var chosen = CertificateLoader.LoadOrCreate(
     settings.CertificatePath,
     settings.KeyPath,
-    new CertificateVault(settings.SecretDirectory, publicDirectory: settings.DataDirectory),
+    vault,
     Environment.MachineName,
-    CertificateLoader.Names(
-        profile.AdvertisedAddress, Environment.MachineName, LocalAddresses.List()));
+    CurrentNames());
 
 var certificate = chosen.Certificate;
+
+// Was Kestrel vorzeigt — austauschbar, damit ein erneuertes oder auf neue
+// Adressen ausgestelltes Zertifikat ohne Neustart gilt (CertificateRenewal).
+var serving = new ServingCertificate(certificate, chosen.SelfIssued);
 
 // Nur wenn der Agent sich selbst beglaubigt hat, gibt es überhaupt etwas
 // abzuholen: ein Zertifikat von Tailscale kennt jeder Browser bereits.
@@ -91,7 +99,8 @@ var authority = chosen.Authority is null
 
 builder.WebHost.ConfigureKestrel(kestrel =>
 {
-    kestrel.ListenAnyIP(settings.Port, listen => listen.UseHttps(certificate));
+    kestrel.ListenAnyIP(settings.Port, listen => listen.UseHttps(https =>
+        https.ServerCertificateSelector = (_, _) => serving.Current));
 
     // Der zweite, unverschlüsselte Port trägt genau eine Datei: das eigene
     // CA-Zertifikat. Ohne ihn gäbe es ein Henne-Ei-Problem — ein Client kann
@@ -186,6 +195,17 @@ builder.Services.AddSingleton(provider => new InstallerUpdate(
     Path.Combine(settings.SecretDirectory, "update"),
     provider.GetRequiredService<ILogger<InstallerUpdate>>()));
 builder.Services.AddHostedService<StartupUpdate>();
+
+// Hält das Zertifikat gültig: täglich nachsehen, bei Netzwechsel neu ausstellen.
+builder.Services.AddSingleton(serving);
+builder.Services.AddSingleton(vault);
+builder.Services.AddSingleton(new CertificateRenewal.Source(
+    profile.Kind == NetworkKind.Tailscale ? profile.AdvertisedAddress : null,
+    settings.CertificatePath ?? Path.Combine(settings.DataDirectory, "cert.crt"),
+    settings.KeyPath ?? Path.Combine(settings.SecretDirectory, "cert.key"),
+    Environment.MachineName,
+    CurrentNames));
+builder.Services.AddHostedService<CertificateRenewal>();
 
 // Wecken als Netz-Fähigkeit: ein wacher Rechner weckt den schlafenden im
 // selben Netz. Wo „dasselbe Netz" ist, sagt die Standort-Kennung unten.
@@ -545,6 +565,11 @@ app.MapDelete("/api/webrtc/{id}", async (string id, WebRtcRegistry registry) =>
 
 app.Logger.LogInformation(
     "RemoteDesktop-Agent lauscht auf Port {Port} als {Host}", settings.Port, Environment.MachineName);
+
+if (chosen.Note is not null)
+{
+    app.Logger.LogWarning("{Note}", chosen.Note);
+}
 
 app.Logger.LogInformation(
     authority is null

@@ -196,7 +196,14 @@ export function usableProfile(value: unknown): DeviceProfile | undefined {
   const { id, host, port, name, caFingerprint, agentFingerprint, clientKey, platform } =
     value as Record<string, unknown>
 
-  if (typeof host !== 'string' || host.trim().length === 0 || host.length > 255) {
+  // Eine Adresse mit Leerzeichen oder Pfad ist keine: sie stünde in der
+  // Geräteliste und führte bei jedem Verbinden ins Leere.
+  if (
+    typeof host !== 'string' ||
+    host.trim().length === 0 ||
+    host.length > 255 ||
+    /[\s/]/.test(host.trim())
+  ) {
     return undefined
   }
 

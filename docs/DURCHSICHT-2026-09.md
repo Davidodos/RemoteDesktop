@@ -38,7 +38,14 @@ umgeschrieben, nur sachlich richtig gehalten.
   sie einen Namen nicht darf) und B6 (Prüfzeichen: `check` in
   `POST /api/pair/code` und im Plugin, Anzeige unter dem Code, drittes Feld im
   Formular; ohne QR und ohne Prüfzeichen wird keine Stelle mehr angenommen).
-- R3, R4, R5 offen.
+- **R3 erledigt:** C1 (`CertificateRenewal`: täglich nachsehen, Tailscale
+  unter 30 Tagen per `tailscale cert` erneuern, per `ServerCertificateSelector`
+  ohne Neustart tauschen; ein beim Start abgelaufenes Tailscale-Zertifikat
+  verliert gegen das eigene, mit Satz im Log), C2 (`NetworkAddressChanged` →
+  eigenes Zertifikat auf die neuen Adressen), C3 (IPv6 in `LocalAddresses`,
+  ohne temporäre; NETZ.md), C4/C5 (NETZ.md, waker/README.md), C6 (Adressen mit
+  Leerzeichen oder `/` fliegen in allen drei `Sanitize`-Fassungen raus).
+- R4, R5 offen.
 
 ---
 

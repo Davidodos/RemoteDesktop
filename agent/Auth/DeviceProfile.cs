@@ -75,7 +75,10 @@ public sealed record DeviceProfile(
     {
         var address = (host ?? string.Empty).Trim();
 
-        if (address.Length == 0 || address.Length > 255)
+        // Eine Adresse mit Leerzeichen oder Pfad ist keine: sie stünde in der
+        // Geräteliste und führte bei jedem Verbinden ins Leere.
+        if (address.Length == 0 || address.Length > 255
+            || address.Any(char.IsWhiteSpace) || address.Contains('/'))
         {
             return null;
         }

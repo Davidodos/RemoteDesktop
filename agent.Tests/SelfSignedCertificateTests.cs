@@ -409,6 +409,38 @@ public class CertificateChoiceTests : IDisposable
     }
 
     [Fact]
+    public void Ein_abgelaufenes_Tailscale_Zertifikat_verliert_gegen_das_eigene()
+    {
+        // Arrange — 90 Tage sind um, und niemand hat erneuert. Vorher zeigte
+        // der Agent es trotzdem vor, und jede Verbindung scheiterte.
+        Directory.CreateDirectory(_ordner);
+
+        using var key = System.Security.Cryptography.ECDsa.Create(
+            System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+
+        var request = new CertificateRequest(
+            "CN=pc.tailnet.ts.net", key, System.Security.Cryptography.HashAlgorithmName.SHA256);
+
+        using var abgelaufen = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddDays(-100), DateTimeOffset.UtcNow.AddDays(-10));
+
+        var certPath = Path.Combine(_ordner, "cert.crt");
+        var keyPath = Path.Combine(_ordner, "cert.key");
+
+        File.WriteAllText(certPath, abgelaufen.ExportCertificatePem());
+        File.WriteAllText(keyPath, key.ExportPkcs8PrivateKeyPem());
+
+        // Act
+        var gewaehlt = CertificateLoader.LoadOrCreate(
+            certPath, keyPath, new CertificateVault(_ordner), "PC", ["pc"]);
+
+        // Assert — das eigene, mit einem Satz dazu für das Log.
+        Assert.True(gewaehlt.SelfIssued);
+        Assert.NotNull(gewaehlt.Note);
+        Assert.Contains("abgelaufen", gewaehlt.Note);
+    }
+
+    [Fact]
     public void Die_eingetragene_Adresse_steht_vorn()
     {
         // Der erste Name ist der Antragsteller — und der, den der QR-Code trägt.

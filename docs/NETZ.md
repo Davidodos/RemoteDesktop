@@ -38,6 +38,11 @@ beide einmalig:
   Rechnernamen, bei der FritzBox etwa `pc.fritz.box`. Trag ihn dann statt der
   Zahl ein.
 
+Das Zertifikat läuft der Adresse dabei hinterher: der Agent stellt es bei
+einem Netzwechsel von allein neu aus, ohne Neustart. IPv6-Adressen des
+Rechners stehen mit drin (nicht die täglich wechselnden „temporären"); ins Feld
+gehört trotzdem am besten IPv4 oder der Name.
+
 **Was Heimnetz nicht kann:** von unterwegs. Sobald das Handy im Mobilfunk ist,
 ist der Rechner weg. Dafür gibt es die anderen Modi.
 
@@ -47,7 +52,9 @@ ist der Rechner weg. Dafür gibt es die anderen Modi.
 > erreichbar, wenn jemand angemeldet ist.
 
 > **Rechner wecken** geht im Heimnetz übrigens weiterhin — das Magic Packet
-> läuft ohnehin nur innerhalb eines Netzes, egal welchen Modus du wählst.
+> läuft ohnehin nur innerhalb eines Netzes, egal welchen Modus du wählst. Im
+> Heimnetz weckt ein zweiter wacher Rechner; der Waker auf der NAS braucht ein
+> Zertifikat von Tailscale und ist damit nur im Modus *Tailscale* erreichbar.
 
 ---
 
@@ -62,7 +69,10 @@ Konto — ein bestehendes bei Google, Microsoft oder GitHub genügt.
 
 Der Vorteil gegenüber den anderen Modi: Tailscale stellt ein **öffentlich
 anerkanntes Zertifikat** aus. Dann muss auf keinem Handy jemand etwas
-bestätigen.
+bestätigen. Es gilt 90 Tage; der Agent sieht täglich nach und erneuert es
+selbst (`tailscale cert`), bevor es abläuft. Ist es beim Start trotzdem
+abgelaufen — etwa nach Wochen im Schrank —, zeigt er bis zur Erneuerung sein
+selbst ausgestelltes vor; das Handy muss es dann einmal bestätigen.
 
 **Der Name in deinem Tailscale-Netz gehört ins Feld „Adresse dieses Rechners“**
 — etwa `pc.tailnet-1234.ts.net`. Genau er landet im QR-Code, und genau ihn muss
@@ -146,6 +156,10 @@ nirgends.
   beim ersten Start des Agents danach — die Antwort muss „zulassen" sein.
 - **Port 8442**, falls du das Zertifikat vom Handy abholen lassen willst
   (siehe unten). Er trägt ausschließlich die Zertifikatsdatei.
+- **H.264 braucht eine direkte Leitung.** Der Videostrom läuft über WebRTC ohne
+  STUN; steht zwischen Handy und Rechner ein NAT, kommt kein Kandidat durch,
+  und die App bleibt beim JPEG-Strom. Das merkt sie selbst — es funktioniert,
+  nur mit mehr Daten.
 
 ---
 
@@ -156,9 +170,11 @@ In den Modi *Heimnetz*, *Headscale* und *Anderer VPN-Anbieter* gibt es keine
 Also stellt der Agent es sich selbst aus:
 
 - Er legt **einmalig** eine eigene kleine Zertifizierungsstelle an
-  (`C:\Program Files\RemoteDesktop\data\agentca.pfx`) und stellt sich damit sein
-  Serverzertifikat aus. Läuft das ab oder ändert sich die Adresse, erneuert er
-  es still — du merkst nichts davon.
+  (`C:\Program Files\RemoteDesktop\data\secret\agentca.pfx`) und stellt sich
+  damit sein Serverzertifikat aus. Läuft das ab oder ändert sich die Adresse,
+  erneuert er es still und ohne Neustart — du merkst nichts davon. Die Stelle
+  darf nur für private Adressen und die eigenen Namen unterschreiben; wer ihr
+  vertraut, vertraut ihr nicht für fremde Seiten.
 - Dein Handy muss dieser Stelle **einmal** vertrauen. Die App führt dich hin:
   sie holt die Datei, vergleicht ihren Fingerabdruck mit dem, den sie beim
   Koppeln bekommen hat, und übergibt sie dem System.

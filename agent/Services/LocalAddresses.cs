@@ -26,11 +26,7 @@ public static class LocalAddresses
 
             foreach (var entry in device.GetIPProperties().UnicastAddresses)
             {
-                // Nur IPv4 und keine Link-Local-Adressen: Letztere gelten nur
-                // auf demselben Kabel und stünden im Zertifikat als Namen, die
-                // nie jemand aufruft.
-                if (entry.Address.AddressFamily == AddressFamily.InterNetwork &&
-                    !entry.Address.ToString().StartsWith("169.254.", StringComparison.Ordinal))
+                if (IsUsable(entry))
                 {
                     addresses.Add(entry.Address.ToString());
                 }
@@ -38,5 +34,33 @@ public static class LocalAddresses
         }
 
         return addresses;
+    }
+
+    /// <summary>
+    /// Keine Link-Local-Adressen: sie gelten nur auf demselben Kabel und
+    /// stünden im Zertifikat als Namen, die nie jemand aufruft. Bei IPv6
+    /// zusätzlich keine temporären: Windows würfelt sie täglich neu, und das
+    /// Zertifikat liefe ihnen nur hinterher (Durchsicht C3).
+    /// </summary>
+    private static bool IsUsable(UnicastIPAddressInformation entry)
+    {
+        var address = entry.Address;
+
+        if (address.AddressFamily == AddressFamily.InterNetwork)
+        {
+            return !address.ToString().StartsWith("169.254.", StringComparison.Ordinal);
+        }
+
+        if (address.AddressFamily != AddressFamily.InterNetworkV6)
+        {
+            return false;
+        }
+
+        if (address.IsIPv6LinkLocal || address.IsIPv6Multicast || address.IsIPv6Teredo)
+        {
+            return false;
+        }
+
+        return !OperatingSystem.IsWindows() || entry.SuffixOrigin != SuffixOrigin.Random;
     }
 }

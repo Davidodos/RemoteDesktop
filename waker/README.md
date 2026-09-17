@@ -56,7 +56,12 @@ tailscale cert --cert-file /volume1/docker/remotedesktop/waker-config/cert.crt \
 ```
 
 Ohne die beiden Variablen startet der Waker trotzdem, sagt es aber im Log und
-ist dann nur von der Maschine selbst aus brauchbar.
+ist dann nur von der Maschine selbst aus brauchbar. Das heißt auch: **der Waker
+setzt Tailscale voraus.** Im Heimnetz gibt es keine öffentliche Stelle für ein
+Zertifikat auf `192.168.…`, und ein selbst ausgestelltes wie beim Agent hat er
+nicht — dort weckt stattdessen ein zweiter wacher Rechner (`POST /api/wol` am
+Agent). Und `tailscale cert` läuft 90 Tage: auf der NAS erneuert es niemand von
+allein, ein Cron-Eintrag mit demselben Befehl alle 60 Tage tut es.
 
 ## 4. Koppeln
 

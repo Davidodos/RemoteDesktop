@@ -78,7 +78,11 @@ data class DeviceProfile(
             val host = json.optString("host").trim()
             val port = json.optInt("port")
 
-            if (host.isEmpty() || host.length > 255 || port !in 1..65535) {
+            // Eine Adresse mit Leerzeichen oder Pfad ist keine: sie stünde in
+            // der Geräteliste und führte bei jedem Verbinden ins Leere.
+            if (host.isEmpty() || host.length > 255 || port !in 1..65535 ||
+                host.any(Char::isWhitespace) || host.contains('/')
+            ) {
                 return null
             }
 

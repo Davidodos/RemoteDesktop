@@ -44,6 +44,9 @@ describe('usableProfile', () => {
 
   it('verwirft unbrauchbare Adressen und Ports', () => {
     expect(usableProfile({ ...gut, host: '   ' })).toBeUndefined()
+    expect(usableProfile({ ...gut, host: 'pc example' })).toBeUndefined()
+    expect(usableProfile({ ...gut, host: 'pc.example/agent' })).toBeUndefined()
+    expect(usableProfile({ ...gut, host: 'https://pc.example' })).toBeUndefined()
     expect(usableProfile({ ...gut, port: 0 })).toBeUndefined()
     expect(usableProfile({ ...gut, port: 70000 })).toBeUndefined()
     expect(usableProfile({ ...gut, port: '8443' })).toBeUndefined()
