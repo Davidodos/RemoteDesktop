@@ -408,7 +408,7 @@ public static class AgentService
 
         using var http = new HttpClient(handler)
         {
-            BaseAddress = new Uri($"https://localhost:{LocalAgent.ConfiguredPort()}"),
+            BaseAddress = new Uri($"https://localhost:{AgentData.AgentPort}"),
 
             // Kurz: die Antwort steht in Millisekunden da oder gar nicht, und das
             // Fenster wartet darauf.
@@ -455,9 +455,7 @@ public sealed class WindowsProbe : ISetupProbe
     /// </para>
     /// </summary>
     public AgentCertificate? Certificate =>
-        File.Exists(Path.Combine(CertificateDirectory, "cert.key"))
-            ? AgentCertificate.Read(Path.Combine(CertificateDirectory, "cert.crt"))
-            : null;
+        AgentCertificate.Read(Path.Combine(CertificateDirectory, "cert.crt"));
 
     /// <summary>
     /// Ob ein **brauchbares** Zertifikat dort liegt: lesbar und noch gültig. Ein

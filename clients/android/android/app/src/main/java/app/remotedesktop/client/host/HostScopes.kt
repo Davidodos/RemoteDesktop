@@ -49,14 +49,6 @@ object HostScopes {
     /** Endpunkte, die selbst die Berechtigung erzeugen und deshalb ohne auskommen. */
     val WITHOUT_CREDENTIAL = listOf("/health", "/api/pair", "/api/session/challenge", "/api/session")
 
-    /**
-     * Nur vom Gerät selbst aus erreichbar: den Kopplungscode anzeigen und
-     * Clients widerrufen. Beides setzt voraus, dass jemand das Handy in der
-     * Hand hat — über das Netz wäre es genau der Weg, den die Kopplung
-     * verhindern soll.
-     */
-    val LOCAL_ONLY = listOf("/api/pair/code", "/api/clients")
-
     private val MAPPING = listOf(
         "/ws/screen" to SCREEN,
         "/api/webrtc" to SCREEN,

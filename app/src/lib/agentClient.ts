@@ -79,21 +79,11 @@ export class AgentClient {
   }
 
   /**
-   * Stößt die Update-Prüfung an. Findet der Agent etwas, tauscht er sich aus
-   * und startet neu — die Antwort kommt vorher, danach gäbe es keine mehr.
-   */
-  async update(): Promise<UpdateReport> {
-    return await this.request<UpdateReport>('/api/update', { method: 'POST' })
-  }
-
-  /**
    * Das **ganze** Update: Agent, Fenster und Oberfläche über den Installer.
    *
    * <p>
    * Der Weg, auf dem ein Rechner sich von einem gekoppelten Gerät aus erneuern
-   * lässt. {@link update} tauscht nur die Programmdatei des Agents — ändert sich
-   * die Oberfläche, und das ist der häufigere Fall, bliebe sie auf dem Stand von
-   * vorher. Windows fragt dabei nichts nach: der Agent läuft ohnehin mit den
+   * lässt. Windows fragt dabei nichts nach: der Agent läuft ohnehin mit den
    * nötigen Rechten (siehe `agent/Services/InstallerUpdate.cs`).
    * </p>
    *
@@ -167,7 +157,7 @@ export class AgentClient {
   }
 }
 
-/** Was aus `POST /api/update` zurückkommt. */
+/** Was aus `POST /api/update/app` zurückkommt. */
 export interface UpdateReport {
   /** `installing`, `uptodate`, `disabled`, `rejected`, … */
   status: string

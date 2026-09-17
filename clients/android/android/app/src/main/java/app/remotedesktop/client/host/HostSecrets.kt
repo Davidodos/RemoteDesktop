@@ -129,8 +129,10 @@ class ChallengeStore(private val now: Clock = System::currentTimeMillis) {
         synchronized(gate) {
             dropExpired()
 
+            // Die älteste fällt, nicht alle: sonst sperrte ein Client, der
+            // stur Challenges anfordert, jede laufende Anmeldung der anderen aus.
             if (open.size >= MAX_OUTSTANDING) {
-                open.clear()
+                open.entries.minByOrNull { it.value.second }?.let { open.remove(it.key) }
             }
 
             open[nonce] = clientId to (now() + LIFETIME_MS)

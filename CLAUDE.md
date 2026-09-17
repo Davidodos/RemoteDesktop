@@ -179,7 +179,7 @@ Einzelheiten unter **31r** in `docs/TASKS-V4.md`.
 **Durchsicht vor der Veröffentlichung (18.09.2026):** Befunde und Plan in
 **`docs/DURCHSICHT-2026-09.md`** — R1 (Stabilität Windows→Android, Ursache
 des Bildabbruchs) zuerst, dann R2 (Sicherheit), R3 (Netzmodi), R4 (Texte),
-R5 (Aufräumen). Nichts davon ist umgesetzt.
+R5 (Aufräumen). Der Stand steht dort unter „Umsetzungsstand".
 
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native

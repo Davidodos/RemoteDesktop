@@ -3,12 +3,11 @@ import type { DevicePlatform } from '../platform/index.ts'
 export type { DevicePlatform }
 
 /**
- * Ein Gerät, das die App steuern kann — gekoppelt oder aus dem Hub.
+ * Ein Gerät, das die App steuern kann.
  *
- * Es gibt genau zwei Arten, sich auszuweisen, und jedes Gerät hat eine davon:
- * die Kopplung aus Phase 10 (`clientId`, dazu der eigene Schlüssel im
- * Schlüsselspeicher) oder das alte geteilte `token`. Der alte Weg bleibt bis
- * Phase 12 — sonst sperrt man sich vom eigenen PC aus.
+ * Ausgewiesen wird sich nur über die Kopplung: `clientId`, dazu der Schlüssel
+ * bei der Gegenstelle dieses Geräts. Das alte geteilte `token` gibt es seit
+ * v1.4 nicht mehr.
  */
 export interface Device {
   id: string
@@ -26,8 +25,6 @@ export interface Device {
   /** MagicDNS-Name des Rechners. */
   host: string
   port: number
-  /** Pre-Shared-Token des Agents, solange das Gerät nicht gekoppelt ist. */
-  token?: string
   /** Kennung, die der Agent bei der Kopplung vergeben hat. */
   clientId?: string
   /**

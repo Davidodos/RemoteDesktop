@@ -37,20 +37,42 @@ public sealed class AgentIdentity
     /// Schlüssel im Klartext — sie muss dort liegen, wo nur der Dienst
     /// hinkommt, genau wie der TLS-Schlüssel daneben.
     /// </summary>
-    public static AgentIdentity LoadOrCreate(string path)
+    /// <param name="publicPath">
+    /// Wohin der öffentliche Teil geschrieben wird — in den lesbaren
+    /// Datenordner, damit das Fenster den Fingerabdruck dieses Rechners kennt,
+    /// ohne an den privaten Schlüssel heranzumüssen.
+    /// </param>
+    public static AgentIdentity LoadOrCreate(string path, string? publicPath = null)
     {
         var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         if (File.Exists(path))
         {
             key.ImportPkcs8PrivateKey(Convert.FromBase64String(File.ReadAllText(path).Trim()), out _);
-            return new AgentIdentity(key);
+        }
+        else
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+            File.WriteAllText(path, Convert.ToBase64String(key.ExportPkcs8PrivateKey()));
         }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-        File.WriteAllText(path, Convert.ToBase64String(key.ExportPkcs8PrivateKey()));
+        var identity = new AgentIdentity(key);
 
-        return new AgentIdentity(key);
+        if (publicPath is not null)
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(publicPath) ?? ".");
+                File.WriteAllText(publicPath, identity.PublicKey);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Ohne die Datei fehlt dem Fenster nur der Fingerabdruck im
+                // eigenen Steckbrief — kein Grund, nicht zu starten.
+            }
+        }
+
+        return identity;
     }
 
     /// <summary>Nur für Tests: eine Identität, die nirgends landet.</summary>

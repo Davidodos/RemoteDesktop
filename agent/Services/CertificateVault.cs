@@ -9,8 +9,19 @@ namespace RemoteDesktopAgent.Services;
 /// steht und hier nur Dateien. Die Trennung ist der Grund, warum sich beides auf
 /// einem Linux-Container prüfen lässt.
 /// </summary>
-public sealed class CertificateVault(string directory, TimeProvider? time = null)
+/// <param name="directory">
+/// Wo die Dateien mit privatem Schlüssel liegen (<c>agentca.pfx</c>,
+/// <c>agent.pfx</c>) — der admin-only Unterordner.
+/// </param>
+/// <param name="publicDirectory">
+/// Wo der öffentliche Teil der CA liegt (<c>agentca.crt</c>): der lesbare
+/// Datenordner, damit das Fenster den Fingerabdruck der eigenen Stelle kennt.
+/// Ohne Angabe derselbe Ordner.
+/// </param>
+public sealed class CertificateVault(string directory, TimeProvider? time = null, string? publicDirectory = null)
 {
+    private readonly string _publicDirectory = publicDirectory ?? directory;
+
     /// <summary>Die eigene CA — der Anker, dem ein Client einmal vertraut.</summary>
     public const string AuthorityFile = RemoteDesktopSetup.AgentPaths.AuthorityFile;
 
@@ -37,6 +48,13 @@ public sealed class CertificateVault(string directory, TimeProvider? time = null
         // Clients müssen einmal erneut bestätigen — sichtbar statt heimlich.
         if (existing is not null && _time.GetUtcNow() < existing.NotAfter)
         {
+            // Der öffentliche Teil liegt seit v1.4 in einem anderen Ordner als
+            // die CA selbst — nachziehen, falls er dort noch fehlt.
+            if (!File.Exists(Path.Combine(_publicDirectory, AuthorityPublicFile)))
+            {
+                SavePublic(existing);
+            }
+
             return existing;
         }
 
@@ -45,9 +63,7 @@ public sealed class CertificateVault(string directory, TimeProvider? time = null
         var created = SelfSignedCertificate.CreateAuthority(machineName, _time.GetUtcNow());
 
         Save(path, created);
-        File.WriteAllBytes(
-            Path.Combine(directory, AuthorityPublicFile),
-            created.Export(X509ContentType.Cert));
+        SavePublic(created);
 
         return created;
     }
@@ -105,6 +121,14 @@ public sealed class CertificateVault(string directory, TimeProvider? time = null
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, certificate.Export(X509ContentType.Pfx));
+    }
+
+    private void SavePublic(X509Certificate2 authority)
+    {
+        Directory.CreateDirectory(_publicDirectory);
+        File.WriteAllBytes(
+            Path.Combine(_publicDirectory, AuthorityPublicFile),
+            authority.Export(X509ContentType.Cert));
     }
 
     /// <summary>

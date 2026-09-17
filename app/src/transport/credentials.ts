@@ -1,12 +1,13 @@
 import { signChallenge } from '../lib/clientKey.ts'
 
 /**
- * Womit sich die App beim Agent ausweist.
+ * Womit sich die App beim Agent ausweist: ein Sitzungstoken, geholt per
+ * Challenge-Response mit dem Schlüssel aus der Kopplung. Der Transport merkt
+ * nur daran, ob {@link Credentials.peek} schon etwas liefert, ob er die
+ * Anmeldung noch abwarten muss.
  *
- * Zwei Wege, dieselbe Schnittstelle: das alte geteilte Token liegt sofort vor,
- * ein Sitzungstoken muss erst per Challenge-Response geholt werden. Der
- * Transport merkt den Unterschied nur daran, ob {@link Credentials.peek} schon
- * etwas liefert.
+ * Das alte geteilte Token aus der Zeit vor der Kopplung gibt es seit v1.4
+ * nicht mehr — ein Geheimnis, das für alles gilt und keine Rechte kennt.
  */
 export interface Credentials {
   /** Was bereits vorliegt — `undefined` heißt: muss erst geholt werden. */
@@ -17,15 +18,16 @@ export interface Credentials {
   invalidate(): void
 }
 
-/** Der alte Weg: ein Token, das schon dasteht. */
-export function staticCredentials(token: string): Credentials {
+/**
+ * Ein Gerät ohne Kopplung hat keinen Ausweis. Jede Anfrage scheitert dann mit
+ * einem Satz, der das sagt — statt mit einem leeren Token und einem 401, das
+ * wie ein Fehler des Agents aussieht.
+ */
+export function noCredentials(): Credentials {
   return {
-    peek: () => token,
-    obtain: () => Promise.resolve(token),
-    invalidate: () => {
-      // Ein Pre-Shared-Token wird nicht ungültig — es ist entweder richtig
-      // oder war es nie.
-    },
+    peek: () => undefined,
+    obtain: () => Promise.reject(new Error('Dieses Gerät ist nicht gekoppelt.')),
+    invalidate: () => {},
   }
 }
 

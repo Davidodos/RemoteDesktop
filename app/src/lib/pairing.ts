@@ -29,7 +29,6 @@ export { ensureClientKey }
  */
 interface PairResponse {
   clientId: string
-  scopes?: string[]
   hostname?: string
   agentFingerprint?: string
   /**

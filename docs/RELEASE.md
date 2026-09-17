@@ -75,9 +75,10 @@ base64 -w0 release.keystore    # Ausgabe als Secret hinterlegen
 
 Vier Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
 `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Die `release.keystore` danach
-sicher aufbewahren — geht sie verloren, kann **keine** installierte App je
-wieder aktualisiert werden; sie muss dann deinstalliert und neu installiert
-werden.
+sicher aufbewahren, **außerhalb des Repo-Ordners** (auf der NAS liegt sie
+unter `/workspace/_secrets/RemoteDesktop/`) — geht sie verloren, kann
+**keine** installierte App je wieder aktualisiert werden; sie muss dann
+deinstalliert und neu installiert werden.
 
 ### 4. Erste Fassung ausrollen
 
@@ -130,7 +131,7 @@ Und auf den Geräten:
 
 | Wo | Was passiert |
 |---|---|
-| **Agent** | Prüft kurz nach jedem Start selbst und tauscht seine eigene `.exe`. Sofort geht es über `POST /api/update` |
+| **Agent** | Prüft kurz nach jedem Start selbst und lässt den Installer laufen, wenn es eine neue Fassung gibt — dieselbe Fassung wird von allein nur einmal versucht |
 | **Windows-Fenster** | *Übersicht → Updates → Nach Updates suchen*. Lädt den Installer und startet ihn; der beendet Agent und Fenster, ersetzt alles und startet den Agent wieder |
 | **Von einem gekoppelten Gerät aus** | Geräteliste → *⋯* → *Aktualisieren*. Der Knopf erscheint nur bei einem Rechner mit älterer Fassung. Windows fragt dabei nichts nach — der Agent läuft ohnehin erhöht |
 | **Android-App** | Sucht bei jedem Start und meldet sich mit einem Band, wenn es etwas gibt; sonst über *Einstellungen → Updates*. Ein Knopf, dann der Systemdialog von Android |

@@ -54,7 +54,7 @@ public sealed class ShellWindow : Form
     private bool _refreshing;
 
     public ShellWindow(
-        WindowsProbe probe, LocalAgent agent, IAutostartHost autostart, string? appDirectory)
+        WindowsProbe probe, IAutostartHost autostart, string? appDirectory)
     {
         _probe = probe;
 

@@ -1,11 +1,13 @@
 # Sicherheits-Durchsicht
 
-Stand: 1. August 2026, nach Phase 14. Betrachtet wurden Agent, Waker und die
-beiden Clients.
+Stand: 18. September 2026, nach R2 der Durchsicht vor der Veröffentlichung
+(`docs/DURCHSICHT-2026-09.md`). Betrachtet wurden Agent, Waker, Fenster,
+Android-Host und App. Entwicklungsdokument — für die Veröffentlichung entsteht
+ein eigenes.
 
 Die Ausgangslage bestimmt alles Weitere: **der Agent hat vollständige Kontrolle
 über den PC** — Maus, Tastatur, Herunterfahren, Bildschirminhalt. Wer ihn
-erreicht und das Token kennt, sitzt praktisch am Rechner.
+erreicht und einen gekoppelten Schlüssel hat, sitzt praktisch am Rechner.
 
 ## Schutzschichten
 
@@ -15,15 +17,16 @@ erreicht und das Token kennt, sitzt praktisch am Rechner.
    darin. Seit V3 ist das eine Wahl (`setup/NetworkProfile.cs`) und keine
    Voraussetzung mehr; die Schutzwirkung ist im Heimnetz naturgemäß geringer
    als in einem VPN — wer im WLAN steht, ist schon drin.
-2. **Kopplung pro Gerät.** Seit Phase 10 gibt es kein geteiltes Token mehr:
-   jeder Client hat ein eigenes Schlüsselpaar, der Agent kennt nur den
-   öffentlichen Teil (`clients.json`), und angemeldet wird per
-   Challenge-Response. Das Sitzungstoken gilt zwölf Stunden und liegt
+2. **Kopplung pro Gerät.** Jeder Client hat ein eigenes Schlüsselpaar, der
+   Agent kennt nur den öffentlichen Teil (`clients.json`), und angemeldet wird
+   per Challenge-Response. Das Sitzungstoken gilt zwölf Stunden und liegt
    ausschließlich im Arbeitsspeicher des Agents. Der Vergleich läuft in fester
-   Zeit (`CryptographicOperations.FixedTimeEquals`).
-3. **Rechte pro Client.** `screen`, `input`, `media`, `power`, `actions`,
+   Zeit (`CryptographicOperations.FixedTimeEquals`). Ein geteiltes Token gibt
+   es nicht — das alte `Agent:Token` ist mit v1.4 weg.
+3. **Rechte pro Pfad.** `screen`, `input`, `media`, `power`, `actions`,
    `wake` — als Whitelist. Ein Pfad, der nicht zugeordnet ist, wird abgelehnt
-   statt durchgelassen.
+   statt durchgelassen. Wer koppelt, bekommt alle Rechte des Geräts; eine
+   Auswahl bei der Kopplung gab es als Parameter, und niemand nutzte sie.
 4. **TLS.** Agent und Waker bedienen ausschließlich HTTPS; die WebSockets
    laufen darüber. Wo Tailscale läuft, kommt das Zertifikat von dort und ist
    öffentlich anerkannt. Sonst stellt sich der Agent seit V3 selbst eins aus
@@ -39,6 +42,18 @@ erreicht und das Token kennt, sitzt praktisch am Rechner.
    Zertifikat nicht zustande kommt. Ein Angreifer, der die Datei austauscht,
    scheitert am Fingerabdruck; einer, der sie mitliest, erfährt nichts, was
    nicht ohnehin jeder Verbindungsaufbau preisgibt.
+6. **Der Datenordner.** `{app}\data` ist für jeden lesbar, aber nur für
+   Administratoren und das System beschreibbar; `data\secret` darin ist für
+   sonst niemanden zugänglich — private Schlüssel, Zertifikate mit Schlüssel,
+   der heruntergeladene Installer. Was das Fenster ohne Rechte schreibt
+   (Ausweis, Gerätename, Kürzel, vertraute Stellen, das lokale Geheimnis),
+   liegt in `%localappdata%\RemoteDesktop`. Die Rechte setzt der Agent bei
+   jedem Start selbst (`DataFolderAcl`), weil Inno Setup Einträge nur ergänzt.
+7. **Die lokalen Endpunkte.** Kopplungscode, Gegenrichtung und Clientliste
+   verlangen die Loopback-Adresse **und** das Geheimnis aus
+   `%localappdata%\RemoteDesktop\local.secret`; das Fenster schickt es als
+   Bearer-Token mit. Am Android-Host gibt es diese Routen gar nicht mehr — die
+   App ruft sie über das Plugin auf.
 
 ## Befunde
 
@@ -50,6 +65,12 @@ erreicht und das Token kennt, sitzt praktisch am Rechner.
 | Mittel | **Token im Query-String der WebSockets.** Unvermeidlich — Browser können bei WebSocket-Verbindungen keine Header setzen. Abgemildert: der Agent loggt keine Query-Strings, und die Verbindung ist TLS-verschlüsselt. |
 | Mittel | **Selbst-Update als Einfallstor.** Bis Phase 13 kam die Datei vom Hub, geprüft wurde nur die SHA-256-Summe aus dem Manifest daneben. Seit Phase 14 kommt sie aus den GitHub-Releases, und das Manifest ist mit ECDSA P-256 unterschrieben; der öffentliche Schlüssel ist in den Agent kompiliert. Ein Hash aus derselben Quelle wie die Datei schützt gegen abgebrochene Downloads, nicht gegen ein übernommenes GitHub-Konto — die Signatur schon. |
 | **Hoch** | **Der Hub bündelte alle Agent-Tokens.** Er lieferte über `GET /api/devices` die Tokens **aller** Rechner an jeden aus, der das eine Hub-Token kannte — ein einziges Geheimnis, hinter dem sämtliche Rechner lagen, und es lag im `localStorage` des Handys. Mit Phase 14 ist die Registry ersatzlos entfallen: der Waker führt keine Geräteliste, kennt keine MACs und keine Tokens. Die App bringt ihre gekoppelten Geräte selbst mit. |
+| **Hoch** | **`data` war für jeden Benutzer beschreibbar** (Durchsicht B1, 18.09.2026): jeder lokale Prozess konnte den privaten Schlüssel des Agents lesen und sich selbst in `clients.json` eintragen. Jetzt Schutzschicht 6. Koppeln bei gestopptem Agent kostet dafür eine Rückfrage von Windows (`AdminTask.Grant`). |
+| **Hoch** | **„Nur lokal" hieß nur Loopback** (B2): jeder Prozess des Rechners bekam einen Kopplungscode. Jetzt Schutzschicht 7. |
+| Mittel | **Der Installer lag in `%TEMP%`** (B3): zwischen Prüfsumme und Start konnte ihn jeder Prozess des Benutzers austauschen. Jetzt `data\secret\update`; das Agent-Nur-Update (`POST /api/update`, `AgentUpdater`) ist weg, es gibt einen Weg. |
+| Mittel | **Das Fenster schrieb fremde Stellen in den Windows-Stammspeicher** (B4). Weg — `TrustedAuthorities` gilt für die Fernsteuerung und sonst nichts. |
+| Mittel | **Das alte geteilte Token** (B7) galt weiter. Entfernt: Agent, App und Geräteliste kennen nur noch die Kopplung. |
+| Niedrig | **Der Kopplungscode stand im Log**, und das Log liegt im lesbaren Ordner. Steht nicht mehr drin. `ChallengeStore` verwirft bei Überlauf die älteste Challenge statt aller. |
 
 ### Bewusst so gelassen
 
@@ -60,9 +81,10 @@ ständige Fehlerquelle für wenig Gewinn: autorisiert wird ausschließlich über
 das Sitzungstoken, Cookies gibt es nicht. Eine fremde Seite im Browser kann
 damit nichts erreichen, was sie nicht ohnehin könnte.
 
-**Kein Rate-Limit am Agent.** Ein Angreifer im Tailnet könnte Tokens raten.
-Bei 32 zufälligen Zeichen ist das aussichtslos, und ein Limit würde bei
-schneller Eingabe (Tastatur-Stream) im Weg stehen.
+**Kein Rate-Limit am Agent.** Ein Angreifer im Netz könnte Sitzungstoken
+raten. Bei 32 zufälligen Bytes ist das aussichtslos, und ein Limit würde bei
+schneller Eingabe (Tastatur-Stream) im Weg stehen. Kopplungscodes sind davon
+ausgenommen: fünf Fehlversuche, dann ist der Code weg.
 
 **ffmpeg wird als Prozess gestartet.** Der Pfad kommt aus der Konfiguration,
 nie aus einer Anfrage. Monitor-Index und Bildrate werden vor dem Einsetzen auf
@@ -124,15 +146,6 @@ scheitert dort erwartungsgemäß). Das ist gleichzeitig eine Sicherheitseigensch
 Wer den PC gesperrt vorfindet, kann ihn über die App nicht entsperren. Ein
 Dienst in Sitzung 0 würde diese Grenze aufheben — bewusst noch nicht gebaut.
 
-**`agentkey.txt` liegt im Klartext neben der `.exe`.** Darin steht der private
-Schlüssel des Agents. Er gehört nach `C:\Program Files\RemoteDesktop\data\` mit
-denselben ACLs wie `cert.key` — steht als offener Punkt in `docs/TASKS-V2.md`.
-
-**Das alte geteilte Token gilt weiter.** `Agent:Token` ist seit Phase 10
-freiwillig, wird aber noch angenommen, damit sich niemand vom eigenen Rechner
-aussperrt. Wer die Kopplung überall durchgezogen hat, sollte die Zeile
-entfernen — dann gibt es kein Geheimnis mehr, das alles darf.
-
 **Der private Geräteschlüssel liegt in den Preferences der App.** Wer das
 entsperrte Handy hat, hat den PC. Der Bildschirmsperre des Handys kommt damit
 dieselbe Bedeutung zu wie dem Schlüssel selbst. Android böte mit
@@ -141,12 +154,11 @@ Phase 12.
 
 ## Wenn ein Gerät verloren geht
 
-1. Am Rechner selbst: `DELETE /api/clients/{id}` — der Widerruf wirft den
-   Client zugleich aus laufenden Sitzungen, wirkt also sofort und nicht erst
-   nach zwölf Stunden. Auf dem Waker dasselbe.
-2. Steht in der `appsettings.json` noch `Agent:Token`, muss es ausgetauscht
-   werden — es gilt für jeden, der es kennt.
-3. Bei Verdacht auf einen fremden Zugriff im Tailnet zusätzlich im
+1. Am Rechner selbst im Fenster unter „Geräte" entfernen (das ist
+   `DELETE /api/clients/{id}` mit dem lokalen Geheimnis) — der Widerruf wirft
+   den Client zugleich aus laufenden Sitzungen, wirkt also sofort und nicht
+   erst nach zwölf Stunden. Am Handy dasselbe unter „Geräte".
+2. Bei Verdacht auf einen fremden Zugriff im Tailnet zusätzlich im
    Tailscale-Adminpanel das betroffene Gerät entfernen. Das wirkt sofort und
    ist die schnellere Sperre.
 

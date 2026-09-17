@@ -43,7 +43,17 @@ public enum AdminTask
     /// Einer statt vier, weil jeder einzelne Sprung eine Rückfrage von Windows
     /// kostet — siehe <see cref="RemoteDesktopSetup.SetupRequest"/>.
     /// </summary>
-    Complete
+    Complete,
+
+    /// <summary>
+    /// Ein Gerät in die <c>clients.json</c> eintragen, während der Agent
+    /// nicht läuft. Läuft er, geht es über ihn und ohne Rechte — seit v1.4
+    /// darf das Fenster in <c>data</c> nur lesen.
+    /// </summary>
+    Grant,
+
+    /// <summary>Das Gegenstück: ein Gerät aus der Datei nehmen.</summary>
+    Revoke
 }
 
 /// <summary>
@@ -71,15 +81,23 @@ public static class Elevation
     private const int StopTimeout = 5000;
 
     /// <summary>
-    /// Der Datenordner: <c>data\</c> neben dem Programm. Dort liegt alles, was
-    /// Rechte verlangt — Schlüssel, Zertifikate, Kopplungen, Netzprofil.
-    ///
-    /// <para>
-    /// Ein Ordner statt zweier: siehe <see cref="AgentPaths"/>. Lesen darf hier
-    /// jeder, schreiben nur der erhöhte Aufruf.
-    /// </para>
+    /// Der Datenordner: <c>data\</c> neben dem Programm — Kopplungen,
+    /// Netzprofil, öffentliche Zertifikate. Lesen darf hier jeder, schreiben
+    /// nur der erhöhte Aufruf. Siehe <see cref="AgentPaths"/>.
     /// </summary>
     public static string DataDirectory { get; } = AgentPaths.For(AppContext.BaseDirectory);
+
+    /// <summary>
+    /// <c>data\secret</c> — private Schlüssel. Das Fenster kommt hier nur
+    /// erhöht hinein, und auch dann nur, um das Zertifikat von Tailscale abzulegen.
+    /// </summary>
+    public static string SecretDirectory { get; } = AgentPaths.SecretIn(DataDirectory);
+
+    /// <summary>
+    /// Was das Fenster ohne Rechte schreibt: Ausweis, Gerätename, Kürzel,
+    /// vertraute Stellen. Im Profil des angemeldeten Benutzers.
+    /// </summary>
+    public static string UserDirectory { get; } = AgentPaths.UserDirectory;
 
     /// <summary>Wo die Daten bis v1.2.0 lagen — nur noch zum Übernehmen.</summary>
     public static string LegacyDataDirectory { get; } = Path.Combine(
@@ -183,6 +201,8 @@ public static class Elevation
         AdminTask.ServiceStartType => InstallTask(argument),
         AdminTask.FetchCertificate => FetchCertificate(argument),
         AdminTask.Complete => Complete(argument),
+        AdminTask.Grant => Grant(argument),
+        AdminTask.Revoke => Revoke(argument),
         _ => WriteNetwork(argument)
     };
 
@@ -430,14 +450,60 @@ public static class Elevation
                 + "Zuerst anmelden, dann das Zertifikat holen.");
         }
 
-        Directory.CreateDirectory(DataDirectory);
+        Directory.CreateDirectory(SecretDirectory);
 
         return ProcessRunner.Run(Tailscale.Executable, [
             "cert",
             "--cert-file", Path.Combine(DataDirectory, "cert.crt"),
-            "--key-file", Path.Combine(DataDirectory, "cert.key"),
+            "--key-file", Path.Combine(SecretDirectory, "cert.key"),
             tailnetName.Trim()
         ]);
+    }
+
+    /// <summary>
+    /// Trägt ein Gerät ein. Der Inhalt kommt als vorbereitete Datei mit
+    /// Schlüssel und Namen — aus demselben Grund wie beim Netzprofil.
+    /// </summary>
+    private static RunResult Grant(string preparedFile)
+    {
+        try
+        {
+            var request = System.Text.Json.JsonSerializer.Deserialize<GrantRequest>(
+                File.ReadAllText(preparedFile));
+
+            if (request?.PublicKey is not { Length: > 0 } publicKey)
+            {
+                return new RunResult(-1, string.Empty, "Der vorbereitete Eintrag war nicht lesbar.");
+            }
+
+            Directory.CreateDirectory(DataDirectory);
+            ClientsFile.Grant(
+                ClientsFile.In(DataDirectory), publicKey, request.Label ?? string.Empty,
+                DateTimeOffset.UtcNow);
+
+            return new RunResult(0, "Eingetragen.", string.Empty);
+        }
+        catch (Exception failure)
+        {
+            return new RunResult(-1, string.Empty, failure.Message);
+        }
+    }
+
+    private static RunResult Revoke(string clientId)
+    {
+        try
+        {
+            var path = ClientsFile.In(DataDirectory);
+
+            ClientsFile.Write(
+                path, ClientsFile.Read(path).Where(client => client.Id != clientId.Trim()));
+
+            return new RunResult(0, "Entfernt.", string.Empty);
+        }
+        catch (Exception failure)
+        {
+            return new RunResult(-1, string.Empty, failure.Message);
+        }
     }
 
     /// <summary>
@@ -485,6 +551,9 @@ public static class Elevation
             ? args[index + 2]
             : string.Empty;
     }
+
+    /// <summary>Was <see cref="AdminTask.Grant"/> aus der vorbereiteten Datei liest.</summary>
+    public sealed record GrantRequest(string? PublicKey, string? Label);
 
     private static string? ReadAndDelete(string path)
     {

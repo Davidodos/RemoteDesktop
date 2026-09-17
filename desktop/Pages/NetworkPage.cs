@@ -22,19 +22,10 @@ public sealed class NetworkPage : PageView
     private readonly ChoiceGroup<NetworkKind> _kinds = new();
     private readonly ThemedTextBox _address = new("z. B. 192.168.178.33");
     private readonly TextBlock _addressHint = new(string.Empty);
-    private readonly ThemedTextBox _trustHost = new("Adresse des anderen Rechners");
     private readonly ThemedButton _suggest = new("Vorschlag");
     private readonly TextBlock _explanation = new(string.Empty);
 
-    /// <summary>
-    /// Der Platz für die Rückfrage beim Vertrauen. Er ist meist leer und wird
-    /// gefüllt, statt die Karte neu zu bauen — die Karte enthält Felder, in die
-    /// jemand gerade getippt hat.
-    /// </summary>
-    private readonly Stack _confirm = new() { Gap = 10 };
-
     private NetworkKind _chosen = NetworkKind.Lan;
-    private FetchedCertificate? _fetched;
 
     public NetworkPage(WindowsProbe probe)
         : base("Netz", "Auf welchem Weg dein Handy diesen Rechner findet.")
@@ -61,7 +52,6 @@ public sealed class NetworkPage : PageView
 
         Body.Add(ModeCard());
         Body.Add(AddressCard());
-        Body.Add(TrustCard());
     }
 
     public override Task RefreshAsync()
@@ -103,32 +93,6 @@ public sealed class NetworkPage : PageView
         card.Body.Add(_addressHint);
         card.Body.Add(Row.Fill(_address, _suggest));
         card.Body.Add(Row.Buttons(save));
-
-        return card;
-    }
-
-    /// <summary>
-    /// Einem anderen Rechner vertrauen, der sich sein Zertifikat selbst
-    /// ausgestellt hat.
-    ///
-    /// Es steht hier und nicht bei den Teilen: es geht nicht um diesen Rechner,
-    /// sondern um einen, den man von hier aus steuern will.
-    /// </summary>
-    private Card TrustCard()
-    {
-        var card = new Card("Einem anderen Rechner vertrauen");
-        var fetch = new ThemedButton("Zertifikat holen");
-
-        fetch.Click += async (_, _) => await FetchAsync();
-
-        card.Body.Add(new TextBlock(
-            "Hat der andere Rechner sich sein Zertifikat selbst ausgestellt, kennt "
-            + "Windows den Aussteller nicht. Hier wird er einmalig eingetragen — "
-            + "nachdem du den Fingerabdruck mit dem verglichen hast, der dort im "
-            + "Fenster steht."));
-
-        card.Body.Add(Row.Fill(_trustHost, fetch));
-        card.Body.Add(_confirm);
 
         return card;
     }
@@ -241,81 +205,5 @@ public sealed class NetworkPage : PageView
                   + "unter „Übersicht“ einmal beenden und starten."
                 : $"Nicht gespeichert: {result.Message}",
             result.Ok ? Tone.Good : Tone.Bad);
-    }
-
-    /// <summary>
-    /// Holen, zeigen, fragen — in dieser Reihenfolge. Der Fingerabdruck steht in
-    /// der Rückfrage, weil er das Einzige ist, was den Schritt sicher macht:
-    /// derselbe Wert steht am anderen Rechner im Fenster. Stimmen sie nicht
-    /// überein, sitzt jemand dazwischen.
-    /// </summary>
-    private async Task FetchAsync()
-    {
-        var host = _trustHost.Value.Trim();
-
-        if (host.Length == 0)
-        {
-            Report("Trage die Adresse des Rechners ein, dem du vertrauen willst.", Tone.Bad);
-
-            return;
-        }
-
-        try
-        {
-            _fetched = await TrustImport.FetchAsync(host);
-        }
-        catch (Exception failure)
-        {
-            _confirm.Clear();
-            Report($"Nicht geklappt: {failure.Message}", Tone.Bad);
-
-            return;
-        }
-
-        var value = new ThemedTextBox { Value = _fetched.Readable, ReadOnly = true };
-        value.UseMonospace();
-
-        var accept = new ThemedButton("Stimmt überein — vertrauen", ButtonTone.Primary);
-        var cancel = new ThemedButton("Abbrechen");
-
-        accept.Click += (_, _) => Accept(host);
-
-        cancel.Click += (_, _) =>
-        {
-            _confirm.Clear();
-            Report("Nichts geändert.");
-        };
-
-        _confirm.Clear();
-
-        _confirm.Add(new TextBlock(
-            $"Dieses Zertifikat gehört angeblich zu „{host}“. Vergleiche den Wert mit "
-            + "dem, der am anderen Rechner unter „Übersicht“ steht. Nur wenn beide "
-            + "übereinstimmen, gehört es dorthin.", Theme.Body, Theme.Text));
-
-        _confirm.Add(value);
-        _confirm.Add(Row.Buttons(accept, cancel));
-
-        Report("Vergleiche den Fingerabdruck, bevor du bestätigst.", Tone.Working);
-    }
-
-    private void Accept(string host)
-    {
-        if (_fetched is not { } certificate)
-        {
-            return;
-        }
-
-        try
-        {
-            TrustImport.Trust(certificate.Certificate);
-            Report($"„{host}“ wird jetzt vertraut.", Tone.Good);
-        }
-        catch (Exception failure)
-        {
-            Report($"Nicht geklappt: {failure.Message}", Tone.Bad);
-        }
-
-        _confirm.Clear();
     }
 }

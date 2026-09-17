@@ -4,13 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 namespace RemoteDesktopClient;
 
 /// <summary>Was beim Holen eines fremden Zertifikats herauskommt.</summary>
-public sealed record FetchedCertificate(X509Certificate2 Certificate, string Fingerprint)
-{
-    /// <summary>Der Fingerabdruck in Zweiergruppen — so vergleicht ihn ein Mensch.</summary>
-    public string Readable =>
-        string.Join(':', Enumerable.Range(0, Fingerprint.Length / 2)
-            .Select(index => Fingerprint.Substring(index * 2, 2)));
-}
+public sealed record FetchedCertificate(X509Certificate2 Certificate, string Fingerprint);
 
 /// <summary>
 /// Einem Gerät vertrauen, das sich sein Zertifikat selbst ausgestellt hat.
@@ -32,8 +26,10 @@ public sealed record FetchedCertificate(X509Certificate2 Certificate, string Fin
 /// Das Zertifikat wird unverschlüsselt geholt, weil es anders nicht geht: die
 /// verschlüsselte Verbindung ist ja gerade die, die ohne dieses Zertifikat nicht
 /// zustande kommt. Es enthält kein Geheimnis. Was es echt macht, ist der
-/// Fingerabdruck — und den vergleicht ein Mensch mit dem, der am anderen Rechner
-/// im Fenster steht.
+/// Fingerabdruck aus der Kopplung — die Seite vergleicht ihn und trägt die
+/// Stelle dann in <see cref="TrustedAuthorities"/> ein. In den Zertifikatspeicher
+/// von Windows kommt seit v1.4 nichts mehr: was dort steht, gilt für jeden
+/// Browser auf diesem Rechner, und das ist mehr, als eine Fernsteuerung braucht.
 /// </para>
 /// </summary>
 public static class TrustImport
@@ -69,23 +65,5 @@ public static class TrustImport
         return new FetchedCertificate(
             certificate,
             Convert.ToHexString(SHA256.HashData(raw)).ToLowerInvariant());
-    }
-
-    /// <summary>
-    /// Legt es unter den vertrauenswürdigen Stammzertifikaten **dieses
-    /// Benutzers** ab.
-    ///
-    /// Nicht für den ganzen Rechner: eine Stelle, der man vertraut, gilt für
-    /// alles, was danach kommt. Diese Entscheidung darf einer für sich treffen
-    /// und nicht für alle, die diesen Rechner benutzen — und sie braucht so auch
-    /// keine Adminrechte.
-    /// </summary>
-    public static void Trust(X509Certificate2 certificate)
-    {
-        using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
-
-        store.Open(OpenFlags.ReadWrite);
-        store.Add(certificate);
-        store.Close();
     }
 }

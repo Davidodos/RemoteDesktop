@@ -36,9 +36,11 @@ RemoteDesktopSetup.AgentPaths.Adopt(
 
 var settings = AgentSettings.Load(builder.Configuration);
 
-// Der Ordner muss stehen, bevor irgendetwas hineingeschrieben wird — der
-// Installer legt ihn zwar an, aber ein Entwicklungsbau hat keinen Installer.
+// Die Ordner müssen stehen, bevor irgendetwas hineingeschrieben wird — der
+// Installer legt sie zwar an, aber ein Entwicklungsbau hat keinen Installer.
 Directory.CreateDirectory(settings.DataDirectory);
+Directory.CreateDirectory(settings.SecretDirectory);
+Directory.CreateDirectory(settings.UserDirectory);
 
 // Der Agent ist eine WinExe und hat damit keine Konsole. Ohne diese Zeile
 // schreibt der voreingestellte Logger in ein Fenster, das es nicht gibt — und
@@ -46,6 +48,16 @@ Directory.CreateDirectory(settings.DataDirectory);
 var log = new AgentLog(settings.DataDirectory);
 
 builder.Logging.AddProvider(new AgentLogProvider(log));
+
+// Seit v1.4 liegt Geheimes in `secret`, das des Benutzers in seinem Profil,
+// und `data` selbst ist nur lesbar. Was eine ältere Fassung noch in `data`
+// hatte, zieht hier um; die Rechte setzt der Agent bei jedem Start selbst.
+var separated = AgentPaths.Separate(
+    settings.DataDirectory, settings.SecretDirectory, settings.UserDirectory);
+
+var aclFailure = OperatingSystem.IsWindows()
+    ? DataFolderAcl.Apply(settings.DataDirectory, settings.SecretDirectory)
+    : null;
 
 // Wie dieser Rechner erreichbar sein soll: im Heimnetz, über Tailscale oder
 // über ein fremdes VPN. Aus derselben Datei, die auch die Oberfläche schreibt.
@@ -60,7 +72,7 @@ var profile = RemoteDesktopSetup.NetworkConfig.Read(
 var chosen = CertificateLoader.LoadOrCreate(
     settings.CertificatePath,
     settings.KeyPath,
-    new CertificateVault(settings.DataDirectory),
+    new CertificateVault(settings.SecretDirectory, publicDirectory: settings.DataDirectory),
     Environment.MachineName,
     CertificateLoader.Names(
         profile.AdvertisedAddress, Environment.MachineName, LocalAddresses.List()));
@@ -107,7 +119,8 @@ builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy => policy
 
 // ---- Kopplung und Zugangsprüfung -----------------------------------------
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton(AgentIdentity.LoadOrCreate(settings.IdentityPath));
+builder.Services.AddSingleton(AgentIdentity.LoadOrCreate(
+    settings.IdentityPath, Path.Combine(settings.DataDirectory, AgentPaths.AgentPublicFile)));
 builder.Services.AddSingleton(new ClientStore(settings.ClientsPath));
 builder.Services.AddSingleton<PairingCodes>();
 builder.Services.AddSingleton<ChallengeStore>();
@@ -117,21 +130,26 @@ builder.Services.AddSingleton<ChallengeStore>();
 // damit er beim Koppeln mitgehen kann. Beides ohne Frist und ohne Netzaufruf.
 builder.Services.AddSingleton(new PeerInbox(settings.PeersPath));
 
-// Der Ausweis der eigenen Oberfläche. Er wird hier angelegt, falls er noch
-// fehlt: der Agent läuft mit den höchsten verfügbaren Rechten und kommt in den
-// Datenordner hinein. Kommt das Fenster zuerst, legt es ihn an — gelesen wird
-// dieselbe Datei. Siehe LocalClient.
+// Der Ausweis der eigenen Oberfläche, im Profil des Benutzers. Er wird hier
+// angelegt, falls er noch fehlt; kommt das Fenster zuerst, legt es ihn an —
+// gelesen wird dieselbe Datei. Siehe LocalClient.
 var localClient = new LocalClient(settings.LocalClientPath);
 
 builder.Services.AddSingleton(localClient);
+
+// Das Geheimnis, mit dem sich das Fenster für die nur lokal erreichbaren
+// Endpunkte ausweist. Ebenfalls im Profil: der Agent schreibt es, das Fenster
+// liest es, und ein fremder Benutzer desselben Rechners kommt nicht heran.
+var localSecret = new LocalSecret(LocalSecretFile.In(settings.UserDirectory));
+
+builder.Services.AddSingleton(localSecret);
 builder.Services.AddSingleton<SessionStore>();
 
 // Wer gerade Bild oder Eingabe offen hält. Ohne diese Liste überlebte eine
 // stehende Verbindung ihren eigenen Widerruf — siehe LiveConnections.
 builder.Services.AddSingleton<LiveConnections>();
 builder.Services.AddSingleton<PairingService>();
-builder.Services.AddSingleton(provider =>
-    new ClientAuth(provider.GetRequiredService<SessionStore>(), settings.Token));
+builder.Services.AddSingleton<ClientAuth>();
 
 // Die Aktionen werden hier und nicht erst beim Auslösen geprüft: ein
 // Tippfehler im Pfad soll auffallen, solange jemand am Rechner sitzt. Wirft
@@ -156,21 +174,18 @@ builder.Services.AddTransient<ScreenSocket>();
 // Zustand pro Thread, deshalb pro Stream eine eigene Instanz.
 builder.Services.AddTransient<DesktopBinder>();
 
-// Selbst-Update über GitHub-Releases. Läuft nur, wenn ein Release-Schlüssel
-// einkompiliert ist — ohne den wird nichts geprüft und nichts getauscht.
+// Updates über GitHub-Releases, immer über den Installer. Läuft nur, wenn ein
+// Release-Schlüssel einkompiliert ist — ohne den wird nichts geprüft und
+// nichts ausgeführt. Der Installer wird im admin-only Ordner abgelegt.
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton(new ManifestVerifier(ReleaseKeys.PublicKey));
-builder.Services.AddSingleton(provider => new AgentUpdater(
-    provider.GetRequiredService<IHttpClientFactory>(),
-    provider.GetRequiredService<ManifestVerifier>(),
-    settings.UpdateRepository,
-    provider.GetRequiredService<ILogger<AgentUpdater>>()));
 builder.Services.AddSingleton(provider => new InstallerUpdate(
     provider.GetRequiredService<IHttpClientFactory>(),
     provider.GetRequiredService<ManifestVerifier>(),
     settings.UpdateRepository,
+    Path.Combine(settings.SecretDirectory, "update"),
     provider.GetRequiredService<ILogger<InstallerUpdate>>()));
-builder.Services.AddHostedService<SelfUpdater>();
+builder.Services.AddHostedService<StartupUpdate>();
 
 // Wecken als Netz-Fähigkeit: ein wacher Rechner weckt den schlafenden im
 // selben Netz. Wo „dasselbe Netz" ist, sagt die Standort-Kennung unten.
@@ -226,7 +241,7 @@ app.MapPairingEndpoints(
     settings.Port,
     // Bei jedem Aufruf frisch gelesen und nicht einmal beim Start: wer sich
     // im Fenster umbenennt, soll dafür nicht den Agent neu starten müssen.
-    () => DeviceNameFile.Read(settings.DataDirectory),
+    () => DeviceNameFile.Read(settings.UserDirectory),
     authority?.Fingerprint);
 app.MapActionEndpoints();
 app.MapWakeEndpoints();
@@ -248,6 +263,23 @@ if (localClient.Ensure() is { } keyFailure)
         "Der Ausweis dieses Rechners ließ sich nicht anlegen: {Reason}", keyFailure);
 }
 
+if (localSecret.Ensure() is { } secretFailure)
+{
+    app.Logger.LogWarning(
+        "Das lokale Geheimnis ließ sich nicht anlegen — das Fenster kann keinen "
+        + "Kopplungscode holen: {Reason}", secretFailure);
+}
+
+if (separated.Count > 0)
+{
+    app.Logger.LogInformation("Umgezogen: {Files}.", string.Join(", ", separated));
+}
+
+if (aclFailure is not null)
+{
+    app.Logger.LogWarning("Die Rechte des Datenordners ließen sich nicht setzen: {Reason}", aclFailure);
+}
+
 app.Logger.LogInformation(
     "Standort-Kennung {SiteId}, eigene MAC {Mac}.",
     site.SiteId ?? "unbekannt",
@@ -260,7 +292,7 @@ app.MapGet("/api/info", (InputExecutor executor) =>
 
     return Results.Ok(new
     {
-        hostname = DeviceNameFile.Read(settings.DataDirectory),
+        hostname = DeviceNameFile.Read(settings.UserDirectory),
 
         // Getrennt aktualisierbar heißt: die App trifft irgendwann auf einen
         // älteren Agent. Bei ungleichem `protocol` sagt sie klar, welche Seite
@@ -524,9 +556,8 @@ app.Logger.LogInformation(
     settings.TrustPort);
 
 app.Logger.LogInformation(
-    "Gekoppelte Clients: {Count}. Altes Sammel-Token: {Legacy}.",
-    app.Services.GetRequiredService<ClientStore>().List().Count,
-    settings.Token is null ? "abgeschaltet" : "noch gültig");
+    "Gekoppelte Clients: {Count}.",
+    app.Services.GetRequiredService<ClientStore>().List().Count);
 
 app.Run();
 
@@ -541,13 +572,8 @@ internal sealed record PowerRequest(string Action);
 internal sealed record MediaRequest(string Action, int? Repeat, string? Session);
 
 /// <summary>Konfiguration des Agents, validiert beim Start statt beim ersten Zugriff.</summary>
-/// <param name="Token">
-/// Das alte geteilte Token. Seit Phase 10 freiwillig: fehlt es, kommt man nur
-/// noch über eine Kopplung herein. Es bleibt bis Phase 12 unterstützt, damit
-/// sich niemand vom eigenen Rechner aussperrt.
-/// </param>
 /// <param name="ClientsPath">Liste der gekoppelten Clients.</param>
-/// <param name="IdentityPath">Privater Schlüssel des Agents selbst.</param>
+/// <param name="IdentityPath">Privater Schlüssel des Agents selbst — in <paramref name="SecretDirectory"/>.</param>
 /// <param name="ActionsPath">
 /// Was dieser Rechner auf Zuruf tun darf. Fehlt die Datei, gibt es eben keine
 /// Aktionen — das ist der Normalfall auf einem frisch eingerichteten Rechner.
@@ -568,20 +594,29 @@ internal sealed record MediaRequest(string Action, int? Repeat, string? Session)
 /// der ohne VPN auskommen wollte.
 /// </param>
 /// <param name="DataDirectory">
-/// Wo die selbst ausgestellten Zertifikate liegen. Vorgabe ist der Ordner des
-/// konfigurierten Zertifikats, sonst <c>C:\ProgramData\RemoteDesktopAgent</c>.
+/// <c>data\</c> neben der Programmdatei — für jeden lesbar: Kopplungen,
+/// öffentliche Zertifikate, Log.
+/// </param>
+/// <param name="SecretDirectory">
+/// <c>data\secret</c> — nur Administratoren und System: private Schlüssel,
+/// Zertifikate mit Schlüssel, der heruntergeladene Installer.
+/// </param>
+/// <param name="UserDirectory">
+/// <c>%localappdata%\RemoteDesktop</c> des angemeldeten Benutzers — was das
+/// Fenster ohne Rechte schreibt: Ausweis, Gerätename, Kürzel, lokales Geheimnis.
 /// </param>
 /// <param name="TrustPort">
 /// Der unverschlüsselte Port, auf dem ausschließlich das eigene CA-Zertifikat
 /// abzuholen ist. Er wird nur geöffnet, wenn es eins gibt.
 /// </param>
 internal sealed record AgentSettings(
-    string? Token,
     int Port,
     int TrustPort,
     string? CertificatePath,
     string? KeyPath,
     string DataDirectory,
+    string SecretDirectory,
+    string UserDirectory,
     string NetworkConfigPath,
     string FfmpegPath,
     string ClientsPath,
@@ -594,9 +629,6 @@ internal sealed record AgentSettings(
 {
     public static AgentSettings Load(IConfiguration configuration)
     {
-        var token = configuration["Agent:Token"]
-                    ?? Environment.GetEnvironmentVariable("REMOTEDESKTOP_TOKEN");
-
         var port = configuration.GetValue("Agent:Port", 8443);
         var trustPort = configuration.GetValue("Agent:TrustPort", 8442);
 
@@ -613,15 +645,19 @@ internal sealed record AgentSettings(
             configuration["Agent:DataDirectory"], DefaultDataDirectory, LegacyDataDirectory)
             ?? DefaultDataDirectory;
 
+        var secretDirectory = AgentPaths.SecretIn(dataDirectory);
+        var userDirectory = AgentPaths.UserDirectory;
+
         // Ohne Eintrag: dorthin legt „Zertifikat holen" die Dateien von
-        // Tailscale. Liegen sie nicht da, stellt der Agent sich selbst eins aus
-        // (siehe CertificateLoader) — der Eintrag ist also kein Zwang, sondern
-        // die Stelle, an der nachgesehen wird.
+        // Tailscale — das Zertifikat in `data`, den Schlüssel in `secret`.
+        // Liegen sie nicht da, stellt der Agent sich selbst eins aus (siehe
+        // CertificateLoader) — der Eintrag ist also kein Zwang, sondern die
+        // Stelle, an der nachgesehen wird.
         certificatePath = AgentPaths.Redirect(certificatePath, dataDirectory, LegacyDataDirectory)
                           ?? Path.Combine(dataDirectory, "cert.crt");
 
-        keyPath = AgentPaths.Redirect(keyPath, dataDirectory, LegacyDataDirectory)
-                  ?? Path.Combine(dataDirectory, "cert.key");
+        keyPath = AgentPaths.Redirect(keyPath, secretDirectory, LegacyDataDirectory)
+                  ?? Path.Combine(secretDirectory, "cert.key");
 
         var networkConfigPath = configuration["Agent:NetworkConfigPath"]
                                 ?? Path.Combine(
@@ -638,13 +674,13 @@ internal sealed record AgentSettings(
             configuration["Agent:ClientsPath"], dataDirectory, AgentPaths.ClientsFileName);
 
         var identityPath = Resolve(
-            configuration["Agent:IdentityPath"], dataDirectory, AgentPaths.IdentityFile);
+            configuration["Agent:IdentityPath"], secretDirectory, AgentPaths.IdentityFile);
 
         // Die beiden Hälften der Gegenrichtung. Nicht konfigurierbar: sie sind
         // Zustand und kein Einstellungspunkt, und wo Zustand liegt, steht in
         // AgentPaths.
         var peersPath = Path.Combine(dataDirectory, AgentPaths.PeersFileName);
-        var localClientPath = ClientKeyFile.In(dataDirectory);
+        var localClientPath = ClientKeyFile.In(userDirectory);
         var actionsPath = Resolve(
             configuration["Agent:ActionsPath"], AppContext.BaseDirectory, "actions.json");
 
@@ -652,16 +688,12 @@ internal sealed record AgentSettings(
         var updateRepository = configuration["Agent:UpdateRepository"] ?? "Davidodos/RemoteDesktop";
 
         return new AgentSettings(
-            token, port, trustPort, certificatePath, keyPath, dataDirectory, networkConfigPath,
-            ffmpegPath, clientsPath, identityPath, peersPath, localClientPath, actionsPath,
-            broadcastAddress, updateRepository);
+            port, trustPort, certificatePath, keyPath, dataDirectory, secretDirectory, userDirectory,
+            networkConfigPath, ffmpegPath, clientsPath, identityPath, peersPath, localClientPath,
+            actionsPath, broadcastAddress, updateRepository);
     }
 
-    /// <summary>
-    /// Der Datenordner: <c>data\</c> neben der Programmdatei. Nur Administratoren
-    /// und das System dürfen hinein — der Schlüssel des Agents liegt im Klartext,
-    /// und wer ihn hat, ist der Agent.
-    /// </summary>
+    /// <summary>Der Datenordner: <c>data\</c> neben der Programmdatei.</summary>
     private static string DefaultDataDirectory => AgentPaths.For(AppContext.BaseDirectory);
 
     /// <summary>Wo die Daten bis v1.2.0 lagen.</summary>

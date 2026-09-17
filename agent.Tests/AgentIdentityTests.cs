@@ -45,6 +45,27 @@ public class AgentIdentityTests : IDisposable
     }
 
     [Fact]
+    public void Der_oeffentliche_Teil_landet_daneben_fuer_das_Fenster()
+    {
+        // Arrange — das Fenster darf den privaten Schlüssel nicht lesen und
+        // braucht trotzdem den Fingerabdruck dieses Rechners.
+        var publicPath = _path + ".pub";
+
+        try
+        {
+            // Act
+            var identity = AgentIdentity.LoadOrCreate(_path, publicPath);
+
+            // Assert
+            Assert.Equal(identity.PublicKey, File.ReadAllText(publicPath));
+        }
+        finally
+        {
+            File.Delete(publicPath);
+        }
+    }
+
+    [Fact]
     public void Zwei_Rechner_haben_verschiedene_Fingerabdruecke()
     {
         // Act

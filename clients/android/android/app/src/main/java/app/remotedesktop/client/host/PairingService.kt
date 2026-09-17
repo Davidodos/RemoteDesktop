@@ -49,7 +49,6 @@ class PairingService(
         code: String,
         label: String,
         publicKey: String,
-        scopes: List<String>?,
     ): PairResult {
         if (!codes.tryRedeem(code)) {
             return PairResult(PairOutcome.BAD_CODE)
@@ -65,14 +64,6 @@ class PairingService(
             return PairResult(PairOutcome.BAD_PUBLIC_KEY)
         }
 
-        // Was ein Client anfordert, das dieses Gerät gar nicht kennt, wird
-        // stillschweigend weggelassen statt abgelehnt: die App fragt überall
-        // dieselbe Liste an, und ein Handy kann davon nun einmal weniger. Ein
-        // Fehlschlag hier hieße, dass sich ein Handy nie koppeln lässt, solange
-        // die App auch nach „power" fragt.
-        val wanted = scopes?.filter(HostScopes::isKnown).orEmpty()
-        val granted = wanted.ifEmpty { HostScopes.ALL }
-
         val moment = now()
 
         // Die Kennung kommt aus dem Schlüssel selbst. Koppelt dasselbe Gerät
@@ -82,7 +73,9 @@ class PairingService(
             id = shortFingerprint(Base64.getDecoder().decode(publicKey)),
             label = trimmed,
             publicKey = publicKey,
-            scopes = granted,
+            // Wer koppelt, bekommt alles, was dieses Gerät kann. Eine Auswahl
+            // gab es bis v1.4 als Parameter, und niemand nutzte sie.
+            scopes = HostScopes.ALL,
             createdAt = moment,
             lastSeenAt = moment,
         )

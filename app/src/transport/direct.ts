@@ -1,8 +1,8 @@
 import { clientPrivateKey } from '../lib/clientKey.ts'
 import type { Device } from '../lib/types.ts'
 import {
+  noCredentials,
   pairedCredentials,
-  staticCredentials,
   type Credentials,
   type SessionExchange,
 } from './credentials.ts'
@@ -25,26 +25,20 @@ export function directTransport(device: Device, credentials = credentialsFor(dev
 }
 
 /**
- * Wählt den Ausweis anhand dessen, was am Gerät hinterlegt ist. Gekoppelt
- * gewinnt: steht beides da, ist das Token nur ein Überbleibsel aus der Zeit
- * vor der Kopplung.
+ * Der Ausweis zu einem Gerät: die Anmeldung mit dem Schlüssel aus der Kopplung.
  *
  * <p>
  * **Entschieden wird allein an `clientId`** — daran, dass dieses Gerät
- * gekoppelt *ist*. Vorher hing die Entscheidung zusätzlich daran, ob im
- * Speicher der App ein privater Schlüssel liegt, und das war seit 31h die
- * falsche Frage: der Ausweis gehört seither der Gegenstelle dieses Geräts
- * (`clientkey.txt` am Handy, `{app}\data\clientkey.json` am Rechner), und die
- * antwortet nur asynchron. Solange noch ein Rest aus der Zeit davor im
- * Speicher lag, fiel es nicht auf. Nach einer wirklich sauberen
- * Neuinstallation fiel jede Anfrage auf `staticCredentials('')` zurück — ein
- * leeres Bearer-Token —, und der Agent notierte für jede einzelne „Abgelehnt
- * (Nicht angemeldet.)".
+ * gekoppelt *ist*. Der Schlüssel dazu gehört der Gegenstelle dieses Geräts
+ * (`clientkey.txt` am Handy, `%localappdata%\RemoteDesktop\clientkey.json`
+ * am Rechner) und wird erst bei der Anmeldung geholt. Ein Eintrag ohne
+ * `clientId` kommt seit v1.4 nicht mehr durch `parseDevices`; steht doch
+ * einer da, bekommt er keinen leeren Ausweis, sondern eine Absage.
  * </p>
  */
 export function credentialsFor(device: Device): Credentials {
   if (device.clientId === undefined) {
-    return staticCredentials(device.token ?? '')
+    return noCredentials()
   }
 
   // Ändert sich eines dieser drei Stücke, ist es eine andere Gegenstelle und

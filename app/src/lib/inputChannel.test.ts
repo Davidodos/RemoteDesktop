@@ -1,14 +1,32 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { InputChannel } from './inputChannel.ts'
-import type { Device } from './types.ts'
+import { InputChannel as Channel } from './inputChannel.ts'
+import { directTransport } from '../transport/direct.ts'
+import type { ConnectionState, Device } from './types.ts'
 
 const DEVICE: Device = {
   id: 'pc',
   name: 'PC',
   host: 'pc.example.ts.net',
   port: 8443,
-  token: 'geheim',
+  clientId: 'handy-1',
   canWake: true,
+}
+
+/** Ein Ausweis, der schon vorliegt — so öffnet der Socket ohne Anmeldung. */
+const TRANSPORT = directTransport(DEVICE, {
+  peek: () => 'geheim',
+  obtain: () => Promise.resolve('geheim'),
+  invalidate: () => {},
+})
+
+class InputChannel extends Channel {
+  constructor(
+    device: Device,
+    onStateChange: (state: ConnectionState) => void,
+    onError: (message: string) => void,
+  ) {
+    super(device, onStateChange, onError, TRANSPORT)
+  }
 }
 
 /** WebSocket-Ersatz, der nichts verbindet, sondern nur mitschreibt. */

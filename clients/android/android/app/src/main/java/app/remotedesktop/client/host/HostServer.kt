@@ -22,7 +22,6 @@ import org.json.JSONObject
 class HostServer(
     private val identity: HostIdentity,
     private val pairing: PairingService,
-    private val codes: PairingCodes,
     private val material: HostCertificate.Material,
     /**
      * Wie dieses Gerät heißt — als Frage und nicht als Wert: der Name ist
@@ -218,14 +217,6 @@ class HostServer(
             return HttpServer.Response(204)
         }
 
-        if (HostScopes.LOCAL_ONLY.any { HostScopes.matches(request.path, it) }) {
-            return if (request.local) {
-                route(request)
-            } else {
-                HttpServer.Response.error(403, "Dieser Aufruf ist nur am Gerät selbst möglich.")
-            }
-        }
-
         if (HostScopes.WITHOUT_CREDENTIAL.any { HostScopes.matches(request.path, it) }) {
             return route(request)
         }
@@ -275,18 +266,11 @@ class HostServer(
 
         request.path == "/api/info" && request.method == "GET" -> info()
 
-        request.path == "/api/pair/code" && request.method == "POST" -> issueCode()
-
         request.path == "/api/pair" && request.method == "POST" -> pair(request)
 
         request.path == "/api/session/challenge" && request.method == "POST" -> challenge(request)
 
         request.path == "/api/session" && request.method == "POST" -> openSession(request)
-
-        request.path == "/api/clients" && request.method == "GET" -> listClients()
-
-        request.path.startsWith("/api/clients/") && request.method == "DELETE" ->
-            revoke(request.path.removePrefix("/api/clients/"))
 
         request.path == "/api/unpair" && request.method == "DELETE" -> unpair(request)
 
@@ -656,40 +640,13 @@ class HostServer(
         return HttpServer.Response.json(200, json.toString())
     }
 
-    private fun issueCode(): HttpServer.Response {
-        val code = codes.issue()
-        val host = address()
-
-        val json = JSONObject()
-            .put("code", code)
-            .put("expiresInSeconds", PairingCodes.LIFETIME_MS / 1000)
-            .put(
-                "pairingUri",
-                if (host.isNullOrBlank()) {
-                    JSONObject.NULL
-                } else {
-                    // Der tatsächliche Port, nicht der gewünschte. Sie sind
-                    // fast immer gleich — aber wenn 8443 belegt war, steht im
-                    // QR-Code sonst eine Adresse, die ins Leere führt.
-                    PairingUri.build(host, boundPort, code, material.fingerprint)
-                },
-            )
-
-        return HttpServer.Response.json(200, json.toString())
-    }
-
     private fun pair(request: HttpServer.Request): HttpServer.Response {
         val body = json(request) ?: return badJson()
-
-        val scopes = body.optJSONArray("scopes")?.let { array ->
-            (0 until array.length()).map { array.getString(it) }
-        }
 
         val result = pairing.pair(
             body.optString("code"),
             body.optString("label"),
             body.optString("publicKey"),
-            scopes,
         )
 
         val client = result.client
@@ -778,40 +735,27 @@ class HostServer(
         return HttpServer.Response.json(200, json.toString())
     }
 
-    private fun listClients(): HttpServer.Response {
-        val array = JSONArray()
-
-        pairing.listClients().forEach { client ->
-            array.put(
-                JSONObject()
-                    .put("id", client.id)
-                    .put("label", client.label)
-                    .put("scopes", JSONArray(client.scopes))
-                    .put("createdAt", client.createdAt)
-                    .put("lastSeenAt", client.lastSeenAt),
-            )
-        }
-
-        return HttpServer.Response.json(200, JSONObject().put("clients", array).toString())
-    }
-
     /**
      * Widerrufen heißt: ab jetzt **und** rückwirkend auf alles, was schon
      * steht. Der Eintrag allein zu löschen genügt nicht — Bild und Eingabe
      * laufen über Dauerverbindungen, und keine davon wird nach dem Aufbau noch
      * einmal geprüft.
      */
-    private fun revoke(id: String): HttpServer.Response {
+    /**
+     * Kopplungscode, Clientliste und Widerruf haben seit v1.4 **keine Route**
+     * mehr: die App dieses Handys ruft sie über das Plugin auf, und über das
+     * Netz gab es sie nur, weil der Rechner sie hat — dort braucht das Fenster
+     * sie. Eine Route, die „nur lokal" erreichbar ist, ist eine Route, die
+     * jede App auf dem Handy erreicht.
+     */
+    internal fun revoke(id: String): Boolean {
         if (!pairing.revoke(id)) {
-            return HttpServer.Response.error(404, "Unbekannter Client.")
+            return false
         }
 
-        val closed = live.close(id)
+        live.close(id)
 
-        return HttpServer.Response.json(
-            200,
-            JSONObject().put("revoked", id).put("closed", closed).toString(),
-        )
+        return true
     }
 
     // ---- Der unverschlüsselte Port ---------------------------------------

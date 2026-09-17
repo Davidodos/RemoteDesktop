@@ -79,18 +79,11 @@ icacls C:\Program Files\RemoteDesktop\data\cert.key /grant "${env:USERNAME}:(R)"
 > folgenden Doppelpunkt noch zum Variablennamen und `icacls` bekommt
 > `Ungültiger Parameter: "(R)"`.
 
-## 4. Token erzeugen
+## 4. Kein Token
 
-Seit Phase 10 ist das **freiwillig**: gekoppelte Clients (siehe „Kopplung"
-unten) brauchen es nicht. Solange noch ein Gerät über die NAS-Geräteliste
-angebunden ist, muss es aber gesetzt sein — sonst sperrst du dich von dem
-Rechner aus, an dem du gerade nicht sitzt. **Ausgabe notieren.**
-
-```powershell
-$token = -join ((1..48) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
-$token
-[Environment]::SetEnvironmentVariable("REMOTEDESKTOP_TOKEN", $token, "User")
-```
+Es gibt keins. Der Agent kennt nur gekoppelte Geräte (siehe „Kopplung" unten);
+das alte `Agent:Token` / `REMOTEDESKTOP_TOKEN` aus der Zeit vor der Kopplung
+wird seit v1.4 nicht mehr gelesen.
 
 ## 5. Firewall öffnen
 
@@ -194,52 +187,46 @@ einzeln widerrufen, ohne die anderen Geräte anzufassen.
 
 Ablauf:
 
-1. **Am Rechner** einen Code anfordern. Er gilt fünf Minuten, lässt sich einmal
-   verwenden und wird nach fünf Fehlversuchen verworfen:
+1. **Am Rechner** im Fenster unter „Geräte" den Code anzeigen lassen. Er gilt
+   fünf Minuten, lässt sich einmal verwenden und wird nach fünf Fehlversuchen
+   verworfen. Dahinter steht `POST /api/pair/code`, erreichbar nur von
+   127.0.0.1 **und** mit dem Geheimnis aus
+   `%localappdata%\RemoteDesktop\local.secret` als Bearer-Token — von Hand:
 
    ```powershell
-   Invoke-RestMethod -Method Post https://localhost:8443/api/pair/code
+   $secret = Get-Content "$env:LOCALAPPDATA\RemoteDesktop\local.secret"
+   Invoke-RestMethod -Method Post https://localhost:8443/api/pair/code -Headers @{ Authorization = "Bearer $secret" }
    ```
-
-   Der Code steht auch im Log des Agents. `/api/pair/code` und `/api/clients`
-   sind **nur vom Rechner selbst** erreichbar — über das Netz antworten sie mit
-   403. Ab Phase 11 macht das ein Knopf im Tray-Fenster.
 
 2. **Auf dem Handy** in der App „Gerät koppeln" wählen, Rechnernamen und Code
    eintippen. Fertig — ab dann weist sich die App mit einer Unterschrift aus.
 
-Verwalten (ebenfalls nur lokal):
-
-```powershell
-Invoke-RestMethod https://localhost:8443/api/clients
-Invoke-RestMethod -Method Delete https://localhost:8443/api/clients/<id>
-```
-
-Ein Widerruf wirkt sofort: die laufende Sitzung des Geräts wird mitgeschlossen.
+Verwalten geht im Fenster unter „Geräte" (dahinter `GET /api/clients` und
+`DELETE /api/clients/<id>`, mit demselben Geheimnis). Ein Widerruf wirkt
+sofort: die laufende Sitzung des Geräts wird mitgeschlossen.
 
 ### Rechte
 
-Jeder gekoppelte Client bekommt eine Teilmenge von `screen`, `input`, `media`,
-`power`, `actions`, `wake`. Fehlt eines, antwortet der Agent mit 403 statt die
-Aktion auszuführen. Das alte Sammel-Token kennt diese Trennung nicht und darf
-alles — auch deshalb wird es abgelöst.
+Jeder gekoppelte Client bekommt `screen`, `input`, `media`, `power`,
+`actions`, `wake`. Die Zuordnung Pfad → Recht ist eine Whitelist: ein Pfad,
+der nirgends steht, wird abgelehnt statt durchgelassen.
 
 ## API
 
 Alles außer `/health` und den Kopplungs-Endpunkten verlangt einen Ausweis — als
 Header `Authorization: Bearer <token>` oder bei WebSockets als `?token=<token>`
-(Browser können bei WebSockets keine Header setzen). Das ist entweder das
-Sitzungstoken aus `/api/session` oder das alte Sammel-Token.
+(Browser können bei WebSockets keine Header setzen). Das ist das Sitzungstoken
+aus `/api/session`.
 
 | Endpoint | Zweck |
 |---|---|
 | `GET /health` | Erreichbarkeit, ohne Auth |
-| `POST /api/pair/code` | Kopplungscode anzeigen — **nur lokal** |
+| `POST /api/pair/code` | Kopplungscode anzeigen — **nur lokal, mit `local.secret`** |
 | `POST /api/pair` | Koppeln: `{"code","label","publicKey"}`, ohne Auth |
 | `POST /api/session/challenge` | Challenge holen: `{"clientId"}`, ohne Auth |
 | `POST /api/session` | Anmelden: `{"clientId","nonce","signature"}`, ohne Auth |
-| `GET /api/clients` | Gekoppelte Geräte — **nur lokal** |
-| `DELETE /api/clients/{id}` | Widerrufen — **nur lokal** |
+| `GET /api/clients` | Gekoppelte Geräte — **nur lokal, mit `local.secret`** |
+| `DELETE /api/clients/{id}` | Widerrufen — **nur lokal, mit `local.secret`** |
 | `GET /api/info` | Hostname, Monitorliste, virtueller Desktop |
 | `POST /api/power` | `{"action":"sleep\|shutdown\|restart\|lock"}` |
 | `POST /api/media` | `{"action":"playpause\|next\|prev\|stop\|volup\|voldown\|mute","repeat":1}` |
@@ -395,19 +382,20 @@ ersten, der wirklich Bilder liefert: `h264_nvenc` (NVIDIA), `h264_qsv` (Intel),
 `h264_amf` (AMD), `libx264` (CPU). Welcher es geworden ist, steht in der
 Statistik-Anzeige der App.
 
-## Selbst-Update über GitHub-Releases
+## Update über GitHub-Releases
 
 Der Agent prüft **15 Sekunden nach jedem Start**, ob im jüngsten Release des
-Repositorys eine andere Fassung liegt, lädt sie, und tauscht sich selbst aus.
-Danach wird nicht mehr von allein geprüft: ein laufender Agent soll sich nicht
-mitten in einer Sitzung wegtauschen, und der Weg zu einer neuen Fassung ist
-ohnehin ein Neustart. Wer nicht warten will, drückt in der App auf
-*Ein/Aus → Auf Updates prüfen* (`POST /api/update`).
+Repositorys eine andere Fassung liegt, lädt den Installer nach
+`data\secret\update` und lässt ihn laufen — der erneuert Agent, Fenster und
+Oberfläche in einem Zug (`agent/Services/InstallerUpdate.cs`,
+`StartupUpdate.cs`). Danach wird nicht mehr von allein geprüft: ein laufender
+Agent soll sich nicht mitten in einer Sitzung wegtauschen, und der Weg zu einer
+neuen Fassung ist ohnehin ein Neustart. Wer nicht warten will, drückt in der
+Geräteliste eines gekoppelten Geräts auf *Aktualisieren* (`POST /api/update/app`).
 
-Die Datei `RemoteDesktopAgent.exe.update` merkt sich die zuletzt versuchte
-Fassung und verhindert eine Neustartschleife, falls der Tausch scheitert. Die
-alte Fassung bleibt als `RemoteDesktopAgent.exe.old` liegen — der Weg zurück
-ist ein Umbenennen.
+`data\secret\update\attempted.txt` merkt sich die zuletzt von allein
+versuchte Fassung und verhindert eine Neustartschleife, falls der Installer
+scheitert; ein Druck auf den Knopf versucht es trotzdem noch einmal.
 
 ### Warum eine Signatur und nicht nur eine Prüfsumme
 
@@ -421,7 +409,7 @@ einen öffentlichen Schlüssel, der **in den Agent kompiliert** ist; der private
 liegt ausschließlich als Repository-Secret.
 
 **Im Auslieferungszustand ist der Schlüssel leer, und damit ist das
-Selbst-Update aus.** Der Agent sagt das beim Start im Log. Einrichten:
+Update aus.** Der Agent sagt das beim Start im Log. Einrichten:
 
 ```bash
 node scripts/release-key.mjs

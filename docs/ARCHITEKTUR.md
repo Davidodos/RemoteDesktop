@@ -240,7 +240,8 @@ Hardware-Encoder und wenn WebRTC keine Verbindung bekommt.
 - Tailscale-ACL: nur das Handy darf Port 8443 auf PC/Laptop erreichen.
 - Kopplung pro Gerät (Phase 10): eigenes Schlüsselpaar je Client, der Agent
   kennt nur den öffentlichen Teil. Kein geteiltes Token mehr.
-- Selbst-Update nur gegen ein Manifest mit gültiger ECDSA-Signatur (Phase 14).
+- Updates nur gegen ein Manifest mit gültiger ECDSA-Signatur (Phase 14) —
+  seit v1.4 ausschließlich über den Installer, nie als Tausch der `.exe`.
 - Der Agent läuft mit den Rechten, die er braucht — Dienst im
   Benutzerkontext für Input-Injection, erhöhte Rechte nur für Power-Aktionen.
 - Tokens und Schlüssel niemals im Repo. Ausführlich in `docs/SICHERHEIT.md`.

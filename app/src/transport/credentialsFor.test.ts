@@ -50,14 +50,17 @@ describe('credentialsFor', () => {
     expect(credentials.peek()).toBeUndefined()
   })
 
-  test('ohne Kopplung bleibt es beim alten Token', () => {
-    // Arrange — ein Eintrag aus der Zeit vor der Kopplung.
-    const alt: Device = { ...paired, token: 'ge heim' }
+  test('ohne Kopplung gibt es keinen Ausweis, sondern eine Absage', async () => {
+    // Arrange — ein Eintrag ohne clientId, wie er eigentlich nie durch
+    // parseDevices kommt.
+    const alt: Device = { ...paired }
 
     delete alt.clientId
 
-    // Act & Assert
-    expect(credentialsFor(alt).peek()).toBe('ge heim')
+    // Act & Assert — kein leeres Token, das an jeder Aufrufstelle wie ein
+    // gültiges aussähe.
+    expect(credentialsFor(alt).peek()).toBeUndefined()
+    await expect(credentialsFor(alt).obtain()).rejects.toThrow('nicht gekoppelt')
   })
 
   /**

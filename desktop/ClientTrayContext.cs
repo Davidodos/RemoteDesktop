@@ -22,7 +22,6 @@ namespace RemoteDesktopClient;
 public sealed class ClientTrayContext : ApplicationContext
 {
     private readonly NotifyIcon _tray;
-    private readonly LocalAgent _agent = new(LocalAgent.ConfiguredPort());
     private readonly WindowsProbe _probe = new();
     private readonly string? _appDirectory;
 
@@ -102,7 +101,6 @@ public sealed class ClientTrayContext : ApplicationContext
         {
             _window = new ShellWindow(
                 _probe,
-                _agent,
                 new WindowsAutostart(Environment.ProcessPath ?? string.Empty),
                 _appDirectory);
         }
@@ -165,7 +163,6 @@ public sealed class ClientTrayContext : ApplicationContext
         if (disposing)
         {
             _tray.Dispose();
-            _agent.Dispose();
             _window?.Dispose();
         }
 

@@ -1,6 +1,8 @@
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using RemoteDesktopSetup;
 
 namespace RemoteDesktopClient;
 
@@ -20,6 +22,9 @@ namespace RemoteDesktopClient;
 /// Deshalb wird das Zertifikat auf <c>127.0.0.1</c> auch nicht geprüft. Wer
 /// dort lauscht, hat den Port 8443 dieses Rechners belegt — dann liefe der
 /// eigene Agent gar nicht, und die Fernsteuerung wäre das kleinste Problem.
+/// Ausgewiesen wird sich trotzdem: jeder Aufruf trägt das Geheimnis aus
+/// <see cref="LocalSecretFile"/>, ohne das der Agent die lokalen Wege seit
+/// v1.4 nicht mehr öffnet — die Loopback-Adresse hat jeder Prozess.
 /// </para>
 ///
 /// <para>
@@ -141,8 +146,8 @@ public static class LocalNode
     {
         try
         {
-            using var response = await Client.GetAsync(
-                $"https://127.0.0.1:{AgentData.AgentPort}/health", cancellationToken);
+            using var response = await Client.SendAsync(
+                Request(HttpMethod.Get, "/health"), cancellationToken);
 
             return response.IsSuccessStatusCode;
         }
@@ -164,10 +169,8 @@ public static class LocalNode
     /// </summary>
     public static async Task<JsonElement> CodeAsync(CancellationToken cancellationToken = default)
     {
-        using var response = await Client.PostAsync(
-            $"https://127.0.0.1:{AgentData.AgentPort}/api/pair/code",
-            content: null,
-            cancellationToken);
+        using var response = await Client.SendAsync(
+            Request(HttpMethod.Post, "/api/pair/code"), cancellationToken);
 
         response.EnsureSuccessStatusCode();
 
@@ -198,8 +201,8 @@ public static class LocalNode
     {
         try
         {
-            using var response = await Client.GetAsync(
-                $"https://127.0.0.1:{AgentData.AgentPort}{path}", cancellationToken);
+            using var response = await Client.SendAsync(
+                Request(HttpMethod.Get, path), cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -232,13 +235,14 @@ public static class LocalNode
     private static async Task<bool> PostAsync(
         string path, object payload, CancellationToken cancellationToken)
     {
-        using var content = new StringContent(
+        using var request = Request(HttpMethod.Post, path);
+
+        request.Content = new StringContent(
             JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         try
         {
-            using var response = await Client.PostAsync(
-                $"https://127.0.0.1:{AgentData.AgentPort}{path}", content, cancellationToken);
+            using var response = await Client.SendAsync(request, cancellationToken);
 
             response.EnsureSuccessStatusCode();
 
@@ -262,8 +266,8 @@ public static class LocalNode
     {
         try
         {
-            using var response = await Client.DeleteAsync(
-                $"https://127.0.0.1:{AgentData.AgentPort}{path}", cancellationToken);
+            using var response = await Client.SendAsync(
+                Request(HttpMethod.Delete, path), cancellationToken);
 
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -279,6 +283,24 @@ public static class LocalNode
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Ein Aufruf an den Agent nebenan, mit dem lokalen Geheimnis. Es wird bei
+    /// jedem Aufruf gelesen: der Agent legt es beim Start an, und das Fenster
+    /// ist oft vorher da.
+    /// </summary>
+    private static HttpRequestMessage Request(HttpMethod method, string path)
+    {
+        var request = new HttpRequestMessage(
+            method, $"https://127.0.0.1:{AgentData.AgentPort}{path}");
+
+        if (LocalSecretFile.Read(LocalSecretFile.In(Elevation.UserDirectory)) is { } secret)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", secret);
+        }
+
+        return request;
     }
 
     private static HttpClient Build()

@@ -63,31 +63,31 @@ public static class AgentData
     /// Wie dieser Rechner heißt: der gewählte Name, sonst der von Windows.
     /// Dieselbe Datei, die auch der Agent für <c>/api/info</c> liest.
     /// </summary>
-    public static string DeviceName() => DeviceNameFile.Read(Elevation.DataDirectory);
+    public static string DeviceName() => DeviceNameFile.Read(Elevation.UserDirectory);
 
     /// <summary>Ob schon jemand einen Namen vergeben hat.</summary>
-    public static bool DeviceNameSet() => DeviceNameFile.IsSet(Elevation.DataDirectory);
+    public static bool DeviceNameSet() => DeviceNameFile.IsSet(Elevation.UserDirectory);
 
     /// <summary>
     /// Den Namen setzen. Er wirkt sofort — auch bei laufendem Agent, weil der
     /// die Datei bei jedem Aufruf frisch liest.
     /// </summary>
     public static void SetDeviceName(string name) =>
-        DeviceNameFile.Write(Elevation.DataDirectory, name);
+        DeviceNameFile.Write(Elevation.UserDirectory, name);
 
     /// <summary>
     /// Das Kürzel für den Vollzugriff auf einen anderen Rechner —
     /// <c>null</c>, solange keins vergeben wurde. Siehe
     /// <see cref="HotkeyFile"/>.
     /// </summary>
-    public static string? Hotkey() => HotkeyFile.Read(Elevation.DataDirectory);
+    public static string? Hotkey() => HotkeyFile.Read(Elevation.UserDirectory);
 
     /// <summary>
     /// Das Kürzel setzen. Es wirkt sofort: die Seite liest es beim Start und
     /// bekommt es hier bestätigt.
     /// </summary>
     public static void SetHotkey(string hotkey) =>
-        HotkeyFile.Write(Elevation.DataDirectory, hotkey);
+        HotkeyFile.Write(Elevation.UserDirectory, hotkey);
 
     /// <summary>
     /// Der Ausweis dieses Rechners als Client — angelegt, falls es ihn noch
@@ -108,7 +108,7 @@ public static class AgentData
     {
         try
         {
-            return ClientKeyFile.LoadOrCreate(ClientKeyFile.In(Elevation.DataDirectory));
+            return ClientKeyFile.LoadOrCreate(ClientKeyFile.In(Elevation.UserDirectory));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -117,29 +117,53 @@ public static class AgentData
     }
 
     /// <summary>
-    /// Trägt die Oberfläche der Gegenseite in die <c>clients.json</c> ein.
+    /// Trägt die Oberfläche der Gegenseite in die <c>clients.json</c> ein —
+    /// erhöht, mit Rückfrage von Windows: das Fenster darf in <c>data</c> nur
+    /// lesen.
     ///
     /// Nur bei gestopptem Agent: läuft er, hält er die Liste im Speicher, und
     /// was hier geschrieben würde, wäre beim nächsten Mal weg. Wer entscheidet,
     /// steht in <see cref="LocalNode"/>.
     /// </summary>
-    public static void Grant(string publicKey, string label) =>
-        ClientsFile.Grant(
-            ClientsFile.In(Elevation.DataDirectory),
-            publicKey,
-            label,
-            DateTimeOffset.UtcNow);
+    public static void Grant(string publicKey, string label)
+    {
+        var prepared = Path.Combine(
+            Path.GetTempPath(), $"remotedesktop-grant-{Guid.NewGuid():N}.json");
+
+        try
+        {
+            File.WriteAllText(prepared, System.Text.Json.JsonSerializer.Serialize(
+                new Elevation.GrantRequest(publicKey, label)));
+
+            Require(Elevation.Run(AdminTask.Grant, prepared));
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(prepared);
+            }
+            catch (IOException)
+            {
+                // Temp-Ordner; Windows räumt ihn auf.
+            }
+        }
+    }
 
     /// <summary>
     /// Nimmt ein Gerät aus der <c>clients.json</c>. Nur bei gestopptem
     /// Agent — siehe <see cref="Grant"/>.
     /// </summary>
-    public static void Revoke(string clientId)
-    {
-        var path = ClientsFile.In(Elevation.DataDirectory);
+    public static void Revoke(string clientId) =>
+        Require(Elevation.Run(AdminTask.Revoke, clientId));
 
-        ClientsFile.Write(
-            path, ClientsFile.Read(path).Where(client => client.Id != clientId));
+    private static void Require(RunResult result)
+    {
+        if (!result.Ok)
+        {
+            throw new InvalidOperationException(
+                result.Message.Length > 0 ? result.Message : "Windows hat den Schritt abgelehnt.");
+        }
     }
 
     /// <summary>
@@ -199,8 +223,9 @@ public static class AgentData
     /// </summary>
     private static string? AuthorityFingerprint()
     {
-        if (File.Exists(Path.Combine(Elevation.DataDirectory, "cert.crt"))
-            && File.Exists(Path.Combine(Elevation.DataDirectory, "cert.key")))
+        // Der Schlüssel dazu liegt in `secret`, wo das Fenster nicht
+        // hineinsieht — das Zertifikat allein genügt als Auskunft.
+        if (File.Exists(Path.Combine(Elevation.DataDirectory, "cert.crt")))
         {
             return null;
         }
@@ -230,10 +255,13 @@ public static class AgentData
     /// seinen öffentlichen Schlüssel. Sie bleibt gleich, auch wenn der Rechner
     /// umbenannt wird oder eine andere Adresse bekommt — deshalb merkt sich die
     /// Gegenseite sie statt des Namens.
+    ///
+    /// Aus <c>agent.pub</c>, das der Agent neben die Kopplungen legt; an den
+    /// privaten Schlüssel kommt das Fenster seit v1.4 nicht mehr heran.
     /// </summary>
     private static string? AgentFingerprint()
     {
-        var path = Path.Combine(Elevation.DataDirectory, AgentPaths.IdentityFile);
+        var path = Path.Combine(Elevation.DataDirectory, AgentPaths.AgentPublicFile);
 
         if (!File.Exists(path))
         {
@@ -242,13 +270,14 @@ public static class AgentData
 
         try
         {
+            var publicKey = File.ReadAllText(path).Trim();
+
+            // Einmal einlesen, damit ein kaputter Inhalt hier auffällt und nicht
+            // erst als Kennung, die zu keinem Rechner passt.
             using var key = ECDsa.Create();
+            key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKey), out _);
 
-            key.ImportPkcs8PrivateKey(
-                Convert.FromBase64String(File.ReadAllText(path).Trim()), out _);
-
-            return ClientKeyFile.Fingerprint(
-                Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()));
+            return ClientKeyFile.Fingerprint(publicKey);
         }
         catch (Exception ex) when (ex is CryptographicException or FormatException
                                        or IOException or UnauthorizedAccessException)

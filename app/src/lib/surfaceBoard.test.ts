@@ -56,16 +56,9 @@ describe('buildSurfaceBoard', () => {
 
   test('ohne Kopplung gibt es keine Flächen', () => {
     // Der native Teil weist sich ausschließlich mit dem Geräteschlüssel aus.
-    // Ein geteiltes Token gehört nicht in ein Widget — es gilt für alles.
-    const alt = geraet('alt', { clientId: undefined, token: 'geheim' })
+    const alt = geraet('alt', { clientId: undefined })
 
     expect(buildSurfaceBoard(alt, [aktion('spotify')], [alt])).toBeUndefined()
-  })
-
-  test('das Token wandert auch dann nicht mit, wenn beides dasteht', () => {
-    const board = buildSurfaceBoard(geraet('pc', { token: 'geheim' }), [], [])
-
-    expect(JSON.stringify(board)).not.toContain('geheim')
   })
 
   test('der Bote zum Wecken kommt mit, samt MAC des Ziels', () => {

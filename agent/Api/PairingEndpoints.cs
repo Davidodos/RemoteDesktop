@@ -43,10 +43,9 @@ public static class PairingEndpoints
         {
             var code = codes.Issue();
 
-            // Der Code steht bewusst auch im Log: ohne Fenster ist das die
-            // einzige Stelle, an der ihn jemand ablesen kann, der am Rechner
-            // sitzt. Ein Geheimnis ist er nur für fünf Minuten.
-            logger.LogInformation("Kopplungscode {Code} erzeugt, gültig 5 Minuten.", code);
+            // Der Code selbst steht nicht im Log: das liegt im lesbaren
+            // Datenordner, und fünf Minuten reichen jedem, der es liest.
+            logger.LogInformation("Kopplungscode erzeugt, gültig 5 Minuten.");
 
             return Results.Ok(new
             {
@@ -152,8 +151,7 @@ public static class PairingEndpoints
             var result = pairing.Pair(
                 request.Code ?? string.Empty,
                 request.Label ?? string.Empty,
-                request.PublicKey ?? string.Empty,
-                request.Scopes);
+                request.PublicKey ?? string.Empty);
 
             if (result.Outcome != PairOutcome.Ok || result.Client is null)
             {
@@ -355,13 +353,12 @@ public static class PairingEndpoints
         PairOutcome.BadCode => "Code falsch oder abgelaufen.",
         PairOutcome.BadLabel => "Der Name des Geräts fehlt oder ist zu lang.",
         PairOutcome.BadPublicKey => "Der öffentliche Schlüssel ist kein ECDSA-P-256-Schlüssel.",
-        PairOutcome.BadScope => "Unbekanntes Recht angefordert.",
         _ => "Kopplung fehlgeschlagen."
     };
 }
 
 internal sealed record PairRequest(
-    string? Code, string? Label, string? PublicKey, string[]? Scopes, ProfileRequest? Self);
+    string? Code, string? Label, string? PublicKey, ProfileRequest? Self);
 
 /// <summary>
 /// Der Steckbrief des Anrufers — alles, was dieser Rechner braucht, um ihn

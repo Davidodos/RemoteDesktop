@@ -7,7 +7,6 @@ public enum PairOutcome
     Ok,
     BadCode,
     BadPublicKey,
-    BadScope,
     BadLabel
 }
 
@@ -61,7 +60,12 @@ public sealed class PairingService
     /// nicht dadurch einen zweiten Versuch bekommen, dass sein Schlüssel
     /// unbrauchbar war.
     /// </summary>
-    public PairResult Pair(string code, string label, string publicKey, IReadOnlyList<string>? scopes)
+    /// <remarks>
+    /// Rechte wählt der Client nicht: wer koppelt, bekommt alle. Eine
+    /// Auswahl gab es bis v1.4 als Parameter, und jeder Client forderte alle
+    /// an — der Parameter war Fläche ohne Zweck.
+    /// </remarks>
+    public PairResult Pair(string code, string label, string publicKey)
     {
         if (!_codes.TryRedeem(code))
         {
@@ -80,13 +84,6 @@ public sealed class PairingService
             return new PairResult(PairOutcome.BadPublicKey, null);
         }
 
-        var granted = scopes is null || scopes.Count == 0 ? AgentScopes.All : scopes;
-
-        if (granted.Any(scope => !AgentScopes.IsKnown(scope)))
-        {
-            return new PairResult(PairOutcome.BadScope, null);
-        }
-
         var now = _time.GetUtcNow();
 
         // Die Kennung kommt aus dem Schlüssel selbst. Koppelt dasselbe Gerät
@@ -96,7 +93,7 @@ public sealed class PairingService
             FingerprintOf(publicKey),
             trimmed,
             publicKey,
-            [.. granted],
+            [.. AgentScopes.All],
             now,
             now);
 

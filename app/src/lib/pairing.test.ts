@@ -10,7 +10,6 @@ import { storage } from './storage.ts'
 
 const ANSWER = {
   clientId: 'handy-1',
-  scopes: ['screen', 'input'],
   hostname: 'PC',
   agentFingerprint: 'a1b2c3d4e5f60708',
 }
@@ -164,7 +163,6 @@ describe('mit einem Agent koppeln', () => {
       fingerprint: 'a1b2c3d4e5f60708',
       canWake: false,
     })
-    expect(device.token).toBeUndefined()
   })
 
   test('die Meldung des Agents kommt beim Nutzer an', async () => {

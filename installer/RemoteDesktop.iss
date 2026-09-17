@@ -133,18 +133,19 @@ Type: filesandordirs; Name: "{localappdata}\RemoteDesktop\EBWebView\Default\Serv
 ; Fassung. Beim Deinstallieren wird er dagegen mit weggeräumt, siehe
 ; [UninstallDelete]: was zum Programm gehört, soll auch mit ihm verschwinden.
 ;
-; „users-modify" seit 31h, und das ist eine bewusste Abwägung. Der Agent läuft
-; erhöht und kommt ohnehin hinein; das Fenster nicht. Es muss aber zwei Dateien
-; schreiben können: seinen eigenen Ausweis (clientkey.json) und die
-; Gegenrichtung einer Kopplung (clients.json), wenn der Agent eingerichtet, aber
-; gestoppt ist. Die Alternative wäre eine Rückfrage von Windows bei jeder
-; Kopplung — für einen Rechner, der nur andere steuern soll, bei jeder einzelnen.
+; Seit v1.4 (Durchsicht B1): `data` ist für jeden lesbar, aber nur für
+; Administratoren und das System beschreibbar; `data\secret` darin ist für
+; sonst niemanden zugänglich — dort liegen der private Schlüssel des Agents und
+; die Zertifikate mit Schlüssel. Was das Fenster ohne Rechte schreiben muss
+; (Ausweis, Gerätename, Kürzel, vertraute Stellen), liegt seither in
+; %localappdata%\RemoteDesktop des Benutzers.
 ;
-; Was das kostet: ein zweiter, nicht-administrativer Benutzer dieses Rechners
-; könnte sich selbst in die clients.json eintragen. Lesen durfte er den Ordner
-; ohnehin schon (er erbt die Rechte von „Programme"), und der Agent läuft in der
-; Sitzung genau des Benutzers, der ihn eingerichtet hat.
-Name: "{app}\data"; Permissions: admins-full system-full users-modify
+; Inno ergänzt Einträge und nimmt keine weg; eine Installation von vor v1.4
+; hatte hier „users-modify". Deshalb setzt der Agent die Rechte bei jedem Start
+; selbst noch einmal (agent/Services/DataFolderAcl.cs) — die Zeilen hier sind
+; nur der Anfangszustand einer frischen Installation.
+Name: "{app}\data"; Permissions: admins-full system-full users-readexec
+Name: "{app}\data\secret"; Permissions: admins-full system-full
 
 [UninstallDelete]
 ; Der Datenordner. Er entsteht zur Laufzeit, deshalb weiß der Uninstaller sonst

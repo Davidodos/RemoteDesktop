@@ -32,13 +32,15 @@ public sealed class TrustedAuthorities
 
     public TrustedAuthorities(string dataDirectory)
     {
-        _path = Path.Combine(dataDirectory, "trusted.json");
+        _path = Path.Combine(dataDirectory, AgentPaths.TrustedFile);
         _fingerprints = Read(_path);
     }
 
-    /// <summary>Der Ordner, in dem alles zu dieser Installation liegt.</summary>
-    public static TrustedAuthorities Default() =>
-        new(AgentPaths.For(AppContext.BaseDirectory));
+    /// <summary>
+    /// Im Profil des Benutzers: wem dieses Fenster vertraut, entscheidet der,
+    /// der davor sitzt — und in <c>data</c> darf es seit v1.4 nicht schreiben.
+    /// </summary>
+    public static TrustedAuthorities Default() => new(Elevation.UserDirectory);
 
     /// <summary>Ob dieser Stelle vertraut wird.</summary>
     public bool Contains(string fingerprint)

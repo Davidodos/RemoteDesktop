@@ -1,15 +1,27 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Device } from '../lib/types.ts'
-import { directTransport } from './direct.ts'
-import { TransportError } from './index.ts'
+import { directTransport as buildTransport } from './direct.ts'
+import { TransportError, type Transport } from './index.ts'
+import type { Credentials } from './credentials.ts'
 
 const DEVICE: Device = {
   id: 'pc',
   name: 'PC',
   host: 'pc.example.ts.net',
   port: 8443,
-  token: 'ge heim',
+  clientId: 'handy-1',
   canWake: true,
+}
+
+/** Ein Ausweis, der schon vorliegt — die Anmeldung selbst prüft `credentials.test.ts`. */
+const CREDENTIALS: Credentials = {
+  peek: () => 'ge heim',
+  obtain: () => Promise.resolve('ge heim'),
+  invalidate: () => {},
+}
+
+function directTransport(device: Device): Transport {
+  return buildTransport(device, CREDENTIALS)
 }
 
 /** WebSocket-Ersatz, der nichts verbindet, sondern nur mitschreibt. */

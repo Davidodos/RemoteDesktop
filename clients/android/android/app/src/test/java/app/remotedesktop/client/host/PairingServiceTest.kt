@@ -40,7 +40,7 @@ class PairingServiceTest {
 
     @Test
     fun `koppelt mit dem angezeigten Code`() {
-        val result = service.pair(codes.issue(), "Laptop", publicKey, null)
+        val result = service.pair(codes.issue(), "Laptop", publicKey)
 
         assertEquals(PairOutcome.OK, result.outcome)
         assertEquals("Laptop", result.client?.label)
@@ -51,15 +51,15 @@ class PairingServiceTest {
     fun `ein falscher Code koppelt nicht`() {
         codes.issue()
 
-        assertEquals(PairOutcome.BAD_CODE, service.pair("000000", "Laptop", publicKey, null).outcome)
+        assertEquals(PairOutcome.BAD_CODE, service.pair("000000", "Laptop", publicKey).outcome)
     }
 
     @Test
     fun `derselbe Code geht nur einmal`() {
         val code = codes.issue()
 
-        assertEquals(PairOutcome.OK, service.pair(code, "Laptop", publicKey, null).outcome)
-        assertEquals(PairOutcome.BAD_CODE, service.pair(code, "Zweitgerät", publicKey, null).outcome)
+        assertEquals(PairOutcome.OK, service.pair(code, "Laptop", publicKey).outcome)
+        assertEquals(PairOutcome.BAD_CODE, service.pair(code, "Zweitgerät", publicKey).outcome)
     }
 
     @Test
@@ -67,7 +67,7 @@ class PairingServiceTest {
         val code = codes.issue()
         clock += PairingCodes.LIFETIME_MS + 1
 
-        assertEquals(PairOutcome.BAD_CODE, service.pair(code, "Laptop", publicKey, null).outcome)
+        assertEquals(PairOutcome.BAD_CODE, service.pair(code, "Laptop", publicKey).outcome)
     }
 
     @Test
@@ -75,22 +75,22 @@ class PairingServiceTest {
         val code = codes.issue()
 
         repeat(PairingCodes.MAX_ATTEMPTS) {
-            assertEquals(PairOutcome.BAD_CODE, service.pair("000000", "X", publicKey, null).outcome)
+            assertEquals(PairOutcome.BAD_CODE, service.pair("000000", "X", publicKey).outcome)
         }
 
-        assertEquals(PairOutcome.BAD_CODE, service.pair(code, "Laptop", publicKey, null).outcome)
+        assertEquals(PairOutcome.BAD_CODE, service.pair(code, "Laptop", publicKey).outcome)
     }
 
     @Test
     fun `ein Name muss sein und darf nicht ausufern`() {
         assertEquals(
             PairOutcome.BAD_LABEL,
-            service.pair(codes.issue(), "   ", publicKey, null).outcome,
+            service.pair(codes.issue(), "   ", publicKey).outcome,
         )
 
         assertEquals(
             PairOutcome.BAD_LABEL,
-            service.pair(codes.issue(), "x".repeat(65), publicKey, null).outcome,
+            service.pair(codes.issue(), "x".repeat(65), publicKey).outcome,
         )
     }
 
@@ -98,30 +98,13 @@ class PairingServiceTest {
     fun `ein unbrauchbarer Schluessel koppelt nicht`() {
         assertEquals(
             PairOutcome.BAD_PUBLIC_KEY,
-            service.pair(codes.issue(), "Laptop", "kein Schlüssel", null).outcome,
+            service.pair(codes.issue(), "Laptop", "kein Schlüssel").outcome,
         )
-    }
-
-    /**
-     * Die App fragt überall dieselben Rechte an. Ein Handy kann davon weniger —
-     * würde es deshalb ablehnen, ließe es sich nie koppeln.
-     */
-    @Test
-    fun `Rechte, die es hier nicht gibt, werden weggelassen statt abgelehnt`() {
-        val result = service.pair(
-            codes.issue(),
-            "Laptop",
-            publicKey,
-            listOf("screen", "input", "power", "wake"),
-        )
-
-        assertEquals(PairOutcome.OK, result.outcome)
-        assertEquals(listOf("screen", "input"), result.client?.scopes)
     }
 
     @Test
     fun `meldet sich mit einer echten Unterschrift an`() {
-        val paired = service.pair(codes.issue(), "Laptop", publicKey, null).client!!
+        val paired = service.pair(codes.issue(), "Laptop", publicKey).client!!
 
         val nonce = service.challenge(paired.id)
         assertNotNull(nonce)
@@ -135,7 +118,7 @@ class PairingServiceTest {
 
     @Test
     fun `eine fremde Unterschrift kommt nicht durch`() {
-        val paired = service.pair(codes.issue(), "Laptop", publicKey, null).client!!
+        val paired = service.pair(codes.issue(), "Laptop", publicKey).client!!
         val nonce = service.challenge(paired.id)!!
 
         val stranger = newKeyPair()
@@ -148,7 +131,7 @@ class PairingServiceTest {
 
     @Test
     fun `dieselbe Challenge geht nur einmal`() {
-        val paired = service.pair(codes.issue(), "Laptop", publicKey, null).client!!
+        val paired = service.pair(codes.issue(), "Laptop", publicKey).client!!
         val nonce = service.challenge(paired.id)!!
 
         assertEquals(SessionOutcome.OK, service.openSession(paired.id, nonce, sign(nonce)).outcome)
@@ -160,7 +143,7 @@ class PairingServiceTest {
 
     @Test
     fun `eine abgelaufene Challenge geht gar nicht`() {
-        val paired = service.pair(codes.issue(), "Laptop", publicKey, null).client!!
+        val paired = service.pair(codes.issue(), "Laptop", publicKey).client!!
         val nonce = service.challenge(paired.id)!!
 
         clock += ChallengeStore.LIFETIME_MS + 1
@@ -182,7 +165,7 @@ class PairingServiceTest {
 
     @Test
     fun `der Widerruf wirkt sofort und auf die laufende Sitzung`() {
-        val paired = service.pair(codes.issue(), "Laptop", publicKey, null).client!!
+        val paired = service.pair(codes.issue(), "Laptop", publicKey).client!!
         val nonce = service.challenge(paired.id)!!
         val token = service.openSession(paired.id, nonce, sign(nonce)).token!!
 
@@ -195,8 +178,8 @@ class PairingServiceTest {
 
     @Test
     fun `erneutes Koppeln ersetzt den Eintrag statt ihn zu verdoppeln`() {
-        service.pair(codes.issue(), "Laptop", publicKey, null)
-        service.pair(codes.issue(), "Laptop neu", publicKey, null)
+        service.pair(codes.issue(), "Laptop", publicKey)
+        service.pair(codes.issue(), "Laptop neu", publicKey)
 
         assertEquals(1, service.listClients().size)
         assertEquals("Laptop neu", service.listClients().first().label)
@@ -204,7 +187,7 @@ class PairingServiceTest {
 
     @Test
     fun `gekoppelte Geraete ueberleben einen Neustart`() {
-        val paired = service.pair(codes.issue(), "Laptop", publicKey, null).client!!
+        val paired = service.pair(codes.issue(), "Laptop", publicKey).client!!
 
         val again = ClientStore(File(folder, "clients.json"))
 

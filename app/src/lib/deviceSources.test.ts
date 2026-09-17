@@ -30,14 +30,15 @@ describe('gespeicherte Geräte lesen', () => {
     ])
   })
 
-  test('ein Gerät mit altem Token bleibt gültig', () => {
-    // Arrange — bis Phase 12 muss der alte Weg offenbleiben.
+  test('ein Gerät mit altem Token, aber ohne Kopplung fliegt raus', () => {
+    // Arrange — ein Eintrag aus der Zeit vor der Kopplung. Das Token gilt
+    // seit v1.4 nirgends mehr; ohne clientId gäbe es nur 401.
     const raw = JSON.stringify([
       { id: 'pc', name: 'PC', host: 'pc.ts.net', port: 8443, token: 'geheim', canWake: true },
     ])
 
     // Assert
-    expect(parseDevices(raw)[0]).toMatchObject({ token: 'geheim', canWake: true })
+    expect(parseDevices(raw)).toEqual([])
   })
 
   test('ohne jeden Ausweis fliegt der Eintrag raus', () => {
@@ -91,7 +92,7 @@ describe('Quellen zusammenlegen', () => {
     // Arrange — ein selbst gekoppeltes Gerät bringt eigene Zugangsdaten mit und
     // soll nicht von einem alten Hub-Eintrag überschrieben werden.
     const local = source('lokal', [device('pc', { clientId: 'handy-1' })])
-    const hub = source('hub', [device('pc', { token: 'alt' })])
+    const hub = source('hub', [device('pc', { clientId: 'alt' })])
 
     // Act
     const { devices } = await collectDevices([local, hub])

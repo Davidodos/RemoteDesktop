@@ -19,14 +19,20 @@ umgeschrieben, nur sachlich richtig gehalten.
 ## Umsetzungsstand
 
 - **R1 erledigt** (Commit `a205dd8`): A1–A6.
-- **R2 in Arbeit:** B1 (Datenordner: `data` nur lesbar, `data\secret`
-  admin-only, Benutzerdateien unter `%localappdata%\RemoteDesktop`,
-  `AgentPaths.Separate/AdoptUserFiles`, `LocalSecretFile` in `setup/` sind
-  angelegt; Agent, Fenster, Installer, Tests folgen), B2 (lokales Geheimnis am
-  PC, Loopback-Endpunkte am Handy weg), B3 (Installer aus `data\secret\update`),
-  D1 (ein Update-Weg: `AgentUpdater`/`SelfUpdater`/`POST /api/update` weg,
-  Startprüfung über `InstallerUpdate`), B4 (Trust-Karte weg), B7 (Sammel-Token
-  weg), B8, B5 (Name Constraints), B6 (Prüfzeichen), `SICHERHEIT.md`.
+- **R2, erster Teil erledigt:** B1 (Datenordner: `data` nur lesbar,
+  `data\secret` admin-only, Benutzerdateien unter `%localappdata%\RemoteDesktop`;
+  der Agent zieht beim Start um und setzt die Rechte selbst; Koppeln bei
+  gestopptem Agent über `AdminTask.Grant/Revoke`), B2 (lokales Geheimnis
+  `local.secret` am PC, `/api/pair/code` und `/api/clients` am Handy weg,
+  Widerruf am Handy trennt jetzt auch die stehenden Verbindungen), B3 und D1
+  (ein Update-Weg: Installer aus `data\secret\update` mit Merker
+  `attempted.txt`, `AgentUpdater`/`SelfUpdater`/`POST /api/update` weg), B4
+  (Trust-Karte und Windows-Stammspeicher weg), B7 (Sammel-Token weg — Agent,
+  App, Geräteliste), B8 (Scopes-Parameter weg, `ChallengeStore` verwirft die
+  älteste, `zod` aus dem Waker, `release.keystore` liegt jetzt unter
+  `/workspace/_secrets/RemoteDesktop/`), `SICHERHEIT.md`/`agent/README.md`
+  nachgezogen. `desktop/LocalAgent.cs` ist weg (D2 vorgezogen).
+- **R2, zweiter Teil offen:** B5 (Name Constraints), B6 (Prüfzeichen).
 - R3, R4, R5 offen.
 
 ---

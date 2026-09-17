@@ -40,6 +40,7 @@ class HostServerTest {
     private lateinit var folder: File
     private lateinit var material: HostCertificate.Material
     private lateinit var server: HostServer
+    private lateinit var codes: PairingCodes
     private lateinit var peers: PeerInbox
 
     /**
@@ -61,16 +62,15 @@ class HostServerTest {
         material = HostCertificate.loadOrCreate(folder, "Pixel", listOf("localhost", "127.0.0.1"))
 
         val clients = ClientStore(File(folder, "clients.json"))
-        val codes = PairingCodes()
         val sessions = SessionStore()
 
+        codes = PairingCodes()
         peers = PeerInbox(File(folder, "peers.json"))
         local = LocalClientKey(File(folder, "clientkey.txt"))
 
         server = HostServer(
             identity = HostIdentity.loadOrCreate(File(folder, "hostkey.txt")),
             pairing = PairingService(clients, codes, ChallengeStore(), sessions),
-            codes = codes,
             material = material,
             deviceName = { "Pixel" },
             version = "1.9.0",
@@ -144,24 +144,16 @@ class HostServerTest {
     }
 
     @Test
-    fun `der Kopplungscode kommt mit einem QR-Ziel`() {
-        val (status, body) = post("/api/pair/code", "{}")
-
-        assertEquals(200, status)
-
-        val json = JSONObject(body)
-
-        assertTrue(Regex("^\\d{6}$").matches(json.getString("code")))
-        assertTrue(
-            json.getString("pairingUri")
-                .startsWith("remotedesktop://pair?host=127.0.0.1&port="),
-        )
-        assertTrue(json.getString("pairingUri").contains("&ca=${material.fingerprint}"))
+    fun `der Kopplungscode hat keine Route mehr`() {
+        // Bis v1.4 stand er unter POST /api/pair/code „nur lokal" — und lokal
+        // ist auf einem Handy jede App.
+        assertEquals(404, post("/api/pair/code", "{}").first)
+        assertEquals(401, get("/api/clients").first)
     }
 
     @Test
     fun `ein falscher Code wird abgewiesen`() {
-        post("/api/pair/code", "{}")
+        codes.issue()
 
         val (status, body) = post(
             "/api/pair",
@@ -216,14 +208,11 @@ class HostServerTest {
 
     @Test
     fun `der Widerruf nimmt dem Token sofort die Wirkung`() {
-        val token = pairAndOpenSession()
-        val clientId = JSONObject(get("/api/clients").second)
-            .getJSONArray("clients")
-            .getJSONObject(0)
-            .getString("id")
+        val clientId = pairOnly()
+        val token = JSONObject(openSession(clientId).second).getString("token")
 
         assertEquals(200, get("/api/info", token).first)
-        assertEquals(200, delete("/api/clients/$clientId"))
+        assertTrue(server.revoke(clientId))
         assertEquals(401, get("/api/info", token).first)
     }
 
@@ -248,7 +237,6 @@ class HostServerTest {
         return HostServer(
             identity = HostIdentity.transient(),
             pairing = PairingService(clients, codes, ChallengeStore(), sessions),
-            codes = codes,
             material = material,
             deviceName = { "Pixel" },
             version = "1.9.0",
@@ -325,7 +313,7 @@ class HostServerTest {
 
     @Test
     fun `der Steckbrief des Anrufers landet im Eingang`() {
-        val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
+        val code = codes.issue()
 
         val answer = JSONObject(
             post(
@@ -356,7 +344,7 @@ class HostServerTest {
 
     @Test
     fun `die Antwort traegt den Ausweis dieser App zurueck`() {
-        val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
+        val code = codes.issue()
 
         val answer = JSONObject(
             post(
@@ -379,7 +367,7 @@ class HostServerTest {
 
     @Test
     fun `ein unbrauchbarer Steckbrief kostet die Kopplung nicht`() {
-        val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
+        val code = codes.issue()
 
         val (status, body) = post(
             "/api/pair",
@@ -450,7 +438,7 @@ class HostServerTest {
 
     /** Nur koppeln; die Anmeldung folgt getrennt, weil sie scheitern darf. */
     private fun pairOnly(): String {
-        val code = JSONObject(post("/api/pair/code", "{}").second).getString("code")
+        val code = codes.issue()
 
         return JSONObject(
             post(

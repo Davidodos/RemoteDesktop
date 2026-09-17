@@ -3,13 +3,7 @@ using RemoteDesktopAgent.Services;
 namespace RemoteDesktopAgent.Api;
 
 /// <summary>
-/// Update auf Knopfdruck, statt auf den nächsten Start zu warten — in zwei
-/// Größen.
-///
-/// <para>
-/// <c>POST /api/update</c> tauscht die Programmdatei des Agents. Das ist der
-/// schnelle Weg, wenn sich nur der Agent geändert hat.
-/// </para>
+/// Update auf Knopfdruck, statt auf den nächsten Start zu warten.
 ///
 /// <para>
 /// <c>POST /api/update/app</c> lässt den Installer laufen und erneuert damit
@@ -20,11 +14,10 @@ namespace RemoteDesktopAgent.Api;
 /// </para>
 ///
 /// <para>
-/// <b>Die Antwort geht in beiden Fällen zuerst hinaus.</b> Vorher beendete sich
-/// der Agent noch im Aufruf, also bevor irgendetwas geschrieben war: die App
-/// bekam keine Auskunft, sondern eine abgebrochene Verbindung — und stand danach
-/// vor der Frage, ob gerade aktualisiert wird oder der Rechner abgestürzt ist.
-/// Jetzt wird geantwortet und erst danach beendet.
+/// <b>Die Antwort geht zuerst hinaus.</b> Vorher beendete sich der Agent noch
+/// im Aufruf, also bevor irgendetwas geschrieben war: die App bekam keine
+/// Auskunft, sondern eine abgebrochene Verbindung — und stand danach vor der
+/// Frage, ob gerade aktualisiert wird oder der Rechner abgestürzt ist.
 /// </para>
 /// </summary>
 public static class UpdateEndpoints
@@ -42,44 +35,6 @@ public static class UpdateEndpoints
 
     public static void MapUpdateEndpoints(this WebApplication app)
     {
-        app.MapPost("/api/update", async (AgentUpdater updater, CancellationToken cancellationToken) =>
-        {
-            UpdateResult result;
-
-            try
-            {
-                result = await updater.CheckAsync(cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                // Die Rohmeldung nennt Adressen und Pfade; nach außen geht nur,
-                // dass die Prüfung nicht durchlief.
-                app.Logger.LogWarning(ex, "Update-Prüfung auf Anforderung fehlgeschlagen.");
-                result = new UpdateResult(UpdateOutcome.Failed);
-            }
-
-            if (result.Outcome == UpdateOutcome.Installing)
-            {
-                ExitAfterGrace(app.Logger);
-            }
-
-            var status = result.Outcome switch
-            {
-                UpdateOutcome.Failed => StatusCodes.Status502BadGateway,
-                UpdateOutcome.Rejected => StatusCodes.Status502BadGateway,
-                _ => StatusCodes.Status200OK
-            };
-
-            return Results.Json(
-                new
-                {
-                    status = result.Outcome.ToString().ToLowerInvariant(),
-                    version = result.Version,
-                    message = Describe(result.Outcome)
-                },
-                statusCode: status);
-        });
-
         app.MapPost("/api/update/app", async (
             InstallerUpdate installer, CancellationToken cancellationToken) =>
         {
@@ -87,11 +42,13 @@ public static class UpdateEndpoints
 
             try
             {
-                result = await installer.CheckAsync(cancellationToken);
+                result = await installer.CheckAsync(automatic: false, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                app.Logger.LogWarning(ex, "Voll-Update auf Anforderung fehlgeschlagen.");
+                // Die Rohmeldung nennt Adressen und Pfade; nach außen geht nur,
+                // dass die Prüfung nicht durchlief.
+                app.Logger.LogWarning(ex, "Update auf Anforderung fehlgeschlagen.");
                 result = new InstallerResult(InstallerOutcome.Failed);
             }
 
@@ -139,23 +96,13 @@ public static class UpdateEndpoints
         });
     }
 
-    private static string Describe(UpdateOutcome outcome) => outcome switch
-    {
-        UpdateOutcome.Disabled => "Selbst-Update ist auf diesem Agent nicht eingerichtet.",
-        UpdateOutcome.UpToDate => "Der Agent ist bereits aktuell.",
-        UpdateOutcome.NotFound => "Es liegt kein vollständiges Release vor.",
-        UpdateOutcome.Rejected => "Die angebotene Fassung ist nicht gültig unterschrieben.",
-        UpdateOutcome.Skipped => "Diese Fassung ließ sich eben erst nicht installieren.",
-        UpdateOutcome.Installing => "Der Agent tauscht sich aus und startet neu.",
-        _ => "Die Update-Prüfung ist fehlgeschlagen."
-    };
-
     private static string Describe(InstallerOutcome outcome) => outcome switch
     {
         InstallerOutcome.Disabled => "Updates sind auf diesem Rechner nicht eingerichtet.",
         InstallerOutcome.UpToDate => "Dieser Rechner ist bereits aktuell.",
         InstallerOutcome.NotFound => "Es liegt kein vollständiges Release vor.",
         InstallerOutcome.Rejected => "Die angebotene Fassung ist nicht gültig unterschrieben.",
+        InstallerOutcome.Skipped => "Diese Fassung ließ sich eben erst nicht installieren.",
         InstallerOutcome.Installing =>
             "Der Rechner wird aktualisiert. Er ist etwa eine Minute lang nicht erreichbar.",
         _ => "Das Update ist fehlgeschlagen."

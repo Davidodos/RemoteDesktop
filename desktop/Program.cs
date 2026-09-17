@@ -56,6 +56,12 @@ internal static class Program
             return 0;
         }
 
+        // Seit v1.4 liegen Ausweis, Gerätename und Kürzel im Profil des
+        // Benutzers. Was eine ältere Fassung noch in `data` hat, wird kopiert —
+        // sonst legte sich das Fenster einen neuen Ausweis an, und jede
+        // Kopplung wäre hinfällig. Verschieben tut der Agent; er darf dort schreiben.
+        RemoteDesktopSetup.AgentPaths.AdoptUserFiles(Elevation.DataDirectory, Elevation.UserDirectory);
+
         // Fehlende Teile sind seit V3 kein Grund mehr, gar nicht erst zu starten:
         // genau dann braucht man die Oberfläche am dringendsten, weil sie sagt,
         // was fehlt, und den Knopf dazu hat. Früher endete das Programm hier mit

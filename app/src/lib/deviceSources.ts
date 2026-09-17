@@ -105,7 +105,6 @@ function toDevice(entry: unknown): Device[] {
     alias,
     host,
     port,
-    token,
     clientId,
     fingerprint,
     caFingerprint,
@@ -122,12 +121,10 @@ function toDevice(entry: unknown): Device[] {
     return []
   }
 
-  const paired = typeof clientId === 'string' && clientId.length > 0
-  const shared = typeof token === 'string' && token.length > 0
-
-  // Ohne einen der beiden Ausweise käme die App bis zur ersten Anfrage und
-  // stünde dann vor einem 401, das wie ein Fehler des Agents aussieht.
-  if (!paired && !shared) {
+  // Ohne Kopplung käme die App bis zur ersten Anfrage und stünde dann vor
+  // einem 401, das wie ein Fehler des Agents aussieht. Ein Eintrag mit dem
+  // alten geteilten Token fällt hier seit v1.4 ebenfalls heraus.
+  if (typeof clientId !== 'string' || clientId.length === 0) {
     return []
   }
 
@@ -142,8 +139,7 @@ function toDevice(entry: unknown): Device[] {
       ...(typeof alias === 'string' && alias.trim().length > 0 ? { alias: alias.trim() } : {}),
       host,
       port: port as number,
-      ...(shared ? { token: token as string } : {}),
-      ...(paired ? { clientId: clientId as string } : {}),
+      clientId,
       ...(typeof fingerprint === 'string' && fingerprint.length > 0 ? { fingerprint } : {}),
       // Bleibt erhalten, weil das Vertrauen zu einer Stelle nachgeholt werden
       // muss, wenn die Gegenstelle beim Eintragen noch nicht lief. Ohne ihn

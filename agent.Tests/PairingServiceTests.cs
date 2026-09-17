@@ -90,7 +90,7 @@ public class PairingServiceTests : IDisposable
         _codes.Issue();
 
         // Act
-        var result = _pairing.Pair("000000-falsch", "Handy", _client.PublicKey, null);
+        var result = _pairing.Pair("000000-falsch", "Handy", _client.PublicKey);
 
         // Assert
         Assert.Equal(PairOutcome.BadCode, result.Outcome);
@@ -104,25 +104,10 @@ public class PairingServiceTests : IDisposable
         var code = _codes.Issue();
 
         // Act
-        var result = _pairing.Pair(code, "Handy", "kein Schlüssel", null);
+        var result = _pairing.Pair(code, "Handy", "kein Schlüssel");
 
         // Assert
         Assert.Equal(PairOutcome.BadPublicKey, result.Outcome);
-        Assert.Empty(_store.List());
-    }
-
-    [Fact]
-    public void Ein_erfundenes_Recht_wird_abgelehnt()
-    {
-        // Arrange
-        var code = _codes.Issue();
-
-        // Act
-        var result = _pairing.Pair(code, "Handy", _client.PublicKey, ["screen", "alles"]);
-
-        // Assert — sonst stünde in der clients.json ein Recht, das nie jemand
-        // prüft, und der Eintrag sähe mächtiger aus, als er ist.
-        Assert.Equal(PairOutcome.BadScope, result.Outcome);
         Assert.Empty(_store.List());
     }
 
@@ -133,7 +118,7 @@ public class PairingServiceTests : IDisposable
         var code = _codes.Issue();
 
         // Act
-        var result = _pairing.Pair(code, "   ", _client.PublicKey, null);
+        var result = _pairing.Pair(code, "   ", _client.PublicKey);
 
         // Assert
         Assert.Equal(PairOutcome.BadLabel, result.Outcome);
@@ -146,8 +131,8 @@ public class PairingServiceTests : IDisposable
         var code = _codes.Issue();
 
         // Act — erst mit unbrauchbarem Schlüssel, dann mit gutem.
-        _pairing.Pair(code, "Handy", "Unfug", null);
-        var second = _pairing.Pair(code, "Handy", _client.PublicKey, null);
+        _pairing.Pair(code, "Handy", "Unfug");
+        var second = _pairing.Pair(code, "Handy", _client.PublicKey);
 
         // Assert — wer den Code errät, soll nicht durch einen kaputten Schlüssel
         // einen zweiten Versuch geschenkt bekommen.
@@ -161,13 +146,13 @@ public class PairingServiceTests : IDisposable
         Pair();
 
         // Act
-        var again = Pair(scopes: ["screen"]);
+        var again = Pair();
 
         // Assert — die Kennung kommt aus dem Schlüssel, deshalb bleibt es ein
-        // Eintrag statt zweier Karteileichen.
+        // Eintrag statt zweier Karteileichen. Und wer koppelt, bekommt alles.
         Assert.Equal(PairOutcome.Ok, again.Outcome);
         Assert.Single(_store.List());
-        Assert.Equal(["screen"], _store.List()[0].Scopes);
+        Assert.Equal(AgentScopes.All, _store.List()[0].Scopes);
     }
 
     // ---- Anmeldung --------------------------------------------------------
@@ -306,6 +291,6 @@ public class PairingServiceTests : IDisposable
         Assert.False(_pairing.Revoke("gibtesnicht"));
     }
 
-    private PairResult Pair(IReadOnlyList<string>? scopes = null) =>
-        _pairing.Pair(_codes.Issue(), "Handy", _client.PublicKey, scopes);
+    private PairResult Pair() =>
+        _pairing.Pair(_codes.Issue(), "Handy", _client.PublicKey);
 }

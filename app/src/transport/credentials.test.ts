@@ -1,32 +1,18 @@
 import { describe, expect, test, vi } from 'vitest'
 import { createClientKey } from '../lib/clientKey.ts'
-import { pairedCredentials, staticCredentials, type SessionExchange } from './credentials.ts'
+import { noCredentials, pairedCredentials, type SessionExchange } from './credentials.ts'
 
 /**
- * Der Ausweis der App. Das alte Token liegt sofort vor, ein Sitzungstoken muss
- * erst per Challenge-Response geholt werden — der Transport soll den
- * Unterschied nur an einer Stelle merken.
+ * Der Ausweis der App: ein Sitzungstoken, das erst per Challenge-Response
+ * geholt wird — der Transport soll den Unterschied zwischen „liegt vor" und
+ * „muss geholt werden" nur an einer Stelle merken.
  */
-describe('das alte geteilte Token', () => {
-  test('steht sofort zur Verfügung', async () => {
-    // Arrange
-    const credentials = staticCredentials('geheim')
+describe('ohne Kopplung', () => {
+  test('gibt es keinen Ausweis, sondern eine Absage', async () => {
+    const credentials = noCredentials()
 
-    // Assert — nur deshalb öffnen die WebSockets ohne Umweg.
-    expect(credentials.peek()).toBe('geheim')
-    expect(await credentials.obtain()).toBe('geheim')
-  })
-
-  test('bleibt auch nach einem Verwerfen dasselbe', () => {
-    // Arrange
-    const credentials = staticCredentials('geheim')
-
-    // Act
-    credentials.invalidate()
-
-    // Assert — ein Pre-Shared-Token wird nicht ungültig; es war entweder
-    // richtig oder nie.
-    expect(credentials.peek()).toBe('geheim')
+    expect(credentials.peek()).toBeUndefined()
+    await expect(credentials.obtain()).rejects.toThrow('nicht gekoppelt')
   })
 })
 

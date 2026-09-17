@@ -14,10 +14,9 @@ namespace RemoteDesktopClient;
 /// AppId, welche Komponenten beim letzten Mal gewählt waren — ein Update
 /// installiert also nichts nach, was jemand bewusst weggelassen hat.
 ///
-/// Das Selbst-Update des Agents (<c>POST /api/update</c>) bleibt daneben
-/// bestehen. Es tauscht nur seine eigene <c>.exe</c> und ist der schnellere Weg,
-/// wenn man ohnehin gerade in der App steht; dieser hier ist der, der auch das
-/// Fenster erneuert.
+/// Denselben Installer lässt der Agent kurz nach seinem Start und auf Zuruf
+/// eines gekoppelten Geräts laufen (<c>agent/Services/InstallerUpdate.cs</c>);
+/// hier ist es der Knopf im Fenster.
 /// </summary>
 public sealed class ClientUpdate : IDisposable
 {

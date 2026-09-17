@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 
 namespace RemoteDesktopAgent.Services;
 
-/// <summary>Wie ein Voll-Update ausgegangen ist.</summary>
+/// <summary>Wie ein Update ausgegangen ist.</summary>
 public enum InstallerOutcome
 {
     /// <summary>Kein Release-Schlüssel einkompiliert — Updates sind aus.</summary>
@@ -14,6 +14,11 @@ public enum InstallerOutcome
     NotFound,
     /// <summary>Unterschrift oder Prüfsumme passten nicht. Es wird nichts ausgeführt.</summary>
     Rejected,
+    /// <summary>
+    /// Diese Fassung wurde beim letzten Start schon einmal versucht und
+    /// läuft trotzdem nicht — ein zweiter Anlauf von allein unterbleibt.
+    /// </summary>
+    Skipped,
     /// <summary>Der Installer läuft, Agent und Fenster gehen gleich aus.</summary>
     Installing,
     Failed
@@ -22,16 +27,8 @@ public enum InstallerOutcome
 public sealed record InstallerResult(InstallerOutcome Outcome, string? Version = null);
 
 /// <summary>
-/// Das <b>ganze</b> Update: Agent, Fenster und Oberfläche in einem Zug — und
-/// zwar so, dass es von einem gekoppelten Gerät aus angestoßen werden kann.
-///
-/// <para>
-/// **Warum das neben <see cref="AgentUpdater"/> steht.** Der tauscht seine
-/// eigene <c>.exe</c> und sonst nichts. Das reicht, solange nur der Agent sich
-/// ändert; ändert sich die Oberfläche — und das ist der häufigere Fall —,
-/// bleibt sie auf dem Stand von vorher, und niemand sieht, warum. Was beides
-/// erneuert, ist der Installer.
-/// </para>
+/// Das Update: Agent, Fenster und Oberfläche in einem Zug über den Installer —
+/// beim Start von allein und auf Zuruf eines gekoppelten Geräts.
 ///
 /// <para>
 /// **Warum ohne Rückfrage von Windows.** Der Agent läuft als geplante Aufgabe
@@ -46,13 +43,21 @@ public sealed record InstallerResult(InstallerOutcome Outcome, string? Version =
 /// vollen Rechten ausgeführt, ohne dass ein Mensch zusieht. Der Installer trägt
 /// darum sein eigenes unterschriebenes Manifest im Release
 /// (<c>installer.json</c>, siehe <c>scripts/sign-manifest.mjs</c>), und ohne
-/// gültige Unterschrift <em>und</em> passende Prüfsumme passiert nichts.
+/// gültige Unterschrift <em>und</em> passende Prüfsumme passiert nichts. Und
+/// die Datei liegt bis zum Start im admin-only Ordner des Agents, nicht in
+/// <c>%TEMP%</c> — dort könnte sie jeder Prozess des Benutzers zwischen
+/// Prüfsumme und Start austauschen.
 /// </para>
 /// </summary>
+/// <param name="stagingDirectory">
+/// Wohin Installer und Startskript geschrieben werden. Muss ein Ordner sein,
+/// in den nur Administratoren und das System kommen.
+/// </param>
 public sealed class InstallerUpdate(
     IHttpClientFactory clients,
     ManifestVerifier verifier,
     string repository,
+    string stagingDirectory,
     ILogger<InstallerUpdate> logger)
 {
     /// <summary>Das Manifest des Installers und seine Unterschrift daneben.</summary>
@@ -60,22 +65,21 @@ public sealed class InstallerUpdate(
     public const string SignatureAsset = "installer.json.sig";
 
     /// <summary>
+    /// Merkt sich, welche Fassung zuletzt von allein versucht wurde. Läuft nach
+    /// dem Versuch immer noch die alte, kommt kein zweiter — sonst liefe der
+    /// Rechner bei einem Installer, der immer scheitert, in einer Schleife aus
+    /// Neustarts.
+    /// </summary>
+    public const string AttemptFile = "attempted.txt";
+
+    /// <summary>
     /// Was der Installer mitbekommt.
     ///
-    /// <para>
     /// <c>/VERYSILENT</c> und nicht <c>/SILENT</c>: hier sieht niemand hin, und
     /// ein Fortschrittsbalken auf einem fremden Bildschirm ist keine Auskunft,
-    /// sondern eine Überraschung.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Kein <c>/NOLAUNCH</c> mehr</b> (19.08.2026). Es sollte das Fenster
-    /// zulassen, weil bei einem Fernupdate „niemand davorsitzt" — nur stimmt
-    /// das nicht: dieser Agent läuft als geplante Aufgabe in der Sitzung eines
-    /// angemeldeten Benutzers, also sitzt dort immer jemand, und der hatte vor
-    /// dem Update ein Fenster offen. Es blieb danach zu und musste von Hand
-    /// gestartet werden.
-    /// </para>
+    /// sondern eine Überraschung. Kein <c>/NOLAUNCH</c>: der Agent läuft in der
+    /// Sitzung eines angemeldeten Benutzers, und der hatte vor dem Update ein
+    /// Fenster offen.
     /// </summary>
     private static readonly string[] Arguments =
         ["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"];
@@ -100,12 +104,17 @@ public sealed class InstallerUpdate(
     /// Gegenseite wartete auf eine Auskunft, die nie kommt.
     /// </para>
     /// </summary>
-    public async Task<InstallerResult> CheckAsync(CancellationToken cancellationToken)
+    /// <param name="automatic">
+    /// Ob der Aufruf vom Start kommt und nicht von einem Menschen. Nur dann
+    /// zählt der Merker aus <see cref="AttemptFile"/> — wer auf den Knopf
+    /// drückt, will es noch einmal versuchen.
+    /// </param>
+    public async Task<InstallerResult> CheckAsync(bool automatic, CancellationToken cancellationToken)
     {
         if (!verifier.IsConfigured)
         {
             logger.LogInformation(
-                "Kein Release-Schlüssel einkompiliert (ReleaseKeys.PublicKey) — Voll-Update ist aus.");
+                "Kein Release-Schlüssel einkompiliert (ReleaseKeys.PublicKey) — Updates sind aus.");
 
             return new InstallerResult(InstallerOutcome.Disabled);
         }
@@ -146,6 +155,15 @@ public sealed class InstallerUpdate(
             return new InstallerResult(InstallerOutcome.UpToDate, manifest.Version);
         }
 
+        if (automatic && WasAttempted(manifest.Version))
+        {
+            logger.LogWarning(
+                "Fassung {Version} wurde beim letzten Start schon versucht und läuft nicht — "
+                + "kein zweiter Anlauf von allein.", manifest.Version);
+
+            return new InstallerResult(InstallerOutcome.Skipped, manifest.Version);
+        }
+
         var assetUrl = release!.Download(manifest.File);
 
         if (assetUrl is null)
@@ -156,10 +174,9 @@ public sealed class InstallerUpdate(
 
         logger.LogInformation("Neue Fassung {Version} gefunden, lade den Installer.", manifest.Version);
 
-        // In den Temp-Ordner und nicht neben die .exe: der Programmordner wird
-        // vom Installer gleich umgebaut, und eine Datei darin, die er nicht
-        // kennt, bliebe für immer liegen.
-        var staged = Path.Combine(Path.GetTempPath(), manifest.File);
+        Directory.CreateDirectory(stagingDirectory);
+
+        var staged = Path.Combine(stagingDirectory, Path.GetFileName(manifest.File));
 
         await DownloadAsync(client, assetUrl, staged, cancellationToken);
 
@@ -171,6 +188,7 @@ public sealed class InstallerUpdate(
             return new InstallerResult(InstallerOutcome.Rejected, manifest.Version);
         }
 
+        MarkAttempted(manifest.Version);
         Launch(staged);
 
         return new InstallerResult(InstallerOutcome.Installing, manifest.Version);
@@ -190,6 +208,33 @@ public sealed class InstallerUpdate(
             RemoteDesktopSetup.ReleaseCheck.Normalize(AgentVersion.Current),
             StringComparison.OrdinalIgnoreCase);
 
+    private string AttemptPath => Path.Combine(stagingDirectory, AttemptFile);
+
+    private bool WasAttempted(string version)
+    {
+        try
+        {
+            return File.Exists(AttemptPath)
+                   && string.Equals(File.ReadAllText(AttemptPath).Trim(), version, StringComparison.Ordinal);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private void MarkAttempted(string version)
+    {
+        try
+        {
+            File.WriteAllText(AttemptPath, version);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Der Update-Merker ließ sich nicht schreiben.");
+        }
+    }
+
     /// <summary>
     /// Startet den Installer über ein Zwischenskript und kehrt sofort zurück.
     ///
@@ -205,7 +250,7 @@ public sealed class InstallerUpdate(
     /// </summary>
     private void Launch(string installer)
     {
-        var script = Path.Combine(Path.GetTempPath(), "remotedesktop-setup.cmd");
+        var script = Path.Combine(stagingDirectory, "remotedesktop-setup.cmd");
 
         File.WriteAllText(script,
             $"""
@@ -254,7 +299,7 @@ public sealed class InstallerUpdate(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Liegt im Temp-Ordner; Windows räumt ihn ohnehin auf.
+            // Bleibt liegen, bis der nächste Download sie überschreibt.
         }
     }
 }

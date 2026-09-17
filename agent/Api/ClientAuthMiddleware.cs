@@ -22,10 +22,10 @@ public static class ClientAuthMiddleware
 
     /// <summary>
     /// Endpunkte, die von außen gar nicht erreichbar sein dürfen: den
-    /// Kopplungscode anzeigen und Clients widerrufen. Beides setzt voraus, dass
-    /// jemand am Rechner sitzt — wer das kann, könnte den Agent ohnehin
-    /// beenden. Über das Netz wäre es dagegen genau der Weg, den die Kopplung
-    /// verhindern soll.
+    /// Kopplungscode anzeigen und Clients widerrufen. Sie verlangen die
+    /// Loopback-Adresse <b>und</b> das lokale Geheimnis aus dem Profil des
+    /// Benutzers (<see cref="LocalSecret"/>). Die Adresse allein reichte bis
+    /// zum 18.09.2026 — und die hat jeder lokale Prozess.
     /// </summary>
     /// <remarks>
     /// Alles unter <c>/api/pair/…</c> steht hier einzeln und nicht bloß unter den
@@ -75,7 +75,10 @@ public static class ClientAuthMiddleware
 
             if (Matches(path, LocalOnly))
             {
-                if (IsLocal(context.Connection.RemoteIpAddress))
+                var secret = context.RequestServices.GetRequiredService<LocalSecret>();
+
+                if (IsLocal(context.Connection.RemoteIpAddress)
+                    && secret.Matches(ExtractCredential(context)))
                 {
                     await next();
                     return;
@@ -83,7 +86,7 @@ public static class ClientAuthMiddleware
 
                 Deny(context, StatusCodes.Status403Forbidden, "Nur am Rechner selbst.");
                 await context.Response.WriteAsJsonAsync(
-                    new { error = "Dieser Aufruf ist nur am Rechner selbst möglich." });
+                    new { error = "Dieser Aufruf ist nur dem Fenster dieses Rechners erlaubt." });
                 return;
             }
 

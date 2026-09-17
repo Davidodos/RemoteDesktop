@@ -208,7 +208,6 @@ class HostRuntime private constructor(
         val server = HostServer(
             identity = identity,
             pairing = pairing,
-            codes = codes,
             material = material,
             deviceName = { deviceName },
             version = version,
@@ -341,7 +340,13 @@ class HostRuntime private constructor(
 
     fun clients(): List<PairedClient> = pairing.listClients()
 
-    fun revoke(id: String): Boolean = pairing.revoke(id)
+    /**
+     * Über den Server, nicht nur über die Liste: er kennt die stehenden
+     * Verbindungen und trennt sie mit. Bis v1.4 ging der Widerruf aus der
+     * App am Eintrag vorbei — Bild und Eingabe liefen weiter, bis die
+     * Gegenseite von sich aus auflegte.
+     */
+    fun revoke(id: String): Boolean = server.revoke(id)
 
     /** Der QR-Inhalt zum angezeigten Code, oder `null` ohne erreichbare Adresse. */
     fun pairingUri(code: String): String? {

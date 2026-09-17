@@ -39,9 +39,13 @@ public sealed class ChallengeStore
         {
             DropExpired();
 
+            // Die älteste fällt, nicht alle: sonst sperrte ein Client, der
+            // stur Challenges anfordert, jede laufende Anmeldung der anderen aus.
             if (_open.Count >= MaxOutstanding)
             {
-                _open.Clear();
+                var oldest = _open.MinBy(entry => entry.Value.ExpiresAt).Key;
+
+                _open.Remove(oldest);
             }
 
             _open[nonce] = (clientId, _time.GetUtcNow() + Lifetime);

@@ -990,6 +990,147 @@ public class AgentPathsTests
 
         Assert.Null(AgentPaths.Redirect(null, "/app/data", "/legacy"));
     }
+
+    [Fact]
+    public void Geheimes_zieht_nach_secret_und_das_des_Benutzers_ins_Profil()
+    {
+        // Arrange — ein data-Ordner, wie ihn v1.3 hinterlassen hat.
+        var root = Directory.CreateTempSubdirectory().FullName;
+        var data = Path.Combine(root, "data");
+        var secret = AgentPaths.SecretIn(data);
+        var user = Path.Combine(root, "profil");
+
+        Directory.CreateDirectory(data);
+
+        File.WriteAllText(Path.Combine(data, "agentkey.txt"), "geheim");
+        File.WriteAllText(Path.Combine(data, "cert.key"), "geheim");
+        File.WriteAllText(Path.Combine(data, "agentca.pfx"), "geheim");
+        File.WriteAllText(Path.Combine(data, "clientkey.json"), "meiner");
+        File.WriteAllText(Path.Combine(data, "devicename.txt"), "PC");
+        File.WriteAllText(Path.Combine(data, "clients.json"), "[]");
+        File.WriteAllText(Path.Combine(data, "agentca.crt"), "öffentlich");
+
+        // Act
+        var moved = AgentPaths.Separate(data, secret, user);
+
+        // Assert — verschoben, nicht kopiert: der Schlüssel darf nicht dort
+        // liegen bleiben, wo jeder ihn lesen kann.
+        Assert.Equal("geheim", File.ReadAllText(Path.Combine(secret, "agentkey.txt")));
+        Assert.Equal("geheim", File.ReadAllText(Path.Combine(secret, "cert.key")));
+        Assert.Equal("geheim", File.ReadAllText(Path.Combine(secret, "agentca.pfx")));
+        Assert.False(File.Exists(Path.Combine(data, "agentkey.txt")));
+        Assert.False(File.Exists(Path.Combine(data, "cert.key")));
+
+        Assert.Equal("meiner", File.ReadAllText(Path.Combine(user, "clientkey.json")));
+        Assert.Equal("PC", File.ReadAllText(Path.Combine(user, "devicename.txt")));
+        Assert.False(File.Exists(Path.Combine(data, "clientkey.json")));
+
+        // Was lesbar bleiben darf, bleibt.
+        Assert.True(File.Exists(Path.Combine(data, "clients.json")));
+        Assert.True(File.Exists(Path.Combine(data, "agentca.crt")));
+
+        Assert.Equal(
+            ["agentkey.txt", "cert.key", "agentca.pfx", "clientkey.json", "devicename.txt"],
+            moved);
+
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public void Beim_Trennen_gewinnt_was_druben_schon_steht()
+    {
+        // Arrange — das Fenster hat sich im Profil schon einen Ausweis
+        // angelegt, in data liegt noch der alte.
+        var root = Directory.CreateTempSubdirectory().FullName;
+        var data = Path.Combine(root, "data");
+        var user = Path.Combine(root, "profil");
+
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(user);
+        File.WriteAllText(Path.Combine(data, "clientkey.json"), "alt");
+        File.WriteAllText(Path.Combine(user, "clientkey.json"), "neu");
+
+        // Act
+        AgentPaths.Separate(data, AgentPaths.SecretIn(data), user);
+
+        // Assert — der alte ist weg, der neue steht.
+        Assert.Equal("neu", File.ReadAllText(Path.Combine(user, "clientkey.json")));
+        Assert.False(File.Exists(Path.Combine(data, "clientkey.json")));
+
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public void Das_Fenster_kopiert_seine_Dateien_nur_ins_Profil()
+    {
+        // Arrange — das Fenster startet nach dem Update vor dem Agent.
+        var root = Directory.CreateTempSubdirectory().FullName;
+        var data = Path.Combine(root, "data");
+        var user = Path.Combine(root, "profil");
+
+        Directory.CreateDirectory(data);
+        File.WriteAllText(Path.Combine(data, "clientkey.json"), "meiner");
+        File.WriteAllText(Path.Combine(data, "agentkey.txt"), "geheim");
+
+        // Act
+        AgentPaths.AdoptUserFiles(data, user);
+
+        // Assert — kopiert, nicht verschoben (in data darf es nur lesen), und
+        // nur das Eigene: der Schlüssel des Agents bleibt, wo er ist.
+        Assert.Equal("meiner", File.ReadAllText(Path.Combine(user, "clientkey.json")));
+        Assert.True(File.Exists(Path.Combine(data, "clientkey.json")));
+        Assert.False(File.Exists(Path.Combine(user, "agentkey.txt")));
+
+        Directory.Delete(root, recursive: true);
+    }
+}
+
+/// <summary>
+/// Das Geheimnis für die nur lokal erreichbaren Endpunkte.
+/// </summary>
+public class LocalSecretFileTests
+{
+    [Fact]
+    public void Wird_einmal_angelegt_und_dann_wiedergelesen()
+    {
+        var root = Directory.CreateTempSubdirectory().FullName;
+        var path = LocalSecretFile.In(root);
+
+        var first = LocalSecretFile.LoadOrCreate(path);
+        var second = LocalSecretFile.LoadOrCreate(path);
+
+        Assert.Equal(64, first.Length);
+        Assert.Equal(first, second);
+        Assert.Equal(first, LocalSecretFile.Read(path));
+
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public void Eine_kaputte_Datei_zaehlt_als_keine()
+    {
+        var root = Directory.CreateTempSubdirectory().FullName;
+        var path = LocalSecretFile.In(root);
+
+        File.WriteAllText(path, "kein hex");
+
+        Assert.Null(LocalSecretFile.Read(path));
+
+        // Und wird beim nächsten Anlegen ersetzt.
+        Assert.Equal(64, LocalSecretFile.LoadOrCreate(path).Length);
+
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public void Nur_dasselbe_Geheimnis_passt()
+    {
+        Assert.True(LocalSecretFile.Matches("abc", "abc"));
+        Assert.False(LocalSecretFile.Matches("abc", "abd"));
+        Assert.False(LocalSecretFile.Matches(null, "abc"));
+        Assert.False(LocalSecretFile.Matches("abc", null));
+        Assert.False(LocalSecretFile.Matches(string.Empty, string.Empty));
+    }
 }
 
 /// <summary>

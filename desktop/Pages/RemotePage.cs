@@ -526,8 +526,8 @@ public sealed class RemotePage : Control
         var key = AgentData.ClientKey()
                   ?? throw new InvalidOperationException(
                       "Der Ausweis dieses Rechners ließ sich nicht anlegen. Ohne ihn kann "
-                      + "sich dieses Fenster bei keinem Gerät anmelden — sind die Rechte am "
-                      + "Ordner data neben dem Programm noch in Ordnung?");
+                      + "sich dieses Fenster bei keinem Gerät anmelden — lässt sich in "
+                      + "%localappdata%\\RemoteDesktop schreiben?");
 
         return new { publicKey = key.PublicKey, privateKey = key.PrivateKey };
     }
