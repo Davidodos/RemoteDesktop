@@ -152,6 +152,13 @@ export function PairingOffer(): React.JSX.Element {
 
           <p className="pairing-code">{pairing.code}</p>
 
+          {/* Für den Weg ohne Kamera: das Prüfzeichen zur eigenen Stelle. Ein
+              Gerät mit Zertifikat von Tailscale hat keins — dann steht hier
+              auch nichts. */}
+          {typeof pairing.check === 'string' && pairing.check.length > 0 && (
+            <p className="pairing-code check">Prüfzeichen {pairing.check}</p>
+          )}
+
           {address === undefined ? (
             <p className="settings-hint">Noch keine Adresse im Netz.</p>
           ) : (

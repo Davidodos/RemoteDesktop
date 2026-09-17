@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using RemoteDesktopAgent.Services;
 using Xunit;
@@ -78,7 +79,10 @@ public class SelfSignedCertificateTests
     [Fact]
     public void Es_wird_von_der_eigenen_CA_unterschrieben()
     {
-        using var ca = SelfSignedCertificate.CreateAuthority("PC", Jetzt);
+        // Die Stelle kennt den Namen des Rechners — so wie im Betrieb, wo
+        // CertificateLoader.Names ihn mitgibt. Ohne ihn dürfte sie „pc" nicht
+        // unterschreiben (siehe NameConstraints).
+        using var ca = SelfSignedCertificate.CreateAuthority("PC", Jetzt, ["pc"]);
         using var server = SelfSignedCertificate.Issue(ca, ["pc"], Jetzt);
 
         Assert.Equal(ca.Subject, server.Issuer);
@@ -94,6 +98,68 @@ public class SelfSignedCertificateTests
         // erst am Handy auf.
         Assert.True(chain.Build(server), string.Join(
             " · ", chain.ChainStatus.Select(status => status.StatusInformation)));
+    }
+
+    [Fact]
+    public void Die_CA_darf_nur_fuer_private_Adressen_und_eigene_Namen_unterschreiben()
+    {
+        // Arrange — die Stelle eines Rechners, der als „pc" und unter einer
+        // eigenen VPN-Adresse erreichbar ist.
+        using var ca = SelfSignedCertificate.CreateAuthority("PC", Jetzt, ["pc", "meinpc.example.org"]);
+
+        // Assert — die Erweiterung ist da und kritisch: ein Client, der sie
+        // nicht versteht, lehnt die Kette ab, statt sie zu übersehen.
+        var constraints = ca.Extensions[NameConstraints.Id.Value!];
+
+        Assert.NotNull(constraints);
+        Assert.True(constraints.Critical);
+
+        Assert.True(NameConstraints.Permits(ca, ["192.168.178.20", "10.0.0.5", "100.101.102.103"]));
+        Assert.True(NameConstraints.Permits(ca, ["pc", "pc.fritz.box", "pc.tailnet.ts.net", "localhost"]));
+        Assert.True(NameConstraints.Permits(ca, ["meinpc.example.org"]));
+        Assert.False(NameConstraints.Permits(ca, ["google.de"]));
+        Assert.False(NameConstraints.Permits(ca, ["8.8.8.8"]));
+    }
+
+    [Fact]
+    public void Eine_Kette_auf_einen_fremden_Namen_scheitert_an_der_Einschraenkung()
+    {
+        // Arrange
+        using var ca = SelfSignedCertificate.CreateAuthority("PC", Jetzt);
+        using var eigen = SelfSignedCertificate.Issue(ca, ["pc.fritz.box", "192.168.178.20"], Jetzt);
+        using var fremd = SelfSignedCertificate.Issue(ca, ["google.de"], Jetzt);
+
+        // Assert — dieselbe Stelle, dieselbe Prüfung: der eigene Name geht
+        // durch, der fremde nicht. Genau das soll ein Handy erleben, das der
+        // Stelle vertraut.
+        Assert.True(Build(ca, eigen));
+        Assert.False(Build(ca, fremd));
+    }
+
+    [Fact]
+    public void Eine_alte_CA_ohne_Einschraenkung_bleibt_stehen()
+    {
+        // Arrange — eine Stelle von vor v1.4, nachgebaut ohne die Erweiterung.
+        using var key = System.Security.Cryptography.RSA.Create(2048);
+        var request = new CertificateRequest("CN=alt", key, HashAlgorithmName.SHA256,
+            System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, true, 0, true));
+        using var alt = request.CreateSelfSigned(Jetzt.AddDays(-1), Jetzt.AddYears(1));
+
+        // Assert — sie darf alles: sie zu ersetzen hieße, jede Kopplung neu zu
+        // bestätigen. Wer neu koppelt, bekommt ohnehin eine eingeschränkte.
+        Assert.True(NameConstraints.Permits(alt, ["google.de", "8.8.8.8"]));
+    }
+
+    private static bool Build(X509Certificate2 ca, X509Certificate2 server)
+    {
+        using var chain = new X509Chain();
+        chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+        chain.ChainPolicy.CustomTrustStore.Add(ca);
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        chain.ChainPolicy.VerificationTime = Jetzt.UtcDateTime.AddDays(1);
+
+        return chain.Build(server);
     }
 
     [Fact]

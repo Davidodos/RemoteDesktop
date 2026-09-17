@@ -51,6 +51,30 @@ export function certificateFingerprint(value: unknown): string | undefined {
   return /^[0-9a-f]{64}$/.test(trimmed) ? trimmed : undefined
 }
 
+/** Wie viele Stellen des Fingerabdrucks als Prüfzeichen abgetippt werden. */
+export const CHECK_LENGTH = 8
+
+/**
+ * Das Prüfzeichen, wie es jemand eintippt: Groß- und Kleinschreibung,
+ * Leerzeichen und Doppelpunkte sind egal. `undefined`, wenn es keins ist.
+ */
+export function normalizeCheck(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  const cleaned = value.replace(/[\s:]/g, '').toLowerCase()
+
+  return new RegExp(`^[0-9a-f]{${CHECK_LENGTH}}$`).test(cleaned) ? cleaned : undefined
+}
+
+/** Ob ein Fingerabdruck mit dem Prüfzeichen beginnt. */
+export function matchesCheck(fingerprint: string, check: string): boolean {
+  const wanted = normalizeCheck(check)
+
+  return wanted !== undefined && fingerprint.trim().toLowerCase().startsWith(wanted)
+}
+
 export interface AgentCertificate {
   /** Das Zertifikat selbst, als Base64 — so nimmt es die Android-Seite entgegen. */
   base64: string

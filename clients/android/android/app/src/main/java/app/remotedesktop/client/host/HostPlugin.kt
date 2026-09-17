@@ -30,6 +30,10 @@ import org.json.JSONObject
 @CapacitorPlugin(name = "Host")
 class HostPlugin : Plugin() {
 
+    private companion object {
+        const val PAIRING_CHECK_LENGTH = 8
+    }
+
     /**
      * Die Rückfrage „darf dieses Gerät jetzt verbinden?" an die Oberfläche
      * hängen.
@@ -123,7 +127,10 @@ class HostPlugin : Plugin() {
             JSObject()
                 .put("code", code)
                 .put("expiresInSeconds", PairingCodes.LIFETIME_MS / 1000)
-                .put("pairingUri", runtime.pairingUri(code)),
+                .put("pairingUri", runtime.pairingUri(code))
+                // Die ersten acht Stellen des CA-Fingerabdrucks — für den Weg
+                // ohne Kamera, siehe agent/Auth/PairingCheck.cs.
+                .put("check", runtime.material.fingerprint.take(PAIRING_CHECK_LENGTH)),
         )
     }
 

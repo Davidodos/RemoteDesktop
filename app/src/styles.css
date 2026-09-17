@@ -361,6 +361,13 @@ input::placeholder {
   letter-spacing: 0.05rem;
 }
 
+.pairing-code.check {
+  font-size: 1.1rem;
+  letter-spacing: 0.1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-dim);
+}
+
 .pairing-qr {
   display: block;
   width: 260px;

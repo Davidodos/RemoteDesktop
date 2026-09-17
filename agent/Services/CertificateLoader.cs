@@ -52,7 +52,7 @@ public static class CertificateLoader
             return new Chosen(Load(certificatePath, keyPath), null);
         }
 
-        var authority = vault.Authority(machineName);
+        var authority = vault.Authority(machineName, names);
 
         return new Chosen(vault.Server(authority, names), authority);
     }

@@ -107,9 +107,13 @@ object HostCertificate {
             return existing.toMaterial(names)
         }
 
-        val authority = existing?.authorityPair ?: newKeyPair()
-        val authorityCertificate = existing?.authorityCertificate
-            ?: selfSign(authority, "RemoteDesktop $subject CA", AUTHORITY_DAYS)
+        // Die Stelle bleibt, solange sie für die Namen unterschreiben darf
+        // (NameConstraints). Darf sie es nicht — ein Name außerhalb der
+        // privaten Bereiche —, entsteht sichtbar eine neue.
+        val keep = existing?.takeIf { NameConstraints.permits(it.authorityCertificate, names) }
+        val authority = keep?.authorityPair ?: newKeyPair()
+        val authorityCertificate = keep?.authorityCertificate
+            ?: selfSign(authority, "RemoteDesktop $subject CA", AUTHORITY_DAYS, names)
 
         val server = newKeyPair()
         val serverCertificate = sign(
@@ -212,14 +216,19 @@ object HostCertificate {
             initialize(ECGenParameterSpec("secp256r1"), SecureRandom())
         }.generateKeyPair()
 
-    private fun selfSign(pair: KeyPair, commonName: String, days: Long): X509Certificate =
+    private fun selfSign(
+        pair: KeyPair,
+        commonName: String,
+        days: Long,
+        names: List<String>,
+    ): X509Certificate =
         build(
             issuerName = commonName,
             issuerKey = pair.private,
             subjectKey = pair.public,
             commonName = commonName,
             days = days,
-            names = emptyList(),
+            names = names,
             authority = true,
         )
 
@@ -308,6 +317,16 @@ object HostCertificate {
             },
         )
 
+        if (authority) {
+            // Wofür diese Stelle unterschreiben darf — kritisch, damit ein
+            // Client, der es nicht versteht, die Kette ablehnt statt übersieht.
+            list += extension(
+                NameConstraints.OID,
+                critical = true,
+                value = NameConstraints.build(names),
+            )
+        }
+
         if (!authority) {
             list += extension(
                 OID_EXT_KEY_USAGE,
@@ -337,35 +356,13 @@ object HostCertificate {
      */
     private fun generalName(name: String): ByteArray {
         val trimmed = name.trim().trim('[', ']').lowercase(Locale.ROOT)
-        val address = parseIpv4(trimmed)
+        val address = NameConstraints.parseIpv4(trimmed)
 
         return if (address != null) {
             Der.implicit(7, address)
         } else {
             Der.implicit(2, trimmed.toByteArray(Charsets.US_ASCII))
         }
-    }
-
-    private fun parseIpv4(text: String): ByteArray? {
-        val parts = text.split('.')
-
-        if (parts.size != 4) {
-            return null
-        }
-
-        val bytes = ByteArray(4)
-
-        for (index in parts.indices) {
-            val value = parts[index].toIntOrNull() ?: return null
-
-            if (value !in 0..255 || (parts[index].length > 1 && parts[index].startsWith("0"))) {
-                return null
-            }
-
-            bytes[index] = value.toByte()
-        }
-
-        return bytes
     }
 
     private fun extension(oid: String, critical: Boolean, value: ByteArray): ByteArray =

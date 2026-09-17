@@ -55,9 +55,17 @@ public static class SelfSignedCertificate
     /// <summary>
     /// Die eigene CA. Sie unterschreibt genau ein Zertifikat, nämlich das
     /// dieses Rechners — deshalb <c>pathLength = 0</c>: sie darf keine weiteren
-    /// CAs beglaubigen, selbst wenn jemand ihren Schlüssel bekäme.
+    /// CAs beglaubigen, selbst wenn jemand ihren Schlüssel bekäme. Und sie darf
+    /// nur für private Adressen und die eigenen Namen unterschreiben
+    /// (<see cref="NameConstraints"/>): ein Handy, das ihr vertraut, vertraut
+    /// ihr nicht für <c>google.de</c>.
     /// </summary>
-    public static X509Certificate2 CreateAuthority(string machineName, DateTimeOffset now)
+    /// <param name="names">
+    /// Die Namen, auf die dieser Rechner lautet — sie kommen zu den Vorgaben
+    /// dazu, damit auch ein eigener VPN-Name unterschrieben werden darf.
+    /// </param>
+    public static X509Certificate2 CreateAuthority(
+        string machineName, DateTimeOffset now, IEnumerable<string>? names = null)
     {
         using var key = RSA.Create(2048);
 
@@ -81,6 +89,8 @@ public static class SelfSignedCertificate
 
         request.CertificateExtensions.Add(
             new X509SubjectKeyIdentifierExtension(request.PublicKey, critical: false));
+
+        request.CertificateExtensions.Add(NameConstraints.Build(names ?? []));
 
         // Fünf Minuten Vorlauf: die Uhren zweier Geräte gehen selten gleich, und
         // ein Zertifikat „aus der Zukunft" lehnt jeder Client ab.

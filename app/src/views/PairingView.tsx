@@ -5,6 +5,8 @@ import {
   certificateFingerprint,
   downloadAuthority,
   fetchAgentCertificate,
+  matchesCheck,
+  normalizeCheck,
   TRUST_PORT,
 } from '../lib/certificateTrust.ts'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
@@ -36,11 +38,10 @@ interface Props {
  * </p>
  *
  * <p>
- * **Es gibt nichts mehr einzutippen außer Adresse und Code.** Bis zum
- * 16.08.2026 folgte darauf eine zweite Seite mit zwei Namensfeldern und
- * mitunter eine dritte mit einem Fingerabdruck zum Vergleichen. Der eigene Name
- * steht jetzt in den Einstellungen und geht von allein mit; die Gegenseite
- * erscheint unter dem Namen, den sie sich selbst gegeben hat.
+ * **Einzutippen sind Adresse, Code und — bei einem Gerät ohne Tailscale — das
+ * Prüfzeichen**, das dort neben dem Code steht. Der eigene Name steht in den
+ * Einstellungen und geht von allein mit; die Gegenseite erscheint unter dem
+ * Namen, den sie sich selbst gegeben hat.
  * </p>
  */
 export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
@@ -160,8 +161,12 @@ function ManualForm({
 }): React.JSX.Element {
   const [host, setHost] = useState('')
   const [code, setCode] = useState('')
+  const [check, setCheck] = useState('')
 
-  const ready = host.trim().length > 0 && code.trim().length === 6
+  const ready =
+    host.trim().length > 0 &&
+    code.trim().length === 6 &&
+    (check.trim().length === 0 || normalizeCheck(check) !== undefined)
 
   return (
     <form
@@ -170,7 +175,14 @@ function ManualForm({
         event.preventDefault()
 
         if (ready && !busy) {
-          onTarget({ host: host.trim(), port: DEFAULT_AGENT_PORT, code: code.trim() })
+          const normalized = normalizeCheck(check)
+
+          onTarget({
+            host: host.trim(),
+            port: DEFAULT_AGENT_PORT,
+            code: code.trim(),
+            ...(normalized === undefined ? {} : { check: normalized }),
+          })
         }
       }}
     >
@@ -196,6 +208,20 @@ function ManualForm({
         onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
         placeholder="6 Ziffern"
         inputMode="numeric"
+        autoComplete="off"
+      />
+
+      <label className="field-label" htmlFor="pair-check">
+        Prüfzeichen
+      </label>
+      <input
+        id="pair-check"
+        value={check}
+        onChange={(event) => setCheck(event.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 8))}
+        placeholder="steht dort neben dem Code — leer, wenn keins da ist"
+        autoCapitalize="off"
+        autoCorrect="off"
+        spellCheck={false}
         autoComplete="off"
       />
 
@@ -238,6 +264,13 @@ async function pairWith(target: PairingTarget): Promise<Paired> {
 
   try {
     const trusted = await trust(target)
+
+    if (!trusted.ok && trusted.fatal === true) {
+      // Nicht weiter: die Gegenseite weist sich selbst aus, und der
+      // Vergleichswert fehlt oder passt nicht. Über `https` weiterzumachen
+      // ergäbe nur eine zweite, unverständlichere Meldung.
+      throw new Error(trusted.failure ?? 'Die Stelle der Gegenseite ließ sich nicht prüfen.')
+    }
 
     if (!trusted.ok) {
       hindernis = trusted.failure
@@ -290,18 +323,24 @@ interface Trusted {
   ok: boolean
   /** Warum nicht. Steht in der Meldung, falls danach die Kopplung scheitert. */
   failure?: string
+  /**
+   * Ob es sich lohnt, trotzdem zu koppeln. Nicht, wenn die Gegenseite eine
+   * Stelle vorzeigt, die sich nicht prüfen ließ — dann wäre der nächste
+   * Schritt genau der, den die Prüfung verhindern soll.
+   */
+  fatal?: boolean
 }
 
 /**
  * Der ausstellenden Stelle der Gegenseite vertrauen.
  *
  * <p>
- * **Mit Fingerabdruck aus dem QR-Code wird verglichen, ohne ihn nicht.** Das
- * ist eine Abwägung und keine Nachlässigkeit: die Alternative wäre der
- * Bildschirm, auf dem der Wert zum Ablesen stand — und der wurde nie abgelesen.
- * Was bleibt, sichert der Kopplungscode: sechs Ziffern, fünf Minuten, genau
- * eine Kopplung. Wer in genau diesem Fenster im Netz dazwischensitzt, kommt
- * durch; wer es nicht tut, kommt nie wieder heran.
+ * **Verglichen wird immer** — mit dem Fingerabdruck aus dem QR-Code oder mit
+ * dem abgetippten Prüfzeichen. Bis zum 18.09.2026 wurde ohne QR-Code jede
+ * Stelle angenommen, die in den fünf Minuten des Codes auf Port 8442
+ * antwortete; wer in dieser Zeit im WLAN dazwischensaß, hatte danach eine
+ * Stelle auf dem Handy. Jetzt scheitert der Weg ohne Vergleichswert, sobald
+ * die Gegenseite eine Stelle vorzeigt.
  * </p>
  */
 async function trust(target: PairingTarget): Promise<Trusted> {
@@ -312,49 +351,75 @@ async function trust(target: PairingTarget): Promise<Trusted> {
     return { ok: false }
   }
 
+  let certificate: { base64: string; fingerprint: string }
+
   try {
     // Nativ holen, wo die Umgebung das kann: die Seite läuft unter `https` und
     // darf die Datei unter `http://…:8442` gar nicht erst anfragen.
-    const certificate =
+    certificate =
       platform.trust.fetchAuthority === undefined
         ? expected === undefined
           ? await downloadAuthority(target.host)
           : await fetchAgentCertificate(target.host, expected)
-        : verify(await platform.trust.fetchAuthority(target.host, TRUST_PORT), expected)
-
-    await platform.trust.install(certificate.base64, certificate.fingerprint)
-
-    return { ok: true }
+        : await platform.trust.fetchAuthority(target.host, TRUST_PORT)
   } catch (failure) {
     // **Der Grund geht mit.** Verschluckt endete er hier, und der Ablauf lief
     // weiter in die verschlüsselte Verbindung — die ohne bestätigte Stelle
     // scheitern *muss*. Am Bildschirm stand danach „antwortet nicht", während
-    // die Gegenstelle nachweislich antwortete.
+    // die Gegenstelle nachweislich antwortete. Ein Gerät mit Zertifikat von
+    // Tailscale antwortet hier gar nicht — dann ist das kein Fehler.
     return { ok: false, failure: failure instanceof Error ? failure.message : String(failure) }
+  }
+
+  try {
+    verify(certificate, expected, target.check)
+    await platform.trust.install(certificate.base64, certificate.fingerprint)
+
+    return { ok: true }
+  } catch (failure) {
+    return {
+      ok: false,
+      failure: failure instanceof Error ? failure.message : String(failure),
+      fatal: true,
+    }
   }
 }
 
 /**
- * Was nativ geholt wurde, gegen den Fingerabdruck aus dem QR-Code halten.
+ * Das geholte Zertifikat gegen den Vergleichswert halten: den Fingerabdruck
+ * aus dem QR-Code, sonst das abgetippte Prüfzeichen. Ohne beides gibt es
+ * nichts zu vergleichen — und dann wird nichts angenommen.
  *
- * Ohne Vergleichswert gibt es nichts zu prüfen — dann gilt, was der Code
- * absichert. Mit ihm wird geprüft, und zwar hier ein zweites Mal, obwohl die
- * Umgebung es ebenfalls könnte: eine Prüfung, die nur an einer Stelle steht,
- * verschwindet beim nächsten Umbau.
+ * Geprüft wird hier auch dann, wenn die Umgebung es nativ ebenfalls könnte:
+ * eine Prüfung, die nur an einer Stelle steht, verschwindet beim nächsten Umbau.
  */
 function verify(
   found: { base64: string; fingerprint: string },
   expected: string | undefined,
-): { base64: string; fingerprint: string } {
-  if (
-    expected !== undefined &&
-    found.fingerprint.trim().toLowerCase() !== expected.trim().toLowerCase()
-  ) {
+  check: string | undefined,
+): void {
+  if (expected !== undefined) {
+    if (found.fingerprint.trim().toLowerCase() !== expected.trim().toLowerCase()) {
+      throw new Error(
+        'Das Zertifikat gehört nicht zu diesem Gerät. Im Netz sitzt jemand ' +
+          'dazwischen, oder es ist das falsche Gerät.',
+      )
+    }
+
+    return
+  }
+
+  if (check === undefined) {
     throw new Error(
-      'Das Zertifikat gehört nicht zu diesem Gerät. Im Netz sitzt jemand ' +
-        'dazwischen, oder es ist das falsche Gerät.',
+      'Dieses Gerät weist sich selbst aus. Trage das Prüfzeichen ein, das dort ' +
+        'neben dem Kopplungscode steht.',
     )
   }
 
-  return found
+  if (!matchesCheck(found.fingerprint, check)) {
+    throw new Error(
+      'Das Prüfzeichen passt nicht zu diesem Gerät. Im Netz sitzt jemand ' +
+        'dazwischen, oder es ist das falsche Gerät.',
+    )
+  }
 }

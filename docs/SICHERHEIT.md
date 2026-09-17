@@ -34,7 +34,12 @@ erreicht und einen gekoppelten Schlüssel hat, sitzt praktisch am Rechner.
    Jahren Laufzeit, die ein Serverzertifikat über 825 Tage unterschreibt und
    still erneuert. Ein Client nimmt sie erst an, nachdem ein Mensch ihren
    Fingerabdruck bestätigt hat — der kommt über die Kopplung, also über den
-   Bildschirm des Rechners.
+   Bildschirm des Rechners: im QR-Code ganz, ohne Kamera als **Prüfzeichen**
+   (die ersten acht Stellen, neben dem Code). Ohne einen der beiden wird
+   keine Stelle angenommen. Beide Stellen tragen **Name Constraints**
+   (kritisch): sie dürfen nur für private Adressen, die üblichen
+   Heimnetz-Endungen, `ts.net` und die eigenen Namen unterschreiben — wer
+   einem Gerät vertraut, vertraut dessen Besitzer nicht für `google.de`.
 5. **Der Vertrauens-Port (8442).** Er wird nur geöffnet, wenn es eine eigene
    Stelle gibt, und trägt genau eine Datei: `/ca.crt`, das öffentliche
    Zertifikat. Alles andere dort ist 404. Unverschlüsselt, weil es anders nicht
@@ -71,6 +76,8 @@ erreicht und einen gekoppelten Schlüssel hat, sitzt praktisch am Rechner.
 | Mittel | **Das Fenster schrieb fremde Stellen in den Windows-Stammspeicher** (B4). Weg — `TrustedAuthorities` gilt für die Fernsteuerung und sonst nichts. |
 | Mittel | **Das alte geteilte Token** (B7) galt weiter. Entfernt: Agent, App und Geräteliste kennen nur noch die Kopplung. |
 | Niedrig | **Der Kopplungscode stand im Log**, und das Log liegt im lesbaren Ordner. Steht nicht mehr drin. `ChallengeStore` verwirft bei Überlauf die älteste Challenge statt aller. |
+| Mittel | **Die Geräte-CAs durften jeden Namen unterschreiben** (B5). Jetzt Name Constraints, siehe Schutzschicht 4. Alte Stellen bleiben, bis neu gekoppelt wird. |
+| Mittel | **Koppeln ohne QR-Code nahm die Stelle ungeprüft an** (B6). Jetzt das Prüfzeichen, siehe Schutzschicht 4. |
 
 ### Bewusst so gelassen
 

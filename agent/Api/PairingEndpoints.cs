@@ -52,6 +52,13 @@ public static class PairingEndpoints
                 code,
                 expiresInSeconds = (int)PairingCodes.Lifetime.TotalSeconds,
 
+                // Das Prüfzeichen für den Weg ohne QR-Code: die ersten acht
+                // Stellen des CA-Fingerabdrucks. Acht tippt man ab, 64 nicht —
+                // und ohne einen Vergleichswert nähme die Gegenseite jede
+                // Stelle an, die ihr in diesen fünf Minuten jemand unterschiebt.
+                // Bei einem Zertifikat von Tailscale gibt es nichts zu prüfen.
+                check = caFingerprint is null ? null : PairingCheck.Of(caFingerprint),
+
                 // Derselbe Code, nur als Adresse — daraus macht das Fenster den
                 // QR-Code. Er wird hier erzeugt und nicht dort, weil das Format
                 // damit an einer Stelle steht, die Tests hat.

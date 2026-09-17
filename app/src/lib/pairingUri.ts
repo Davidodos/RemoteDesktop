@@ -23,6 +23,12 @@ export interface PairingTarget {
   port: number
   code: string
   /**
+   * Das Prüfzeichen aus dem Formular — die ersten acht Stellen des
+   * CA-Fingerabdrucks, abgetippt. Nur auf dem Weg ohne QR-Code; dort ersetzt
+   * es `caFingerprint`.
+   */
+  check?: string
+  /**
    * Fingerabdruck der Zertifizierungsstelle, wenn der Rechner sich sein
    * Zertifikat selbst ausgestellt hat.
    *

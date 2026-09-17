@@ -32,7 +32,12 @@ umgeschrieben, nur sachlich richtig gehalten.
   älteste, `zod` aus dem Waker, `release.keystore` liegt jetzt unter
   `/workspace/_secrets/RemoteDesktop/`), `SICHERHEIT.md`/`agent/README.md`
   nachgezogen. `desktop/LocalAgent.cs` ist weg (D2 vorgezogen).
-- **R2, zweiter Teil offen:** B5 (Name Constraints), B6 (Prüfzeichen).
+- **R2 erledigt:** dazu B5 (Name Constraints auf beiden CAs, kritisch;
+  `NameConstraints.cs`/`NameConstraints.kt`; eine alte Stelle ohne die
+  Erweiterung bleibt stehen, eine mit Erweiterung wird neu ausgestellt, wenn
+  sie einen Namen nicht darf) und B6 (Prüfzeichen: `check` in
+  `POST /api/pair/code` und im Plugin, Anzeige unter dem Code, drittes Feld im
+  Formular; ohne QR und ohne Prüfzeichen wird keine Stelle mehr angenommen).
 - R3, R4, R5 offen.
 
 ---

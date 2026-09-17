@@ -3,6 +3,8 @@ import {
   certificateFingerprint,
   certificateUrl,
   fetchAgentCertificate,
+  matchesCheck,
+  normalizeCheck,
   TrustError,
   TRUST_PORT,
   downloadAuthority,
@@ -85,6 +87,25 @@ describe('Zertifikat eines Agents holen', () => {
     await expect(
       fetchAgentCertificate('pc', 'a'.repeat(64), antwort(zertifikat, 404)),
     ).rejects.toThrow(TrustError)
+  })
+})
+
+describe('Prüfzeichen', () => {
+  const fingerprint = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90'
+
+  test('acht Hexstellen, egal wie geschrieben', () => {
+    expect(normalizeCheck('A1B2 C3D4')).toBe('a1b2c3d4')
+    expect(normalizeCheck('a1:b2:c3:d4')).toBe('a1b2c3d4')
+    expect(normalizeCheck('a1b2c3d')).toBeUndefined()
+    expect(normalizeCheck('a1b2c3d4e')).toBeUndefined()
+    expect(normalizeCheck('zzzzzzzz')).toBeUndefined()
+    expect(normalizeCheck(undefined)).toBeUndefined()
+  })
+
+  test('passt, wenn der Fingerabdruck damit beginnt', () => {
+    expect(matchesCheck(fingerprint, 'A1B2C3D4')).toBe(true)
+    expect(matchesCheck(fingerprint, 'a1b2c3d5')).toBe(false)
+    expect(matchesCheck(fingerprint, '')).toBe(false)
   })
 })
 

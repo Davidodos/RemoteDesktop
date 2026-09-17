@@ -5,6 +5,7 @@ import java.nio.file.Files
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,6 +48,53 @@ class HostCertificateTest {
 
         assertTrue(names.contains("pixel.example.ts.net"))
         assertTrue(names.contains("192.168.178.31"))
+    }
+
+    @Test
+    fun `die CA darf nur fuer private Adressen und eigene Namen unterschreiben`() {
+        val material = HostCertificate.loadOrCreate(
+            directory(), "Pixel", listOf("pixel.example.ts.net", "192.168.178.31"),
+        )
+
+        val authority = parse(material.authorityDer)
+
+        // Kritisch: ein Client, der die Einschränkung nicht versteht, lehnt
+        // die Kette ab, statt sie zu übersehen.
+        assertTrue(authority.criticalExtensionOIDs.contains(NameConstraints.OID))
+
+        assertTrue(NameConstraints.permits(authority, listOf("192.168.1.5", "10.0.0.7", "100.100.1.1")))
+        assertTrue(NameConstraints.permits(authority, listOf("pixel.fritz.box", "pixel.example.ts.net", "localhost")))
+        assertFalse(NameConstraints.permits(authority, listOf("google.de")))
+        assertFalse(NameConstraints.permits(authority, listOf("8.8.8.8")))
+    }
+
+    @Test
+    fun `die Kette haelt die Einschraenkung ein`() {
+        // Java prüft Name Constraints beim Kettenaufbau — wenn die Kodierung
+        // stimmt, geht der eigene Name durch.
+        val material = HostCertificate.loadOrCreate(
+            directory(), "Pixel", listOf("192.168.178.31"),
+        )
+
+        val authority = parse(material.authorityDer)
+        val server = material.keyStore.getCertificate(material.alias) as X509Certificate
+
+        val anchor = java.security.cert.TrustAnchor(authority, null)
+        val parameters = java.security.cert.PKIXParameters(setOf(anchor)).apply { isRevocationEnabled = false }
+        val path = CertificateFactory.getInstance("X.509").generateCertPath(listOf(server))
+
+        java.security.cert.CertPathValidator.getInstance("PKIX").validate(path, parameters)
+    }
+
+    @Test
+    fun `ein Name ausserhalb der Bereiche ergibt eine neue Stelle`() {
+        val folder = directory()
+        val first = HostCertificate.loadOrCreate(folder, "Pixel", listOf("192.168.178.31"))
+        val second = HostCertificate.loadOrCreate(folder, "Pixel", listOf("203.0.113.9"))
+
+        // Sichtbar statt heimlich: die Clients müssen einmal neu bestätigen.
+        assertNotEquals(first.fingerprint, second.fingerprint)
+        assertTrue(NameConstraints.permits(parse(second.authorityDer), listOf("203.0.113.9")))
     }
 
     @Test

@@ -151,6 +151,12 @@ export interface HostPairingCode {
   expiresInSeconds: number
   /** Inhalt des QR-Codes — `undefined`, solange keine Adresse feststeht. */
   pairingUri?: string
+  /**
+   * Das Prüfzeichen für den Weg ohne Kamera: die ersten acht Stellen des
+   * CA-Fingerabdrucks. Fehlt bei einem Zertifikat von Tailscale — dann gibt
+   * es nichts zu prüfen. Siehe {@link matchesCheck}.
+   */
+  check?: string | null
 }
 
 /** Eine Verbindung, die gerade um Zustimmung bittet. */

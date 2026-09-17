@@ -37,7 +37,13 @@ public sealed class CertificateVault(string directory, TimeProvider? time = null
     /// Lädt die CA oder legt sie an. Sie entsteht genau einmal je Rechner:
     /// entstünde sie neu, müsste jedes gekoppelte Gerät erneut bestätigen.
     /// </summary>
-    public X509Certificate2 Authority(string machineName)
+    /// <param name="names">
+    /// Wofür sie unterschreiben können muss. Darf eine bestehende Stelle einen
+    /// dieser Namen nicht (<see cref="NameConstraints"/>), entsteht eine neue —
+    /// das ist der seltene Fall eines eigenen VPN-Namens, der nach der Stelle
+    /// eingetragen wurde, und er kostet ein erneutes Bestätigen.
+    /// </param>
+    public X509Certificate2 Authority(string machineName, IReadOnlyList<string>? names = null)
     {
         var path = Path.Combine(directory, AuthorityFile);
         var existing = TryLoad(path);
@@ -46,7 +52,9 @@ public sealed class CertificateVault(string directory, TimeProvider? time = null
         // Vertrauen der Clients hängt an ihr, und ein stiller Tausch sähe für
         // sie aus wie ein untergeschobener Rechner. Sie wird erneuert, und die
         // Clients müssen einmal erneut bestätigen — sichtbar statt heimlich.
-        if (existing is not null && _time.GetUtcNow() < existing.NotAfter)
+        if (existing is not null
+            && _time.GetUtcNow() < existing.NotAfter
+            && NameConstraints.Permits(existing, names ?? []))
         {
             // Der öffentliche Teil liegt seit v1.4 in einem anderen Ordner als
             // die CA selbst — nachziehen, falls er dort noch fehlt.
@@ -60,7 +68,7 @@ public sealed class CertificateVault(string directory, TimeProvider? time = null
 
         existing?.Dispose();
 
-        var created = SelfSignedCertificate.CreateAuthority(machineName, _time.GetUtcNow());
+        var created = SelfSignedCertificate.CreateAuthority(machineName, _time.GetUtcNow(), names);
 
         Save(path, created);
         SavePublic(created);
