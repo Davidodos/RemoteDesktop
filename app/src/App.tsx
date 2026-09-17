@@ -757,6 +757,25 @@ function Shell(): React.JSX.Element {
         ? page
         : 'screen'
 
+  // **Die Zoomgeste, einmal.** Am Rechner gibt es in der Sitzung mit einem
+  // Handy keine Symbolreihe, und dass ein gezogener Rechtsklick dort zoomt,
+  // steht sonst nirgends. Ein Satz beim ersten Mal — wie das Kürzel beim
+  // ersten Rechner.
+  useEffect(() => {
+    if (
+      !platform.hotkey.available ||
+      !touchTarget ||
+      view !== 'screen' ||
+      selected === undefined ||
+      storage.pinchHintShown()
+    ) {
+      return
+    }
+
+    storage.markPinchHintShown()
+    setError('Zoomen am Handy: rechte Maustaste gedrückt halten und ziehen.')
+  }, [platform, touchTarget, view, selected, setError])
+
   return (
     <div className="app">
       {/* **Die Kopfzeile steht immer da.** Vorher entstand sie erst mit einer

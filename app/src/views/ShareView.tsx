@@ -81,7 +81,7 @@ export function ShareView({ onBack }: Props): React.JSX.Element {
         <p className="settings-hint">
           {host.toggleable
             ? running
-              ? 'Eingeschaltet. Läuft, solange die App nicht weggewischt wird. Jede Verbindung wird einzeln bestätigt.'
+              ? 'Eingeschaltet.'
               : 'Ausgeschaltet. Dieses Gerät ist von außen nicht erreichbar.'
             : running
               ? 'Der Agent läuft — dieser Rechner ist erreichbar.'
@@ -213,7 +213,7 @@ function Header({ onBack }: { onBack: () => void }): React.JSX.Element {
       <button type="button" className="link-button" onClick={onBack}>
         ← Einstellungen
       </button>
-      <h1>Fernsteuerung dieses Geräts</h1>
+      <h1>Freigabe</h1>
     </>
   )
 }

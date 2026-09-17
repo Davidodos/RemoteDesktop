@@ -5,6 +5,7 @@ const CLIENT_KEY = 'remotedesktop.clientKey'
 const LAST_DEVICE_KEY = 'remotedesktop.lastDevice'
 const TRANSPORT_KEY = 'remotedesktop.transport'
 const SHORTCUTS_KEY = 'remotedesktop.shortcuts'
+const PINCH_HINT_KEY = 'remotedesktop.pinchHint'
 const DEFAULT_MONITOR_PREFIX = 'remotedesktop.monitor.'
 
 /**
@@ -95,4 +96,8 @@ export const storage = {
   /** Die eigenen Tastenkombinationen als JSON — ausgewertet in `shortcuts.ts`. */
   getShortcuts: (): string | undefined => read(SHORTCUTS_KEY),
   setShortcuts: (json: string | undefined): void => write(SHORTCUTS_KEY, json),
+
+  /** Ob der Satz zur Zoomgeste am Handy schon einmal dastand. */
+  pinchHintShown: (): boolean => read(PINCH_HINT_KEY) === '1',
+  markPinchHintShown: (): void => write(PINCH_HINT_KEY, '1'),
 }

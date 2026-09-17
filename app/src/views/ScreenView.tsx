@@ -1011,7 +1011,7 @@ export function ScreenView({
           type="button"
           className={sheet === 'shortcuts' ? 'bar-button active' : 'bar-button'}
           onClick={() => toggleSheet('shortcuts')}
-          aria-label="Shortcuts"
+          aria-label="Tastenkombinationen"
         >
           <ShortcutIcon />
         </button>
@@ -1037,7 +1037,7 @@ export function ScreenView({
           type="button"
           className={sheet === 'power' ? 'bar-button active' : 'bar-button'}
           onClick={() => toggleSheet('power')}
-          aria-label="Power"
+          aria-label="Ein/Aus"
         >
           <PowerIcon />
         </button>

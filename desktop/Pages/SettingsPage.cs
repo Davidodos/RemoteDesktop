@@ -169,7 +169,7 @@ public sealed class SettingsPage : PageView
     /// </summary>
     private Card HotkeyCard()
     {
-        var card = new Card("Toggle für Remote Windows-Steuerung");
+        var card = new Card("Kürzel für den Vollzugriff");
         var change = new ThemedButton(ChangeLabel);
 
         _hotkeyBox.ReadOnly = true;
@@ -226,14 +226,14 @@ public sealed class SettingsPage : PageView
             }
         };
 
-        card.Body.Add(new TextBlock("Schaltet zwischen eigenem Desktop und Remote Host um."));
+        card.Body.Add(new TextBlock("Schaltet den Vollzugriff auf einen anderen Rechner ein und aus."));
 
         card.Body.Add(Row.Fill(_hotkeyBox, change));
 
         return card;
     }
 
-    private const string ChangeLabel = "Shortcut ändern";
+    private const string ChangeLabel = "Kürzel ändern";
 
     /// <summary>Was in dem Feld steht, solange niemand daran dreht.</summary>
     private static string Beschreibe(string? stored) =>

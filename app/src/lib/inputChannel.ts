@@ -266,11 +266,7 @@ export class InputChannel {
           return
         }
 
-        this.onError(
-          `Die Verbindung zu ${this.device.name} kommt nicht zustande. Meist ist ` +
-          'das Sicherheitszertifikat des Rechners abgelaufen — im Fenster dort ' +
-          'unter „Einrichtung“ neu holen.',
-        )
+        this.onError(`Die Verbindung zu ${this.device.name} kommt nicht zustande.`)
       },
     })
   }

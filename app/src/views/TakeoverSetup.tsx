@@ -73,10 +73,7 @@ export function TakeoverSetup({ onChoose, onLater }: Props): React.JSX.Element {
       >
         <h2>Vollzugriff auf einen anderen Rechner</h2>
 
-        <p>
-          Ein Kürzel schaltet ihn ein und wieder aus. Solange er läuft, gehen Maus und Tastatur
-          vollständig hinüber — dieses Kürzel ist das Einzige, was hier bleibt.
-        </p>
+        <p>Ein Kürzel schaltet ihn ein und wieder aus.</p>
 
         <p className="pairing-code address">{describeHotkey(hotkey)}</p>
 

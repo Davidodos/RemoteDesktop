@@ -155,18 +155,8 @@ export function ConnectionRequestView(): React.JSX.Element | null {
           <strong>{current.label}</strong> möchte den Bildschirm dieses Geräts sehen
           und es bedienen.
         </p>
-        <p className="settings-hint">
-          Jede Verbindung wird einzeln bestätigt — auch von einem Gerät, das schon
-          gekoppelt ist. Ohne Antwort gilt sie nach einer halben Minute als
-          abgelehnt.
-        </p>
-
         {sharing === false && allowed !== false && (
-          <p className="settings-hint">
-            Für das Bild fragt Android gleich noch einmal nach. Lehnst du das ab,
-            kommt die Verbindung trotzdem zustande — dieses Gerät lässt sich dann
-            bedienen, aber nicht ansehen.
-          </p>
+          <p className="settings-hint">Für das Bild fragt Android gleich noch einmal.</p>
         )}
 
         <button type="button" onClick={() => answer(true)}>

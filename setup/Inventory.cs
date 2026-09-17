@@ -125,8 +125,7 @@ public static class Inventory
         {
             return new Part(
                 AgentTitle,
-                "Macht diesen Rechner fernsteuerbar. Läuft im Hintergrund und lässt nur "
-                + "Geräte herein, die du ausdrücklich gekoppelt hast.",
+                "Macht diesen Rechner fernsteuerbar.",
                 "nicht installiert — die Programmdatei fehlt",
                 Ok: false,
                 Missing: true,
@@ -141,9 +140,8 @@ public static class Inventory
         {
             return new Part(
                 AgentTitle,
-                "Macht diesen Rechner fernsteuerbar. Er läuft noch als Windows-Dienst — so "
-                + "sieht er keinen Bildschirm und kann keine Eingaben machen. Einmal neu "
-                + "einrichten stellt das um.",
+                "Macht diesen Rechner fernsteuerbar. Läuft noch als Windows-Dienst — einmal "
+                + "neu einrichten stellt das um.",
                 "läuft als Dienst — muss umgestellt werden",
                 Ok: false,
                 Missing: false,
@@ -154,8 +152,7 @@ public static class Inventory
         {
             return new Part(
                 AgentTitle,
-                "Macht diesen Rechner fernsteuerbar. Läuft im Hintergrund und lässt nur "
-                + "Geräte herein, die du ausdrücklich gekoppelt hast.",
+                "Macht diesen Rechner fernsteuerbar.",
                 "nicht eingerichtet",
                 Ok: false,
                 Missing: true,

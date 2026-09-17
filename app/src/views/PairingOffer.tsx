@@ -120,7 +120,7 @@ export function PairingOffer(): React.JSX.Element {
       {!running && (
         <p className="settings-hint">
           {host.toggleable
-            ? 'Erst freigeben — der Code kommt vom laufenden Server. Einstellungen → Dieses Gerät freigeben.'
+            ? 'Zuerst unter Einstellungen → Freigabe einschalten.'
             : 'Der Agent läuft nicht. Nur er gibt Codes aus. Starten unter „Übersicht“.'}
         </p>
       )}

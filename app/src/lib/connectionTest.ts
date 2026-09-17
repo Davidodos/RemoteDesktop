@@ -102,7 +102,7 @@ const SCOPE_NAMES: Record<string, string> = {
   screen: 'Bild',
   input: 'Eingabe',
   media: 'Medien',
-  power: 'Energie',
+  power: 'Ein/Aus',
   actions: 'Aktionen',
   wake: 'Wecken',
 }

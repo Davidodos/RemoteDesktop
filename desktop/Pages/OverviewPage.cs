@@ -116,8 +116,12 @@ public sealed class OverviewPage : PageView
                 : PartCard(part, part.State, text: null));
         }
 
-        Body.Add(UpdateCard());
-        Body.Add(AboutCard());
+        // Nur, wenn es etwas gibt: eine Karte „Alles aktuell" sagt nichts, und
+        // „Über" steht in den Einstellungen. Gesucht wird trotzdem beim Start.
+        if (_offer is not null)
+        {
+            Body.Add(UpdateCard());
+        }
 
         // Erst jetzt gemerkt, nicht vorher: geht auf dem Weg hierher etwas
         // schief, muss der nächste Versuch es noch einmal probieren. Sonst
@@ -184,23 +188,6 @@ public sealed class OverviewPage : PageView
         act.Click += async (_, _) => await UpdateStepAsync();
 
         card.Body.Add(Row.Fill(new TextBlock(_updateLine), act));
-
-        return card;
-    }
-
-    private Card AboutCard()
-    {
-        var card = new Card("Über");
-        var project = new ThemedButton("Projektseite öffnen");
-
-        project.Click += (_, _) => Open(Project);
-
-        card.Body.Add(new TextBlock(
-            $"RemoteDesktop {ClientUpdate.InstalledVersion()}\n"
-            + $"Anzeigekomponente WebView2: {WebView2Runtime.InstalledVersion() ?? "fehlt"}\n"
-            + $"Datenordner des Agents: {Elevation.DataDirectory}"));
-
-        card.Body.Add(Row.Buttons(project));
 
         return card;
     }

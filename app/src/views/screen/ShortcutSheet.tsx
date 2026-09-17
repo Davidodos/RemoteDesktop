@@ -20,7 +20,7 @@ export function ShortcutSheet({ input }: Props): React.JSX.Element {
     <div className="shortcut-sheet">
       {shortcuts.length === 0 ? (
         <p className="now-playing-empty">
-          Keine Shortcuts angelegt — im Menü unter „Shortcuts" geht das.
+          Noch keine Tastenkombination angelegt — im Menü unter „Tastenkombinationen“.
         </p>
       ) : (
         shortcuts.map((shortcut) => (

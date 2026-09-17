@@ -11,7 +11,7 @@ interface Props {
 /**
  * Die Aktionen, die der Zielrechner anbietet.
  *
- * Anders als die Tastenkombinationen unter „Kürzel“ kommen sie vom Rechner und
+ * Anders als die Tastenkombinationen kommen sie vom Rechner und
  * nicht aus dem Speicher dieses Handys: sie gelten für jeden Client, überleben
  * eine Neuinstallation der App und können mehr als Tasten. Bearbeitet werden
  * sie nur am Rechner selbst — über das Netz gibt es dafür keinen Weg, und das

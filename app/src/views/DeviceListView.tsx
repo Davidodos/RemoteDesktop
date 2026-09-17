@@ -578,7 +578,7 @@ function DevicePanel({
             type="button"
             className="secondary"
             disabled={busy}
-            title="Lädt den Installer und führt ihn dort aus. Der Rechner ist danach kurz weg."
+            title="Der Rechner ist danach kurz weg."
             onClick={() => void update()}
           >
             {busy ? 'Aktualisiere…' : 'Aktualisieren'}

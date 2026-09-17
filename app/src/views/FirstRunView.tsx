@@ -13,12 +13,6 @@ interface Props {
 type Step = 'name' | 'ask' | 'permissions'
 
 /**
- * Die Anleitung zur Bedienungshilfe. Den Abschnitt auf der Projektseite gibt es
- * noch nicht — bis dahin landet der Link auf der Projektseite selbst.
- */
-const INPUT_GUIDE = 'https://github.com/Davidodos/RemoteDesktop#bedienungshilfe'
-
-/**
  * Der erste Start am Handy: zwei Fragen, dann ist die App benutzbar.
  *
  * <p>
@@ -195,12 +189,6 @@ export function FirstRunView({ suggestion, rename, onDone }: Props): React.JSX.E
       >
         {input ? '✓ Eingaben freigegeben' : 'Eingaben freigeben (Bedienungshilfe)'}
       </button>
-
-      {!input && (
-        <a className="guide-link" href={INPUT_GUIDE} target="_blank" rel="noreferrer">
-          Anleitung: Bedienungshilfe aktivieren
-        </a>
-      )}
 
       <button type="button" className="secondary" onClick={onDone}>
         Fertig

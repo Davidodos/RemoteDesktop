@@ -63,8 +63,7 @@ export function CertificateTrustStep({ device, onDone }: Props): React.JSX.Eleme
       <h2>Zertifikat bestätigen</h2>
 
       <p>
-        <strong>{device.name}</strong> stellt sein Zertifikat selbst aus. Dieses Gerät muss
-        der Stelle einmal vertrauen — danach nie wieder.
+        <strong>{device.name}</strong> einmal bestätigen.
       </p>
 
       {manual && (

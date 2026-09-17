@@ -54,14 +54,14 @@ const PAGES: { id: Page; label: string; icon: IconComponent; needs: Capability }
   { id: 'screen', label: 'Bildschirm', icon: ScreenIcon, needs: 'screen' },
   { id: 'mouse', label: 'Maus', icon: MouseIcon, needs: 'input' },
   { id: 'keyboard', label: 'Tastatur', icon: KeyboardIcon, needs: 'input' },
-  { id: 'power', label: 'Power', icon: PowerIcon, needs: 'power' },
+  { id: 'power', label: 'Ein/Aus', icon: PowerIcon, needs: 'power' },
   { id: 'media', label: 'Medien', icon: MediaIcon, needs: 'media' },
   // Vom Zielrechner, nicht aus dem Speicher dieses Handys — deshalb über den
-  // Shortcuts, die nur lokal gelten.
+  // Tastenkombinationen, die nur lokal gelten.
   { id: 'actions', label: 'Aktionen', icon: ShortcutIcon, needs: 'actions' },
-  // Ein Shortcut ist eine gespeicherte Tastenkombination. Wo keine Tasten
-  // ankommen, ist er ein Knopf, der nichts tut.
-  { id: 'shortcuts', label: 'Shortcuts', icon: ShortcutIcon, needs: 'keys' },
+  // Eine gespeicherte Tastenkombination. Wo keine Tasten ankommen, ist sie
+  // ein Knopf, der nichts tut.
+  { id: 'shortcuts', label: 'Tastenkombinationen', icon: ShortcutIcon, needs: 'keys' },
 ]
 
 /**

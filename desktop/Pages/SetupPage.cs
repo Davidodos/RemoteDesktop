@@ -39,11 +39,9 @@ namespace RemoteDesktopClient.Pages;
 /// </summary>
 public sealed class SetupPage : PageView
 {
-    /// <summary>
-    /// Die Anleitung zu Tailscale. Den Abschnitt auf der Projektseite gibt es
-    /// noch nicht — bis dahin landet der Knopf auf der Projektseite selbst.
-    /// </summary>
-    private const string TailscaleGuide = "https://github.com/Davidodos/RemoteDesktop#tailscale";
+    /// <summary>Die Anleitung zu den Netzmodi — der Tailscale-Abschnitt darin.</summary>
+    private const string TailscaleGuide =
+        "https://github.com/Davidodos/RemoteDesktop/blob/master/docs/NETZ.md#tailscale--der-bequeme-weg-nach-draußen";
 
     private enum Step
     {
@@ -353,9 +351,7 @@ public sealed class SetupPage : PageView
             if (_withAgent)
             {
                 card.Body.Add(new TextBlock(
-                    "Für diese Adresse stellt keine öffentliche Stelle ein Zertifikat aus. "
-                    + "Der Agent stellt sich deshalb selbst eins aus, und dein Handy "
-                    + "bestätigt es einmal beim Koppeln — danach nie wieder.",
+                    "Das Handy bestätigt den Rechner einmal beim Koppeln.",
                     Theme.Body,
                     Theme.TextDim));
             }
@@ -662,17 +658,6 @@ public sealed class SetupPage : PageView
         lines.Add($"Autostart: {OnOff(_withWindows)}");
 
         card.Body.Add(new TextBlock(string.Join("\n", lines), Theme.Body, Theme.Text));
-
-        // Der Eintrag in der Aufgabenplanung gehört dem Agent. Ohne ihn startet
-        // nur das Fenster, und das steht im Autostart des Benutzers.
-        if (Mode().Starts(AutostartMode.Agent))
-        {
-            card.Body.Add(new TextBlock(
-                "Es wird ein Eintrag in der Aufgabenplanung für den Autostart von "
-                + "RemoteDesktop erstellt.",
-                Theme.Body,
-                Theme.TextDim));
-        }
 
         var back = new ThemedButton("Zurück");
         var finish = new ThemedButton("Einrichtung abschließen", ButtonTone.Primary);

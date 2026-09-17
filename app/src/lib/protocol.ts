@@ -20,7 +20,7 @@ export function protocolMismatch(info: AgentInfo, deviceName: string): string | 
   if (info.protocol < CLIENT_PROTOCOL) {
     return (
       `Der Agent auf ${deviceName} ist älter als diese App. ` +
-      'Auf der Seite „Ein/Aus" lässt er sich aktualisieren.'
+      'In der Geräteliste lässt er sich aktualisieren.'
     )
   }
 

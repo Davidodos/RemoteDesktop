@@ -45,7 +45,13 @@ umgeschrieben, nur sachlich richtig gehalten.
   eigenes Zertifikat auf die neuen Adressen), C3 (IPv6 in `LocalAddresses`,
   ohne temporäre; NETZ.md), C4/C5 (NETZ.md, waker/README.md), C6 (Adressen mit
   Leerzeichen oder `/` fliegen in allen drei `Sanitize`-Fassungen raus).
-- R4, R5 offen.
+- **R4 erledigt:** E1 (Ein/Aus, Tastenkombinationen, Kürzel für den
+  Vollzugriff, Freigabe), E2 (protocol.ts, inputChannel.ts, tote Links raus
+  bzw. auf NETZ.md), E3 (Anfragekarte, ShareView, PairingOffer, SetupPage,
+  Inventory, Übersicht ohne „Über" und mit „Updates" nur bei Angebot,
+  Tooltip, CertificateTrustStep, TakeoverSetup), E4 (ein Satz zur Zoomgeste
+  beim ersten Handy vom Rechner aus, `storage.pinchHintShown`).
+- R5 offen.
 
 ---
 

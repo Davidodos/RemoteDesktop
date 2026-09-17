@@ -37,11 +37,11 @@ export function SettingsView({ onShare }: Props): React.JSX.Element {
 
       {onShare !== undefined && platform.host.available && (
         <section className="settings-group">
-          <h2>Fernsteuerung dieses Geräts</h2>
+          <h2>Freigabe</h2>
 
           <button type="button" className="settings-entry" onClick={onShare}>
             <ScreenIcon />
-            <span>Freigabe und Rechte</span>
+            <span>Freigabe</span>
           </button>
         </section>
       )}

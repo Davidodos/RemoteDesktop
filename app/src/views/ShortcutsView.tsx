@@ -102,7 +102,7 @@ export function ShortcutsView(): React.JSX.Element {
 
   return (
     <div className="shortcuts-view">
-      <span className="key-group-label">Shortcuts</span>
+      <span className="key-group-label">Tastenkombinationen</span>
 
       {shortcuts.length === 0 && (
         <p className="now-playing-empty">Noch keine Kombination angelegt.</p>
