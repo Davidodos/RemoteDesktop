@@ -217,6 +217,37 @@ class ScreenStreamTest {
         assertTrue("keine Kennzahlen bei stehendem Bild", texts.contains("stats"))
     }
 
+    /**
+     * Dasselbe in der Pause: der Client hält nach sechs Sekunden Stille die
+     * Verbindung für tot — und ein minimiertes Fenster am Rechner pausiert.
+     * Bis zum 18.09.2026 schwieg der Strom in der Pause ganz.
+     */
+    @Test(timeout = 10_000)
+    fun `auch in der Pause verstummt der Socket nicht`() {
+        val source = FakeSource(640, 1424, frames = 0)
+        val (socket, messages) = collector()
+        val uhr = java.util.concurrent.atomic.AtomicLong(0)
+        val schlaefer = java.util.concurrent.atomic.AtomicInteger(0)
+
+        val stream = ScreenStream(
+            source, 640, 1424, fps = 10,
+            now = { uhr.addAndGet(200) },
+            sleep = {
+                if (schlaefer.incrementAndGet() > 30) {
+                    socket.close()
+                }
+            },
+        )
+
+        stream.apply(JSONObject().put("t", "pause").toString())
+        stream.run(socket)
+
+        val texts = messages.filterIsInstance<String>().map { JSONObject(it).getString("t") }
+
+        assertTrue("keine Kennzahlen in der Pause", texts.contains("stats"))
+        assertEquals("in der Pause wird kein Bild geholt", 0, source.calls)
+    }
+
     /** Ist die Aufnahme wirklich weg, wird es gesagt — und die Rückkehr auch. */
     @Test(timeout = 10_000)
     fun `eine weggefallene Aufnahme wird gemeldet`() {

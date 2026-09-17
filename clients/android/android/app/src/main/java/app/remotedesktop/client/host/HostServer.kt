@@ -87,20 +87,28 @@ class HostServer(
     /** Ob sie gebunden ist und Befehle annimmt. Siehe [awaitInput]. */
     private val inputReady: () -> Boolean = { true },
     /**
-     * Beendet die Bildschirmaufnahme samt Zustimmung.
+     * Beendet die Bildschirmaufnahme samt Aufnahme-Erlaubnis.
      *
      * <p>
-     * **Gerufen, wenn der letzte Zuschauer geht.** Eine Zustimmung, die über
-     * das Ende der Verbindung hinaus gilt, klingt bequem und ist es auch — bis
-     * sie nicht mehr gilt: Android nimmt eine Projektion nach einer Weile ohne
-     * Zuschauer von sich aus zurück, und zwar lautlos. Was dann blieb, war eine
-     * Quelle, die es zu geben behauptete und nichts lieferte, und ein Gerät, das
-     * beim nächsten Verbinden nicht mehr fragte, weil es sich für berechtigt
-     * hielt. Ein Ende, das man selbst herbeiführt, ist verlässlicher als eins,
-     * von dem man nichts erfährt.
+     * **Gerufen, wenn die letzte Verbindung überhaupt endet** — nicht, wenn
+     * nur der Bild-Socket zu ist. Bis zum 18.09.2026 hing das am Bild-Socket
+     * allein: baute der Client ihn neu auf, während sein Eingabe-Socket stand,
+     * war die Erlaubnis weg, die Zustimmung der Sitzung aber noch da. Niemand
+     * fragte neu, und der nächste Bild-Socket lief in „gibt seinen Bildschirm
+     * noch nicht frei". Das war „Bild weg, Eingaben gehen noch".
      * </p>
      */
     private val releaseScreen: () -> Unit = {},
+    /** Ob die Aufnahme-Erlaubnis gerade vorliegt. Siehe [requestScreen]. */
+    private val screenPermitted: () -> Boolean = { true },
+    /**
+     * Bittet die Oberfläche, den Aufnahmedialog von Android zu öffnen.
+     *
+     * Gerufen, wenn eine Sitzung zugestimmt hat, die Erlaubnis aber fehlt —
+     * etwa weil Android sie zurückgenommen hat. Die Karte „darf dieses Gerät
+     * verbinden?" kommt in dem Fall nicht noch einmal; sie ist beantwortet.
+     */
+    private val requestScreen: () -> Unit = {},
 ) {
 
     companion object {
@@ -164,6 +172,12 @@ class HostServer(
          * </p>
          */
         private const val SOURCE_WAIT_MS = 6000L
+
+        /**
+         * Länger, wenn dafür ein Mensch den Aufnahmedialog bestätigen muss —
+         * das dauert, bis das Handy in der Hand liegt.
+         */
+        private const val DIALOG_WAIT_MS = 25_000L
         private const val SOURCE_POLL_MS = 250L
     }
 
@@ -322,12 +336,21 @@ class HostServer(
      * gibt es nichts, worauf man warten könnte, und der Satz darf sofort
      * hinaus. Siehe {@link SOURCE_WAIT_MS} für den Grund, warum es sonst dauert.
      */
-    private fun awaitSource(): FrameSource? {
+    internal fun awaitSource(): FrameSource? {
         if (!screenAllowed()) {
             return null
         }
 
-        val deadline = System.currentTimeMillis() + SOURCE_WAIT_MS
+        // Die Zustimmung steht, die Erlaubnis fehlt: dann muss der Dialog von
+        // Android noch einmal her, und zwar jetzt — nicht erst bei der
+        // nächsten Karte, die es in dieser Sitzung nicht mehr gibt.
+        val needsDialog = !screenPermitted()
+
+        if (needsDialog) {
+            requestScreen()
+        }
+
+        val deadline = System.currentTimeMillis() + (if (needsDialog) DIALOG_WAIT_MS else SOURCE_WAIT_MS)
 
         while (true) {
             screenSource()?.let { return it }
@@ -349,28 +372,21 @@ class HostServer(
      * Räumt auf, wenn eine Verbindung endet.
      *
      * <p>
-     * **Zwei Dinge, und beide hängen am selben Augenblick.** Geht der letzte
-     * Zuschauer, endet die Bildschirmaufnahme samt Zustimmung — Android nimmt
-     * eine ungenutzte Projektion ohnehin lautlos zurück, und ein Ende, das man
-     * selbst herbeiführt, ist verlässlicher. Geht die letzte Verbindung dieses
-     * Geräts überhaupt, wird auch die Zustimmung des Menschen vergessen: sie
-     * galt dieser Verbindung und nicht dem Sitzungstoken, das zwölf Stunden
-     * lebt.
-     * </p>
-     *
-     * <p>
-     * Beim Ablösen — ein neuer Socket verdrängt den alten — läuft dieses
-     * `finally` erst *nach* der Registrierung des Nachfolgers. Dann ist der
-     * Zähler nicht null, und es passiert richtigerweise nichts.
+     * Geht die letzte Verbindung dieses Geräts, wird die Zustimmung des
+     * Menschen vergessen: sie galt dieser Verbindung und nicht dem
+     * Sitzungstoken, das zwölf Stunden lebt. Geht die letzte Verbindung
+     * überhaupt, endet auch die Aufnahme samt Erlaubnis. Beides hängt an
+     * Verbindungen, nicht am Bild-Socket allein — ein neu aufgebauter
+     * Bild-Socket bei stehendem Eingabe-Socket ist kein Ende.
      * </p>
      */
-    private fun partOver(request: HttpServer.Request) {
-        if (live.countOf(LiveConnections.Kind.SCREEN) == 0) {
-            releaseScreen()
+    internal fun partOver(clientId: String?, session: HostSession?) {
+        if (live.countFor(clientId) == 0) {
+            session?.forget()
         }
 
-        if (live.countFor(clientOf(request)) == 0) {
-            sessionOf(request)?.forget()
+        if (live.count == 0) {
+            releaseScreen()
         }
     }
 
@@ -505,7 +521,7 @@ class HostServer(
                 socket.close()
                 sender.join(2000)
                 release()
-                partOver(request)
+                partOver(clientOf(request), sessionOf(request))
             }
         }
 
@@ -562,7 +578,7 @@ class HostServer(
             } finally {
                 socket.close()
                 release()
-                partOver(request)
+                partOver(clientOf(request), sessionOf(request))
             }
         }
 

@@ -234,6 +234,17 @@ export function ScreenView({
   const channelRef = useRef<ScreenChannel | undefined>(undefined)
   const webrtcRef = useRef<WebRtcChannel | undefined>(undefined)
 
+  // Die Rückrufe des Aufrufers liegen in Refs und nicht in den Abhängigkeiten
+  // der Effekte: sonst baute ein neuer Rückruf den Bild-Socket neu auf, und
+  // ob er neu ist, entscheidet der Aufrufer bei jedem Rendern.
+  const onErrorRef = useRef(onError)
+  const onTakeoverEndRef = useRef(onTakeoverEnd)
+
+  useEffect(() => {
+    onErrorRef.current = onError
+    onTakeoverEndRef.current = onTakeoverEnd
+  })
+
   // Die Handler lesen Zoom und Zeigerposition bei jedem Touch-Event; über die
   // State-Werte hingen sie am letzten Render und wären während einer Geste
   // veraltet.
@@ -291,9 +302,9 @@ export function ScreenView({
       .getInfo()
       .then((info) => setMonitors(info.monitors))
       .catch((cause: unknown) => {
-        onError(cause instanceof Error ? cause.message : String(cause))
+        onErrorRef.current(cause instanceof Error ? cause.message : String(cause))
       })
-  }, [agent, onError])
+  }, [agent])
 
   // Erst H.264 versuchen, dann JPEG. Der Effekt hängt bewusst nicht am
   // Monitor: bei H.264 wechselt der Monitor innerhalb der Verbindung, und ein
@@ -368,7 +379,7 @@ export function ScreenView({
         // Eine Absage beendet das Warten ebenso wie eine Zusage — nur steht
         // danach der Grund da statt eines Bildes.
         setAwaiting(false)
-        onError(message)
+        onErrorRef.current(message)
       },
       onAvailability: (available, reason) =>
         setUnavailable(available ? undefined : (reason ?? 'Bildschirm nicht verfügbar.')),
@@ -382,7 +393,7 @@ export function ScreenView({
       channel.disconnect()
       channelRef.current = undefined
     }
-  }, [device, active, transport, onError, updateViewport])
+  }, [device, active, transport, updateViewport])
 
   // Nach einem Monitor- oder Transportwechsel stimmen die Bildmaße nicht mehr,
   // und beim Drehen des Handys ebenso wenig — dann muss der Ausschnitt neu auf
@@ -491,12 +502,14 @@ export function ScreenView({
       try {
         await grabPointer(stage)
       } catch {
-        onError(
+        onErrorRef.current(
           'Die Maus ließ sich nicht einfangen. Einmal ins Bild klicken und das '
           + 'Kürzel noch einmal drücken.',
         )
       }
     })()
+
+    const onTakeoverEnd = (): void => onTakeoverEndRef.current()
 
     /**
      * Die Maus bewegt sich hier, der Zeiger drüben.
@@ -577,7 +590,7 @@ export function ScreenView({
     // Übernahme baute diesen Effekt neu auf, und dabei ginge die eingefangene
     // Maus verloren. Der Monitor beim Einschalten ist der richtige.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [takeover, input, updateViewport, onTakeoverEnd, onError])
+  }, [takeover, input, updateViewport])
 
   // Eine gehaltene Maustaste darf nicht überleben, wenn die Ansicht verschwindet.
   useEffect(

@@ -19,7 +19,7 @@ const PROBE_TIMEOUT_MS = 3000
  * Eine Anmeldung nur zum Nachsehen, ob jemand da ist, wäre verkehrt herum —
  * gefragt wird deshalb `/health`.
  */
-export async function isReachable(device: Device): Promise<boolean> {
+export async function isReachable(device: Device, now = Date.now()): Promise<boolean> {
   if (await knock(device)) {
     return true
   }
@@ -29,7 +29,32 @@ export async function isReachable(device: Device): Promise<boolean> {
   // so aus wie ein Rechner, der schläft. Das ist der Fall, der am echten Gerät
   // ein eingeschaltetes Handy dauerhaft als „offline" führte — bestätigt wurde
   // beim Eintragen in die Liste, und da lief die Gegenstelle noch nicht.
+  //
+  // Höchstens einmal je Minute je Gerät: der Abruf kostet bis zu drei Sekunden
+  // und die Liste fragt alle vier — bei einem Rechner, der aus ist, überholten
+  // sich die Runden sonst.
+  if (!dueForTrust(device.id, now)) {
+    return false
+  }
+
   return (await ensureTrust(device)) && (await knock(device))
+}
+
+/** Wann zuletzt je Gerät versucht wurde, der Stelle zu vertrauen. */
+const trustAttempts = new Map<string, number>()
+
+const TRUST_RETRY_MS = 60_000
+
+function dueForTrust(id: string, now: number): boolean {
+  const last = trustAttempts.get(id)
+
+  if (last !== undefined && now - last < TRUST_RETRY_MS) {
+    return false
+  }
+
+  trustAttempts.set(id, now)
+
+  return true
 }
 
 /**

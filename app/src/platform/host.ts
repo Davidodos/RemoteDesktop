@@ -99,6 +99,13 @@ export interface HostService {
    */
   answer(id: string, allow: boolean): Promise<void>
 
+  /**
+   * Der Host braucht die Aufnahme-Erlaubnis von Android, und die Zustimmung
+   * dafür liegt schon vor. Der Zuhörer öffnet dann {@link enableScreen} —
+   * ohne Karte. Rückgabewert meldet ab.
+   */
+  onScreenNeeded(listener: () => void): () => void
+
   /** Wer dieses Gerät steuern darf. */
   clients(): Promise<HostClient[]>
 
@@ -176,6 +183,7 @@ export const noHost: HostService = {
   openInputSettings: () => unavailable(),
   onRequests: (): (() => void) => () => undefined,
   answer: () => unavailable(),
+  onScreenNeeded: (): (() => void) => () => undefined,
   clients: (): Promise<HostClient[]> => Promise.resolve([]),
   revoke: () => unavailable(),
 }

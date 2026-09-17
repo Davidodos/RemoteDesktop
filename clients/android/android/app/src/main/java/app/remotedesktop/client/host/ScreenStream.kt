@@ -122,6 +122,10 @@ class ScreenStream(
             val started = now()
 
             if (paused) {
+                // Auch in der Pause die Kennzahlen: der Client hält nach sechs
+                // Sekunden Stille die Verbindung für tot und baut sie neu auf —
+                // derselbe Grund, aus dem der Windows-Agent es so hält.
+                sendStatsIfDue(socket)
                 sleep(100)
                 continue
             }

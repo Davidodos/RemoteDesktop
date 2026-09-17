@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 /**
  * Wie lange eine Meldung stehen bleibt, wenn sie niemand wegtippt.
@@ -106,7 +106,17 @@ export interface Notice {
   clear: () => void
 }
 
-/** Die Anbindung an React — die Regeln stehen in {@link Notices}. */
+/**
+ * Die Anbindung an React — die Regeln stehen in {@link Notices}.
+ *
+ * `report` und `clear` behalten ihre Identität über alle Renderdurchläufe.
+ * Das ist keine Kleinigkeit: beide hängen in `App.tsx` als Abhängigkeiten an
+ * Effekten und gehen als `onError` in die Ansichten. Wären sie bei jedem
+ * Rendern neu, liefe der Effekt `clearError()` nach jedem Rendern — also
+ * direkt nach dem, in dem eine Meldung erschienen ist — und die
+ * Bildschirmansicht baute ihren Bild-Socket bei jedem Rendern der Shell neu
+ * auf. Genau das war bis zum 18.09.2026 der Fall.
+ */
 export function useNotice(lifetimeMs: number = NOTICE_LIFETIME_MS): Notice {
   const [message, setMessage] = useState<string | undefined>(undefined)
 
@@ -117,9 +127,8 @@ export function useNotice(lifetimeMs: number = NOTICE_LIFETIME_MS): Notice {
 
   useEffect(() => () => notices.dispose(), [notices])
 
-  return {
-    message,
-    report: (text) => notices.report(text),
-    clear: () => notices.clear(),
-  }
+  const report = useCallback((text: string) => notices.report(text), [notices])
+  const clear = useCallback(() => notices.clear(), [notices])
+
+  return { message, report, clear }
 }

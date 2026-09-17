@@ -59,6 +59,17 @@ class ConnectionRequests(private val timeoutMs: Long = TIMEOUT_MS) {
     var onSettled: ((id: String) -> Unit)? = null
 
     /**
+     * Die Oberfläche soll den Aufnahmedialog von Android öffnen — ohne Karte,
+     * die Zustimmung ist schon da. Siehe `HostServer.requestScreen`.
+     */
+    @Volatile
+    var onScreenNeeded: (() -> Unit)? = null
+
+    fun requestScreen() {
+        onScreenNeeded?.invoke()
+    }
+
+    /**
      * Fragt und wartet. Läuft im Thread der Verbindung — der darf hier stehen
      * bleiben, denn genau darauf wartet die Gegenseite.
      *

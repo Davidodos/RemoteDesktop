@@ -509,6 +509,8 @@ function Shell(): React.JSX.Element {
   // niemand mehr sieht.
   useEffect(() => setTakeover(false), [selected])
 
+  const endTakeover = useCallback((): void => setTakeover(false), [])
+
   /**
    * Die echte Tastatur — vier Fälle, in dieser Reihenfolge.
    *
@@ -808,7 +810,7 @@ function Shell(): React.JSX.Element {
               visible={view === 'screen'}
               takeover={takeover}
               {...(hotkey === undefined ? {} : { takeoverHint: describeHotkey(hotkey) })}
-              onTakeoverEnd={() => setTakeover(false)}
+              onTakeoverEnd={endTakeover}
               onError={setError}
             />
           </div>

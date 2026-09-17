@@ -231,6 +231,96 @@ class HostServerTest {
 
     private fun publicKey(): String = Base64.getEncoder().encodeToString(client.public.encoded)
 
+    /**
+     * Ein zweiter Host mit eigenen Rückrufen, ohne zu lauschen — für die
+     * Lebensdauer von Zustimmung und Aufnahme-Erlaubnis.
+     */
+    private fun quiet(
+        releaseScreen: () -> Unit = {},
+        screenPermitted: () -> Boolean = { true },
+        requestScreen: () -> Unit = {},
+        screenSource: () -> FrameSource? = { null },
+    ): HostServer {
+        val clients = ClientStore(File(folder, "clients2.json"))
+        val codes = PairingCodes()
+        val sessions = SessionStore()
+
+        return HostServer(
+            identity = HostIdentity.transient(),
+            pairing = PairingService(clients, codes, ChallengeStore(), sessions),
+            codes = codes,
+            material = material,
+            deviceName = { "Pixel" },
+            version = "1.9.0",
+            port = 0,
+            trustPort = 0,
+            sessions = sessions,
+            peers = peers,
+            local = local,
+            screen = { HostServer.Screen(1080, 2400) },
+            address = { "127.0.0.1" },
+            screenSource = screenSource,
+            releaseScreen = releaseScreen,
+            screenPermitted = screenPermitted,
+            requestScreen = requestScreen,
+        )
+    }
+
+    /**
+     * Der Befund vom 18.09.2026: baute der Client seinen Bild-Socket neu auf,
+     * während der Eingabe-Socket stand, war die Aufnahme-Erlaubnis weg, die
+     * Zustimmung aber noch da — niemand fragte neu, das Bild blieb schwarz.
+     */
+    @Test
+    fun `ein neuer Bild-Socket bei stehender Eingabe beendet die Aufnahme nicht`() {
+        var released = 0
+        val host = quiet(releaseScreen = { released++ })
+        val session = HostSession("c1", listOf("screen", "input"))
+
+        assertTrue(session.confirmOnce { true })
+
+        val input = host.live.register("c1", LiveConnections.Kind.INPUT) {}
+        val screen = host.live.register("c1", LiveConnections.Kind.SCREEN) {}
+
+        screen()
+        host.partOver("c1", session)
+
+        assertEquals("Die Erlaubnis gehört der Verbindung, nicht dem Bild-Socket", 0, released)
+        assertTrue("Die Zustimmung steht noch", session.confirmOnce { false })
+
+        input()
+        host.partOver("c1", session)
+
+        assertEquals(1, released)
+        assertTrue("Ohne Verbindung wird neu gefragt", !session.confirmOnce { false })
+    }
+
+    /**
+     * Fehlt die Erlaubnis bei genehmigter Sitzung, bittet der Host die
+     * Oberfläche um den Aufnahmedialog — statt „gibt seinen Bildschirm noch
+     * nicht frei" zu melden.
+     */
+    @Test(timeout = 10_000)
+    fun `ohne Erlaubnis wird der Aufnahmedialog angefordert`() {
+        var requested = 0
+
+        val source = object : FrameSource {
+            override val width = 10
+            override val height = 10
+            override fun next(quality: Int): CapturedFrame? = null
+            override fun close() = Unit
+        }
+
+        val host = quiet(
+            screenPermitted = { false },
+            requestScreen = { requested++ },
+            screenSource = { if (requested > 0) source else null },
+        )
+
+        assertNotNull(host.awaitSource())
+        assertEquals(1, requested)
+    }
+
     // ---- Die Kopplung geht immer in beide Richtungen ----------------------
 
     @Test

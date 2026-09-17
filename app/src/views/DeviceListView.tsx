@@ -143,13 +143,32 @@ export function DeviceListView({
     setStatuses(await probeAll(devices))
   }, [devices])
 
+  // Eine Runde nach der anderen und nicht im festen Takt: eine Runde dauert
+  // bei einem Rechner, der aus ist, bis zu drei Sekunden je Versuch — mit
+  // `setInterval` überholten sich die Runden.
   useEffect(() => {
-    void refresh()
+    let alive = true
+    let timer: number | undefined
 
     const interval = waking === undefined ? IDLE_POLL_INTERVAL_MS : WAKE_POLL_INTERVAL_MS
-    const timer = window.setInterval(() => void refresh(), interval)
 
-    return () => window.clearInterval(timer)
+    const round = async (): Promise<void> => {
+      await refresh()
+
+      if (alive) {
+        timer = window.setTimeout(() => void round(), interval)
+      }
+    }
+
+    void round()
+
+    return () => {
+      alive = false
+
+      if (timer !== undefined) {
+        window.clearTimeout(timer)
+      }
+    }
   }, [refresh, waking])
 
   const isOnline = (id: string): boolean =>

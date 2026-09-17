@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AgentClient } from '../lib/agentClient.ts'
 import type { AgentActionSummary } from '../lib/types.ts'
 
@@ -22,6 +22,14 @@ export function ActionsView({ agent, deviceName, onError }: Props): React.JSX.El
   const [busy, setBusy] = useState<string | undefined>(undefined)
   const [asking, setAsking] = useState<AgentActionSummary | undefined>(undefined)
 
+  // Im Ref, nicht in den Abhängigkeiten: ein neuer Rückruf soll die Liste
+  // nicht neu holen.
+  const onErrorRef = useRef(onError)
+
+  useEffect(() => {
+    onErrorRef.current = onError
+  })
+
   useEffect(() => {
     let current = true
 
@@ -36,7 +44,7 @@ export function ActionsView({ agent, deviceName, onError }: Props): React.JSX.El
           // Eine leere Liste statt `undefined`: sonst stünde für immer
           // „Lade…“ da, obwohl längst klar ist, dass nichts kommt.
           setActions([])
-          onError(failure instanceof Error ? failure.message : String(failure))
+          onErrorRef.current(failure instanceof Error ? failure.message : String(failure))
         }
       },
     )
@@ -44,7 +52,7 @@ export function ActionsView({ agent, deviceName, onError }: Props): React.JSX.El
     return () => {
       current = false
     }
-  }, [agent, onError])
+  }, [agent])
 
   const invoke = async (action: AgentActionSummary): Promise<void> => {
     setAsking(undefined)

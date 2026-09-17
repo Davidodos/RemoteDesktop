@@ -53,6 +53,12 @@ class HostPlugin : Plugin() {
         requests.onSettled = { id ->
             notifyListeners("connectionSettled", JSObject().put("id", id), true)
         }
+
+        // Die Erlaubnis fehlt, die Zustimmung nicht: die Seite öffnet dann den
+        // Aufnahmedialog, ohne noch einmal zu fragen.
+        requests.onScreenNeeded = {
+            notifyListeners("screenNeeded", JSObject(), true)
+        }
     }
 
     /** Die Antwort vom Bildschirm. Ohne sie läuft die Frage in ihr Zeitlimit. */

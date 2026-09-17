@@ -35,11 +35,19 @@ class HttpServer(
 ) {
 
     companion object {
-        /** Mehr gleichzeitige Verbindungen braucht niemand, der zwei Geräte hat. */
-        private const val MAX_CONNECTIONS = 16
+        /**
+         * Kurze Anfragen. WebSockets zählen hier nicht mit — sie bekommen
+         * einen eigenen Thread (siehe [openSocket]), sonst hielte jeder von
+         * ihnen einen der Arbeiter für die Dauer der Sitzung fest.
+         */
+        private const val MAX_CONNECTIONS = 32
 
-        /** Eine stille Verbindung wird nach dieser Zeit fallen gelassen. */
-        private const val READ_TIMEOUT_MS = 30_000
+        /**
+         * Eine stille Verbindung wird nach dieser Zeit fallen gelassen. Kurz,
+         * weil jede offene Keep-Alive-Verbindung einen Arbeiter bindet und
+         * ein Browser bis zu sechs davon aufmacht.
+         */
+        private const val READ_TIMEOUT_MS = 8_000
 
         /** Obergrenze für Kopfzeilen — schützt vor einem Strom ohne Ende. */
         private const val MAX_HEADER_BYTES = 16 * 1024
@@ -172,17 +180,19 @@ class HttpServer(
     }
 
     private fun serve(client: Socket) {
-        client.use { connection ->
-            connection.soTimeout = READ_TIMEOUT_MS
+        var detached = false
 
-            val input = connection.getInputStream().buffered()
-            val output = BufferedOutputStream(connection.getOutputStream())
-            val local = connection.inetAddress?.isLoopbackAddress == true
+        try {
+            client.soTimeout = READ_TIMEOUT_MS
+
+            val input = client.getInputStream().buffered()
+            val output = BufferedOutputStream(client.getOutputStream())
+            val local = client.inetAddress?.isLoopbackAddress == true
 
             // Mehrere Anfragen über dieselbe Verbindung: ohne das baut der
             // Browser für jeden Aufruf einen neuen TLS-Handschlag auf, und der
             // kostet auf einem Handy spürbar mehr als die Anfrage selbst.
-            while (!connection.isClosed) {
+            while (!client.isClosed) {
                 val request = try {
                     read(input, local) ?: return
                 } catch (broken: IOException) {
@@ -196,12 +206,10 @@ class HttpServer(
                 val upgrade = response.upgrade
 
                 if (upgrade != null) {
-                    // Ab hier gehört die Verbindung dem WebSocket. Kein
-                    // Zeitlimit mehr: ein Eingabe-Socket ist minutenlang still,
-                    // wenn niemand tippt, und wäre nach dreißig Sekunden weg.
-                    connection.soTimeout = 0
-
-                    if (openSocket(connection, request, input, output, upgrade)) {
+                    if (openSocket(client, request, input, output, upgrade)) {
+                        // Ab hier gehört die Verbindung dem Socket-Thread —
+                        // er schließt sie am Ende, nicht dieser Arbeiter.
+                        detached = true
                         return
                     }
 
@@ -218,11 +226,20 @@ class HttpServer(
                     return
                 }
             }
+        } finally {
+            if (!detached) {
+                runCatching { client.close() }
+            }
         }
     }
 
     /**
-     * Vollzieht den Handschlag und übergibt.
+     * Vollzieht den Handschlag und übergibt an einen eigenen Thread.
+     *
+     * Ein eigener Thread und nicht der Arbeiter: ein WebSocket steht Minuten
+     * bis Stunden, und ein Arbeiter, der so lange gebunden ist, fehlt jeder
+     * kurzen Anfrage — bis der Vorrat leer war und neue Verbindungen
+     * kommentarlos zugingen.
      *
      * @return `false`, wenn die Anfrage gar keine Aufrüstung war — dann geht es
      *   als gewöhnliche Antwort weiter, statt eine Verbindung stillschweigend
@@ -247,7 +264,7 @@ class HttpServer(
             return false
         }
 
-        return try {
+        try {
             output.write(
                 (
                     "HTTP/1.1 101 Switching Protocols\r\n" +
@@ -257,30 +274,31 @@ class HttpServer(
                     ).toByteArray(Charsets.US_ASCII),
             )
             output.flush()
-
-            // **Der TCP-Socket wird mitgeschlossen, und das ist der Punkt.**
-            //
-            // Der Befund dahinter (18.08.2026): `close()` setzte nur ein Flag
-            // und schickte einen Close-Rahmen. Der Thread hing derweil in
-            // `input.read()` — ohne Zeitlimit, denn das wurde oben gerade
-            // aufgehoben. Legte die Gegenseite nicht sauber auf, sondern verlor
-            // einfach die Route (WLAN-Wechsel, geschlossener Deckel, ein
-            // beendetes Fenster), wartete er dort für immer. Zwei Folgen: die
-            // Verbindung zählte weiter als offen — am Handy stand in der
-            // Benachrichtigung, jemand sehe zu, obwohl niemand mehr zusah —,
-            // und der Arbeiter blieb belegt. Nach ein paar solchen Versuchen war
-            // der Vorrat aufgebraucht und ein neuer Versuch wurde abgewiesen:
-            // genau das „geht nicht mehr, bis die App neu startet".
-            //
-            // Ein geschlossener Socket bricht das blockierende Lesen sofort mit
-            // einer IOException ab. Damit endet `listen`, und damit läuft das
-            // `finally`, an dem die Freigabe hängt.
-            upgrade(WebSocketConnection(input, output) { runCatching { connection.close() } })
-
-            true
         } catch (broken: IOException) {
-            true
+            return false
         }
+
+        // Kein Zeitlimit mehr: ein Eingabe-Socket ist minutenlang still, wenn
+        // niemand tippt. Geschlossen wird über den TCP-Socket — das ist die
+        // einzige Art, den lesenden Thread aus seinem `read()` zu holen (siehe
+        // `WebSocketConnection.onClosed`).
+        connection.soTimeout = 0
+
+        val socket = WebSocketConnection(input, output) { runCatching { connection.close() } }
+
+        Thread({
+            try {
+                upgrade(socket)
+            } finally {
+                socket.close()
+                runCatching { connection.close() }
+            }
+        }, "remotedesktop-socket").apply {
+            isDaemon = true
+            start()
+        }
+
+        return true
     }
 
     /** @return `null`, wenn die Gegenseite aufgelegt hat. */

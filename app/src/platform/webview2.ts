@@ -287,6 +287,7 @@ const windowHost: HostService = {
   openInputSettings: () => beimAgent(),
   onRequests: (): (() => void) => () => undefined,
   answer: () => beimAgent(),
+  onScreenNeeded: (): (() => void) => () => undefined,
 
   clients: async (): Promise<HostClient[]> => {
     const { clients } = await ask<{ clients?: unknown }>({ kind: 'local-clients' })

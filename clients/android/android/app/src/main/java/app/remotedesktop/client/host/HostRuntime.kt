@@ -249,6 +249,8 @@ class HostRuntime private constructor(
             // verlässlich bleibt: Android nimmt eine ungenutzte Projektion von
             // sich aus zurück, ohne es jemandem zu sagen.
             releaseScreen = ScreenCapture::forget,
+            screenPermitted = { ScreenCapture.isPermitted },
+            requestScreen = connections::requestScreen,
         )
 
         server.live.onChange = { count -> onConnectionsChanged?.invoke(count) }

@@ -535,6 +535,7 @@ function hostService(plugins: CapacitorPlugins): HostService {
     openInputSettings: () => plugin.openInputSettings(),
     onRequests: (listener) => watchConnections(plugin, listener),
     answer: (id, allow) => plugin.answerConnection({ id, allow }),
+    onScreenNeeded: (listener) => watchScreenNeeded(plugin, listener),
     clients: async () => (await plugin.clients()).clients,
     revoke: (id) => plugin.revoke({ id }),
   }
@@ -597,6 +598,30 @@ function watchConnections(
     for (const handle of handles) {
       void handle.then((entry) => entry.remove()).catch(() => undefined)
     }
+  }
+}
+
+/**
+ * Der Host braucht den Aufnahmedialog — ohne Karte, die Zustimmung steht.
+ * Eine ältere APK kennt das Ereignis nicht; dann bleibt es beim Verhalten von
+ * vorher.
+ */
+function watchScreenNeeded(plugin: HostPlugin, listener: () => void): () => void {
+  if (typeof plugin.addListener !== 'function') {
+    return () => undefined
+  }
+
+  let alive = true
+
+  const handle = plugin.addListener('screenNeeded', () => {
+    if (alive) {
+      listener()
+    }
+  })
+
+  return () => {
+    alive = false
+    void handle.then((entry) => entry.remove()).catch(() => undefined)
   }
 }
 

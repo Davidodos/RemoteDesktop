@@ -52,6 +52,37 @@ export function ConnectionRequestView(): React.JSX.Element | null {
     return host.onRequests(setRequests)
   }, [host])
 
+  /**
+   * Der Host hat die Zustimmung, aber keine Aufnahme-Erlaubnis mehr — Android
+   * nimmt sie zurück, oder die letzte Verbindung hat sie beendet. Dann kommt
+   * der Systemdialog von hier, ohne eine zweite Karte. Ein Dialog auf einmal:
+   * zwei Bild-Sockets kurz nacheinander sollen nicht zwei Dialoge auslösen.
+   */
+  useEffect(() => {
+    if (!host.available) {
+      return
+    }
+
+    let asking = false
+
+    return host.onScreenNeeded(() => {
+      if (asking) {
+        return
+      }
+
+      asking = true
+
+      void host.enableScreen().then(
+        () => {
+          asking = false
+        },
+        () => {
+          asking = false
+        },
+      )
+    })
+  }, [host])
+
   const current = requests[0]
 
   // Nachgesehen wird, sobald eine Frage ansteht, und nicht im Takt: der Stand
