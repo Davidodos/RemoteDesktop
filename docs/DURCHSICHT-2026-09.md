@@ -11,6 +11,24 @@ Agent 382 grün, Setup 133 grün, App 323 grün, Kotlin grün, Waker 69 grün.
 Die Nummern (A1, B3 …) sind für die Umsetzung gedacht; der Plan steht in
 Abschnitt 7.
 
+**Hinweis zu den Docs:** alle Dateien unter `docs/` und die READMEs sind
+Entwicklungsunterlagen. Für die Veröffentlichung entstehen eigene Dokumente
+(Funktionen, Änderungen, Anleitung); die bestehenden werden dafür nicht
+umgeschrieben, nur sachlich richtig gehalten.
+
+## Umsetzungsstand
+
+- **R1 erledigt** (Commit `a205dd8`): A1–A6.
+- **R2 in Arbeit:** B1 (Datenordner: `data` nur lesbar, `data\secret`
+  admin-only, Benutzerdateien unter `%localappdata%\RemoteDesktop`,
+  `AgentPaths.Separate/AdoptUserFiles`, `LocalSecretFile` in `setup/` sind
+  angelegt; Agent, Fenster, Installer, Tests folgen), B2 (lokales Geheimnis am
+  PC, Loopback-Endpunkte am Handy weg), B3 (Installer aus `data\secret\update`),
+  D1 (ein Update-Weg: `AgentUpdater`/`SelfUpdater`/`POST /api/update` weg,
+  Startprüfung über `InstallerUpdate`), B4 (Trust-Karte weg), B7 (Sammel-Token
+  weg), B8, B5 (Name Constraints), B6 (Prüfzeichen), `SICHERHEIT.md`.
+- R3, R4, R5 offen.
+
 ---
 
 ## 1. Die Ursache für „Bild bricht ab, Eingaben gehen noch" (Windows → Android)

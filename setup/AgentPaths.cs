@@ -25,6 +25,133 @@ public static class AgentPaths
     /// <summary>Der Unterordner neben der Programmdatei.</summary>
     public const string FolderName = "data";
 
+    /// <summary>
+    /// Der Unterordner darin, in den nur Administratoren und das System
+    /// hineinkommen: private Schlüssel und Zertifikate mit Schlüssel.
+    ///
+    /// <para>
+    /// **Der Befund dahinter (18.09.2026):** <c>data</c> war für jeden Benutzer
+    /// beschreibbar, weil das Fenster ohne Rechte dort schreiben musste. Damit
+    /// konnte jeder lokale Prozess den Schlüssel des Agents lesen und sich in
+    /// die Liste der zugelassenen Geräte eintragen. Jetzt liegt alles Geheime
+    /// hier, alles, was das Fenster schreibt, im Profil des Benutzers
+    /// (<see cref="UserDirectory"/>), und <c>data</c> selbst ist nur lesbar.
+    /// </para>
+    /// </summary>
+    public const string SecretFolderName = "secret";
+
+    /// <summary>Der öffentliche Schlüssel des Agents — für das Fenster.</summary>
+    public const string AgentPublicFile = "agent.pub";
+
+    /// <summary>Die Liste der Stellen, denen das Fenster vertraut.</summary>
+    public const string TrustedFile = "trusted.json";
+
+    /// <summary>Das Geheimnis für die nur lokal erreichbaren Endpunkte.</summary>
+    public const string LocalSecretFileName = "local.secret";
+
+    /// <summary>
+    /// Was der Agent mit erhöhten Rechten anlegt und was niemand sonst lesen
+    /// soll.
+    /// </summary>
+    public static readonly IReadOnlyList<string> SecretFiles =
+        [IdentityFile, "cert.key", ServerCertificateFile, AuthorityFile];
+
+    /// <summary>
+    /// Was das Fenster ohne Rechte schreiben muss — und deshalb im Profil des
+    /// Benutzers liegt. Der Agent läuft in der Sitzung desselben Benutzers und
+    /// liest dieselben Dateien.
+    /// </summary>
+    public static readonly IReadOnlyList<string> UserFiles =
+        [ClientKeyFile.FileName, DeviceNameFile.FileName, HotkeyFile.FileName, TrustedFile];
+
+    /// <summary>Der Ordner des angemeldeten Benutzers: <c>%localappdata%\RemoteDesktop</c>.</summary>
+    public static string UserDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RemoteDesktop");
+
+    /// <summary>Der geheime Unterordner zu einem Datenordner.</summary>
+    public static string SecretIn(string dataDirectory) =>
+        Path.Combine(dataDirectory, SecretFolderName);
+
+    /// <summary>
+    /// Trennt, was bis v1.4 alles in <c>data</c> lag: Geheimes nach
+    /// <c>secret</c>, das des Benutzers in sein Profil. Verschoben, nicht
+    /// kopiert — sonst läge der Schlüssel weiter dort, wo jeder ihn lesen kann.
+    /// Nur der Agent ruft das; er kommt in beide Ordner hinein.
+    /// </summary>
+    /// <returns>Die Dateien, die umgezogen sind.</returns>
+    public static IReadOnlyList<string> Separate(
+        string dataDirectory, string secretDirectory, string userDirectory)
+    {
+        var moved = new List<string>();
+
+        foreach (var (name, target) in SecretFiles.Select(name => (name, secretDirectory))
+                     .Concat(UserFiles.Select(name => (name, userDirectory))))
+        {
+            var from = Path.Combine(dataDirectory, name);
+            var to = Path.Combine(target, name);
+
+            if (!File.Exists(from))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(target);
+
+                if (File.Exists(to))
+                {
+                    // Drüben steht schon etwas — dann gilt das, und die alte
+                    // Kopie hat hier nichts mehr verloren.
+                    File.Delete(from);
+                }
+                else
+                {
+                    File.Move(from, to);
+                }
+
+                moved.Add(name);
+            }
+            catch (Exception)
+            {
+                // Bleibt liegen; der nächste Start versucht es noch einmal.
+            }
+        }
+
+        return moved;
+    }
+
+    /// <summary>
+    /// Holt die Dateien des Benutzers aus <c>data</c> ins Profil — kopiert,
+    /// nicht verschoben: das Fenster darf in <c>data</c> nur lesen. Gebraucht,
+    /// wenn das Fenster nach dem Update vor dem Agent startet; sonst legte es
+    /// sich einen neuen Ausweis an, und jede Kopplung wäre hinfällig.
+    /// </summary>
+    public static void AdoptUserFiles(string dataDirectory, string userDirectory)
+    {
+        foreach (var name in UserFiles)
+        {
+            var from = Path.Combine(dataDirectory, name);
+            var to = Path.Combine(userDirectory, name);
+
+            if (!File.Exists(from) || File.Exists(to))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(userDirectory);
+                File.Copy(from, to, overwrite: false);
+            }
+            catch (Exception)
+            {
+                // Dann eben beim nächsten Mal — oder der Agent zieht um.
+            }
+        }
+    }
+
     /// <summary>Wo die Daten bis v1.2.0 lagen — nur noch zum Übernehmen.</summary>
     public const string LegacyFolderName = "RemoteDesktopAgent";
 
