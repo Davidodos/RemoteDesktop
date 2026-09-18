@@ -13,6 +13,7 @@ import {
 import { useIdentity } from './lib/ownName.ts'
 import { InputChannel } from './lib/inputChannel.ts'
 import { useNotice } from './lib/notice.ts'
+import { useBackButton } from './lib/useBackButton.ts'
 import { useHardwareKeyboard } from './lib/useHardwareKeyboard.ts'
 import { protocolMismatch } from './lib/protocol.ts'
 import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
@@ -514,6 +515,57 @@ function Shell(): React.JSX.Element {
     onError: setError,
   })
 
+  // **Alle Hooks stehen über den frühen Rückgaben.** Der Zoomgesten-Effekt
+  // stand einmal darunter — und React zählt Hooks je Renderlauf: sobald der
+  // Erststart in die Geräteliste überging, kam einer dazu, und die Seite blieb
+  // leer (Windows-Fenster und Handy, 18.09.2026).
+  /**
+   * Die Seite, die wirklich zu sehen ist.
+   *
+   * <p>
+   * Ohne verbundenes Gerät gibt es nur drei: die Liste, die Einstellungen und
+   * die Freigabe. Mit einem bleibt der Wunsch in `page` stehen, auch wenn das
+   * eben gewählte Gerät ihn nicht erfüllen kann — wer von einem Handy zurück
+   * auf den PC wechselt, landet wieder auf „Ein/Aus", statt eine Seite neu
+   * suchen zu müssen.
+   * </p>
+   *
+   * <p>
+   * Entschieden wird das hier und nicht in einem Effekt: sonst wäre ein
+   * Bilddurchlauf lang die Seite zu sehen, die es dort gar nicht gibt.
+   * </p>
+   */
+  const view: Page =
+    selected === undefined
+      ? page === 'settings' || page === 'share'
+        ? page
+        : 'devices'
+      : pageAvailable(page, abilities)
+        ? page
+        : 'screen'
+
+  // **Die Zoomgeste, einmal.** Am Rechner gibt es in der Sitzung mit einem
+  // Handy keine Symbolreihe, und dass ein gezogener Rechtsklick dort zoomt,
+  // steht sonst nirgends. Ein Satz beim ersten Mal — wie das Kürzel beim
+  // ersten Rechner.
+  useEffect(() => {
+    if (
+      !getPlatform().hotkey.available ||
+      !touchTarget ||
+      view !== 'screen' ||
+      selected === undefined ||
+      storage.pinchHintShown()
+    ) {
+      return
+    }
+
+    storage.markPinchHintShown()
+    setError('Zoomen am Handy: rechte Maustaste gedrückt halten und ziehen.')
+  }, [touchTarget, view, selected, setError])
+
+  // **Zurück am Handy** — eine Ebene hoch, nicht raus. Siehe useBackButton.
+  useBackButton({ menuOpen, setMenuOpen, pairing, setPairing, selected, disconnect, page, setPage, onError: setError })
+
   // **Der erste Start** — Name und Freigabe, genau einmal. Solange die Antwort
   // von der Plattform noch aussteht, wird nichts gezeigt: eine Erststartfrage,
   // die für einen Bilddurchlauf aufblitzt, wäre schlimmer als eine, die kurz
@@ -597,50 +649,6 @@ function Shell(): React.JSX.Element {
     !hotkeySkipped &&
     selected !== undefined &&
     !touchTarget
-
-  /**
-   * Die Seite, die wirklich zu sehen ist.
-   *
-   * <p>
-   * Ohne verbundenes Gerät gibt es nur drei: die Liste, die Einstellungen und
-   * die Freigabe. Mit einem bleibt der Wunsch in `page` stehen, auch wenn das
-   * eben gewählte Gerät ihn nicht erfüllen kann — wer von einem Handy zurück
-   * auf den PC wechselt, landet wieder auf „Ein/Aus", statt eine Seite neu
-   * suchen zu müssen.
-   * </p>
-   *
-   * <p>
-   * Entschieden wird das hier und nicht in einem Effekt: sonst wäre ein
-   * Bilddurchlauf lang die Seite zu sehen, die es dort gar nicht gibt.
-   * </p>
-   */
-  const view: Page =
-    selected === undefined
-      ? page === 'settings' || page === 'share'
-        ? page
-        : 'devices'
-      : pageAvailable(page, abilities)
-        ? page
-        : 'screen'
-
-  // **Die Zoomgeste, einmal.** Am Rechner gibt es in der Sitzung mit einem
-  // Handy keine Symbolreihe, und dass ein gezogener Rechtsklick dort zoomt,
-  // steht sonst nirgends. Ein Satz beim ersten Mal — wie das Kürzel beim
-  // ersten Rechner.
-  useEffect(() => {
-    if (
-      !platform.hotkey.available ||
-      !touchTarget ||
-      view !== 'screen' ||
-      selected === undefined ||
-      storage.pinchHintShown()
-    ) {
-      return
-    }
-
-    storage.markPinchHintShown()
-    setError('Zoomen am Handy: rechte Maustaste gedrückt halten und ziehen.')
-  }, [platform, touchTarget, view, selected, setError])
 
   return (
     <div className="app">

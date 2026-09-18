@@ -149,11 +149,21 @@ public sealed class ClientTrayContext : ApplicationContext
         _stopAgent.Enabled = installed && running;
     }
 
-    private void Quit()
+    /// <summary>
+    /// „Beenden" heißt beides: Fenster und Agent. Wer hier klickt, will den
+    /// Rechner nicht mehr erreichbar haben — ein Agent, der still weiterliefe,
+    /// wäre das Gegenteil dessen, was der Eintrag verspricht. Beim nächsten
+    /// Anmelden startet ihn die Aufgabe wieder.
+    /// </summary>
+    private async void Quit()
     {
         // Ohne das bleibt das Symbol als Leiche im Infobereich stehen, bis
         // jemand mit der Maus darüberfährt.
         _tray.Visible = false;
+
+        using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+
+        await LocalNode.QuitAsync(limit.Token);
 
         ExitThread();
     }

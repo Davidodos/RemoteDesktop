@@ -7,6 +7,7 @@ const TRANSPORT_KEY = 'remotedesktop.transport'
 const SHORTCUTS_KEY = 'remotedesktop.shortcuts'
 const PINCH_HINT_KEY = 'remotedesktop.pinchHint'
 const DEFAULT_MONITOR_PREFIX = 'remotedesktop.monitor.'
+const POINTER_SPEED_PREFIX = 'remotedesktop.pointerSpeed.'
 
 /**
  * Was die App sich merkt — benannt statt als lose Schlüssel.
@@ -92,6 +93,20 @@ export const storage = {
 
   setDefaultMonitor: (deviceId: string, index: number): void =>
     write(DEFAULT_MONITOR_PREFIX + deviceId, String(index)),
+
+  /**
+   * Wie weit der Zeiger je Fingerweg geht — je Gerät, weil ein Laptop und ein
+   * 4K-Monitor nicht dieselbe Empfindlichkeit brauchen. `undefined` heißt 1.
+   */
+  getPointerSpeed: (deviceId: string): number | undefined => {
+    const raw = read(POINTER_SPEED_PREFIX + deviceId)
+    const speed = raw === undefined ? Number.NaN : Number.parseFloat(raw)
+
+    return Number.isFinite(speed) && speed > 0 ? speed : undefined
+  },
+
+  setPointerSpeed: (deviceId: string, speed: number): void =>
+    write(POINTER_SPEED_PREFIX + deviceId, String(speed)),
 
   /** Die eigenen Tastenkombinationen als JSON — ausgewertet in `shortcuts.ts`. */
   getShortcuts: (): string | undefined => read(SHORTCUTS_KEY),

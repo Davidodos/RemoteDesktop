@@ -135,6 +135,23 @@ public static class LocalNode
     }
 
     /// <summary>
+    /// Bittet den Agent, sich zu beenden. Kein Fehler, wenn er nicht läuft —
+    /// dann gibt es nichts zu beenden.
+    /// </summary>
+    public static async Task QuitAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await Client.SendAsync(
+                Request(HttpMethod.Post, "/api/quit"), cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            // Lief nicht, oder antwortet nicht mehr — beides ist hier das Ziel.
+        }
+    }
+
+    /// <summary>
     /// Ob der Agent gerade läuft.
     ///
     /// Am Rechner ist „dieses Gerät freigeben" keine Einstellung der

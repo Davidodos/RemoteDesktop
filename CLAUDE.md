@@ -186,7 +186,9 @@ Einzelheiten unter **31r** in `docs/TASKS-V4.md`.
 des Bildabbruchs) zuerst, dann R2 (Sicherheit), R3 (Netzmodi), R4 (Texte),
 R5 (Aufräumen). **R1–R5 sind umgesetzt** (18.09.2026, Commits `a205dd8` bis zum
 Aufräumen), offen ist nur R6, die Abnahme am Gerät. Was sich dabei geändert
-hat, steht unter **31t** in `docs/TASKS-V4.md`.
+hat, steht unter **31t** in `docs/TASKS-V4.md`. **31u** (18.09.2026) behebt den
+leeren Bildschirm nach dem ersten Testlauf (Hook unter frühen Rückgaben) und
+bringt Zurück-Taste, Zeigerregler, Installer-Haken und „Beenden" für beides.
 
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native

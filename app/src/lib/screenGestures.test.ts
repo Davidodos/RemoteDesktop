@@ -52,6 +52,23 @@ describe('Fingerposition auf Monitorkoordinaten abbilden', () => {
   })
 })
 
+describe('Zeigergeschwindigkeit', () => {
+  test('der Regler streckt den Fingerweg', () => {
+    const media = { width: 1000, height: 500 }
+
+    expect(movePointer({ x: 0.5, y: 0.5 }, 100, 50, media, 1).x).toBeCloseTo(0.6)
+    expect(movePointer({ x: 0.5, y: 0.5 }, 100, 50, media, 1, 2).x).toBeCloseTo(0.7)
+    expect(movePointer({ x: 0.5, y: 0.5 }, 100, 50, media, 1, 0.5).y).toBeCloseTo(0.55)
+  })
+
+  test('ein unbrauchbarer Wert bewegt nichts', () => {
+    expect(movePointer({ x: 0.5, y: 0.5 }, 100, 50, { width: 1000, height: 500 }, 1, 0)).toEqual({
+      x: 0.5,
+      y: 0.5,
+    })
+  })
+})
+
 describe('Tippen von Wischen unterscheiden', () => {
   test('unbewegter Finger ist ein Tippen', () => {
     expect(isTap({ x: 100, y: 100 }, { x: 100, y: 100 })).toBe(true)

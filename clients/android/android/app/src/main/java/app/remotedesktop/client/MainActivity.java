@@ -6,6 +6,7 @@ import android.os.Build;
 import android.os.Bundle;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.PluginHandle;
 
 import app.remotedesktop.client.host.HostPlugin;
 import app.remotedesktop.client.host.HostPreference;
@@ -25,6 +26,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SurfacesPlugin.class);
         registerPlugin(CertificateTrustPlugin.class);
         registerPlugin(HostPlugin.class);
+        registerPlugin(AppNavigationPlugin.class);
 
         super.onCreate(savedInstanceState);
 
@@ -78,6 +80,24 @@ public class MainActivity extends BridgeActivity {
         }
 
         requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
+    }
+
+    /**
+     * Zurück geht an die Seite, solange sie zuhört — sie entscheidet, ob das
+     * eine Ebene hoch oder das Ende ist. Ohne Zuhörer bleibt es bei Android.
+     */
+    @Override
+    public void onBackPressed() {
+        PluginHandle handle = getBridge() == null ? null : getBridge().getPlugin("AppNavigation");
+        AppNavigationPlugin navigation =
+                handle == null ? null : (AppNavigationPlugin) handle.getInstance();
+
+        if (navigation != null && navigation.isListening()) {
+            navigation.back();
+            return;
+        }
+
+        super.onBackPressed();
     }
 
     /**

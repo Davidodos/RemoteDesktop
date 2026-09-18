@@ -252,6 +252,17 @@ app.UseClientAuth();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
+// Das Fenster sagt „Beenden" — und meint beides. Nur vom Rechner selbst mit
+// dem lokalen Geheimnis (ClientAuthMiddleware); ein Ende mit Rückgabewert 0
+// startet die Aufgabe nicht neu, erst die nächste Anmeldung tut das.
+app.MapPost("/api/quit", (IHostApplicationLifetime lifetime) =>
+{
+    app.Logger.LogInformation("Beendet auf Zuruf des Fensters.");
+    lifetime.StopApplication();
+
+    return Results.Ok(new { quitting = true });
+});
+
 // Die eingetragene Adresse schlägt den Namen im Zertifikat: bei einem selbst
 // ausgestellten Zertifikat steht dort zwar dasselbe, aber wer im Heimnetz eine
 // IP einträgt, soll genau diese im QR-Code wiederfinden. Nur wo nichts

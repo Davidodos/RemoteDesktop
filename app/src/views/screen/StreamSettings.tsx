@@ -1,3 +1,4 @@
+import { POINTER_SPEED_MAX, POINTER_SPEED_MIN, POINTER_SPEED_STEP } from '../../lib/screenGestures.ts'
 import type { QualityMode } from '../../lib/types.ts'
 
 /**
@@ -35,6 +36,13 @@ interface Props {
   onTransport: (mode: Transport) => void
   onQuality: (mode: QualityMode) => void
   onDefaultMonitor: () => void
+  /**
+   * Der Regler für den Zeiger — nur am Handy, wo der Finger wischt. Am
+   * Rechner geht die Maus eins zu eins hinaus, und ein zweiter Faktor über
+   * den Windows-Einstellungen wäre einer, den niemand mehr zuordnen kann.
+   */
+  pointerSpeed?: number
+  onPointerSpeed?: (speed: number) => void
 }
 
 /**
@@ -51,9 +59,26 @@ export function StreamSettings({
   onTransport,
   onQuality,
   onDefaultMonitor,
+  pointerSpeed,
+  onPointerSpeed,
 }: Props): React.JSX.Element {
   return (
     <div className="stream-settings">
+      {pointerSpeed !== undefined && onPointerSpeed !== undefined && (
+        <label className="stream-slider">
+          <span>Zeiger {pointerSpeed.toFixed(2).replace(/\.?0+$/, '')}×</span>
+          <input
+            type="range"
+            min={POINTER_SPEED_MIN}
+            max={POINTER_SPEED_MAX}
+            step={POINTER_SPEED_STEP}
+            value={pointerSpeed}
+            onChange={(event) => onPointerSpeed(Number.parseFloat(event.target.value))}
+            aria-label="Zeigergeschwindigkeit"
+          />
+        </label>
+      )}
+
       {/* Merkt sich den gezeigten Monitor für dieses Gerät — beim nächsten Mal
           steht das Bild sofort richtig. */}
       <button

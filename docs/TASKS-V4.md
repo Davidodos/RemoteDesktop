@@ -1832,6 +1832,34 @@ Koppeln bei gestopptem Agent (Rückfrage von Windows), Update aus der
 Geräteliste, ein Netzwechsel des Laptops im Heimnetz, und nach einem Update von
 v1.3: Kopplungen und Ausweis bleiben (Umzug der Dateien).
 
+## Phase 31u — leere Seite, Zurück-Taste, Regler, Installer-Haken, Beenden ✅ (18.09.2026, am Gerät noch zu prüfen)
+
+**Der leere Bildschirm** nach dem Erststart am Handy und im Geräte-Tab des
+Fensters: der Zoomgesten-Effekt aus R4 stand in `App.tsx` unter den frühen
+Rückgaben für Erststart und Kopplung. React zählt Hooks je Renderlauf; sobald
+der Erststart in die Geräteliste überging, kam einer dazu, und React ließ die
+Seite fallen. Jetzt stehen alle Hooks oben, und `App.render.test.ts` spielt
+genau den Übergang nach — mit dem Fehler fällt er durch.
+
+**Zurück-Taste am Handy** (`AppNavigationPlugin`, `platform/navigation.ts`,
+`lib/useBackButton.ts`): eine Ebene hoch — Menü zu, Kopplung abbrechen,
+Sitzung trennen, zur Geräteliste. Auf der Geräteliste warnt der erste Druck
+(„Noch einmal Zurück beendet die App."), ein zweiter binnen zwei Sekunden
+beendet.
+
+**Regler für den Zeiger am Handy** hinter dem Zahnrad der Bildschirmansicht
+(`StreamSettings`, 0,5× bis 3×), je Gerät gemerkt
+(`storage.getPointerSpeed`), gerechnet nur in `movePointer`. Am Rechner gibt
+es ihn nicht — dort geht die Maus eins zu eins hinaus.
+
+**Installer:** die Abschlussseite hat den Haken „RemoteDesktop jetzt starten"
+(`postinstall skipifsilent`); still installiert startet es weiterhin immer
+(`skipifnotsilent`).
+
+**Beenden im Tray** beendet auch den Agent: `POST /api/quit`, nur lokal mit
+`local.secret`, der Agent hält an; beim nächsten Anmelden startet ihn die
+Aufgabe wieder.
+
 ## Phase 32 — Dateidienst im Windows-Agent
 
 Neues Recht `files`. **Achtung:** ein neues Recht bekommt kein bereits

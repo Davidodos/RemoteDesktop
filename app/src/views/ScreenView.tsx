@@ -167,6 +167,17 @@ export function ScreenView({
    */
   const withMouse = getPlatform().capabilities.pointerLock
 
+  // Der Regler für den Finger — je Gerät gemerkt, siehe storage.getPointerSpeed.
+  const [pointerSpeed, setPointerSpeed] = useState(() => storage.getPointerSpeed(device.id) ?? 1)
+  const pointerSpeedRef = useRef(pointerSpeed)
+
+  useEffect(() => {
+    const stored = storage.getPointerSpeed(device.id) ?? 1
+
+    setPointerSpeed(stored)
+    pointerSpeedRef.current = stored
+  }, [device.id])
+
   /** Ob am anderen Ende ein Finger erwartet wird statt einer Tastatur. */
   const touchRemote = isTouchTarget(abilities)
 
@@ -684,6 +695,7 @@ export function ScreenView({
       dy,
       { width: media.offsetWidth, height: media.offsetHeight },
       scale,
+      pointerSpeedRef.current,
     )
 
     pointerRef.current = next
@@ -869,6 +881,16 @@ export function ScreenView({
           }}
           onQuality={changeQuality}
           isDefaultMonitor={defaultMonitor === active}
+          {...(withMouse
+            ? {}
+            : {
+                pointerSpeed,
+                onPointerSpeed: (speed: number) => {
+                  setPointerSpeed(speed)
+                  pointerSpeedRef.current = speed
+                  storage.setPointerSpeed(device.id, speed)
+                },
+              })}
           onDefaultMonitor={() => {
             storage.setDefaultMonitor(device.id, active)
             setDefaultMonitor(active)

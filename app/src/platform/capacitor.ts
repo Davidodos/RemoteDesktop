@@ -5,6 +5,7 @@ import type { SurfaceBoardPublisher } from './surfaces.ts'
 // Werte direkt aus den definierenden Modulen — siehe web.ts.
 import { noHost } from './host.ts'
 import { noHotkey } from './hotkey.ts'
+import { noAppNavigation, type AppNavigation } from './navigation.ts'
 import { noIdentity } from './identity.ts'
 import { noLocalNode, usableProfile } from './localNode.ts'
 import { noTrust } from './trust.ts'
@@ -84,6 +85,12 @@ interface SurfacesPlugin {
   publish(options: { board: string }): Promise<void>
 }
 
+/** Die Zurück-Taste und das Beenden — `AppNavigationPlugin` in der APK. */
+export interface NavigationPlugin {
+  exit(): Promise<void>
+  addListener?(event: 'back', listener: () => void): { remove: () => Promise<void> } | Promise<{ remove: () => Promise<void> }>
+}
+
 export interface CapacitorPlugins {
   preferences: PreferencesPlugin
   clipboard: ClipboardPlugin
@@ -97,6 +104,8 @@ export interface CapacitorPlugins {
   appUpdate?: AppUpdatePlugin
   /** Ebenfalls freiwillig, aus demselben Grund wie {@link CapacitorPlugins.appUpdate}. */
   surfaces?: SurfacesPlugin
+  /** Ebenso freiwillig: ohne das Plugin beendet Android die App beim ersten Druck. */
+  navigation?: NavigationPlugin
   /** Ebenso freiwillig: eine ältere APK kennt das Plugin nicht. */
   trust?: TrustPlugin
   /** Ebenso — dieses Plugin kam erst mit V4 dazu. */
@@ -364,6 +373,33 @@ function surfaceBoardPublisher(plugins: CapacitorPlugins): SurfaceBoardPublisher
   }
 }
 
+function appNavigation(plugin: NavigationPlugin | undefined): AppNavigation {
+  if (plugin === undefined || typeof plugin.addListener !== 'function') {
+    return noAppNavigation
+  }
+
+  return {
+    available: true,
+
+    onBack(listener: () => void): () => void {
+      let alive = true
+
+      const handle = plugin.addListener!('back', () => {
+        if (alive) {
+          listener()
+        }
+      })
+
+      return () => {
+        alive = false
+        void Promise.resolve(handle).then((h) => h.remove()).catch(() => undefined)
+      }
+    },
+
+    exit: () => plugin.exit(),
+  }
+}
+
 function sessionKeepAlive(plugins: CapacitorPlugins): SessionKeepAlive {
   return {
     async begin(deviceName: string): Promise<void> {
@@ -410,6 +446,7 @@ export function capacitorPlatform(
     session: sessionKeepAlive(plugins),
     surfaces: surfaceBoardPublisher(plugins),
     trust: certificateTrust(plugins),
+    navigation: appNavigation(plugins.navigation),
     host: hostService(plugins),
     node: localNode(plugins),
     identity: deviceIdentity(plugins),
@@ -695,6 +732,7 @@ async function registerCapacitorPlugins(): Promise<CapacitorPlugins> {
     appUpdate: registerPlugin<AppUpdatePlugin>('AppUpdate'),
     surfaces: registerPlugin<SurfacesPlugin>('Surfaces'),
     trust: registerPlugin<TrustPlugin>('CertificateTrust'),
+    navigation: registerPlugin<NavigationPlugin>('AppNavigation'),
     host: registerPlugin<HostPlugin>('Host'),
   }
 }

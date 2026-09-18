@@ -3,6 +3,7 @@ import { noSessionKeepAlive } from './session.ts'
 // Werte direkt aus den definierenden Modulen — siehe web.ts.
 import { usableProfile } from './localNode.ts'
 import { noSurfaces } from './surfaces.ts'
+import { noAppNavigation } from './navigation.ts'
 import type {
   Capabilities,
   ClientKey,
@@ -532,6 +533,8 @@ export function webview2Platform(host: WebView2Host): Platform {
     // dieser Phase, und niemand hat danach gefragt.
     surfaces: noSurfaces,
     trust: windowTrust,
+    // Das Fenster hat keine Zurück-Taste; der Weg zurück ist die Seitenleiste.
+    navigation: noAppNavigation,
     // Steuerbar macht diesen Rechner der Agent daneben. Die Oberfläche kann
     // ihn nicht schalten — sie kann aber sagen, wie er dasteht, und die Liste
     // führen, die er dabei benutzt.

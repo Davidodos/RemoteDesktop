@@ -5,6 +5,7 @@
 // der Fall, und es fiel erst auf, als jemand `platform.node` im Browser las.
 import type { HostService } from './host.ts'
 import type { HotkeySetting } from './hotkey.ts'
+import type { AppNavigation } from './navigation.ts'
 import type { DeviceIdentity } from './identity.ts'
 import type { LocalNode } from './localNode.ts'
 import type { SessionKeepAlive } from './session.ts'
@@ -129,6 +130,8 @@ export interface Platform {
    * überall dort, wo kein Tailscale läuft — also im Heimnetz und im eigenen VPN.
    */
   readonly trust: TrustService
+  /** Die Zurück-Taste des Systems, wo es eine gibt. */
+  readonly navigation: AppNavigation
   /**
    * Dieses Gerät steuerbar machen — seit V4 kann ein Handy auch die Gegenseite
    * sein. Wo es das nicht kann, steht `noHost`.
@@ -170,6 +173,7 @@ export {
 } from './localNode.ts'
 export { noIdentity, type DeviceIdentity, type IdentityState } from './identity.ts'
 export { noHotkey, type HotkeySetting } from './hotkey.ts'
+export { noAppNavigation, type AppNavigation } from './navigation.ts'
 export {
   noHost,
   type ConnectionRequest,

@@ -5,6 +5,7 @@ import { noSessionKeepAlive } from './session.ts'
 // Gefragte zuletzt. Die Vorgabe-Plattform hatte deshalb ein leeres `node`.
 import { noHost } from './host.ts'
 import { noHotkey } from './hotkey.ts'
+import { noAppNavigation } from './navigation.ts'
 import { noIdentity } from './identity.ts'
 import { noLocalNode } from './localNode.ts'
 import { noTrust } from './trust.ts'
@@ -152,6 +153,7 @@ export const fallbackPlatform: Platform = {
   // könnte — dafür braucht es die APK.
   surfaces: noSurfaces,
   trust: noTrust,
+  navigation: noAppNavigation,
   host: noHost,
   node: noLocalNode,
   identity: noIdentity,

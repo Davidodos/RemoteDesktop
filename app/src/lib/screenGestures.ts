@@ -174,13 +174,19 @@ export interface Size {
   height: number
 }
 
+/** Der Regler geht von halb so weit bis dreimal so weit. */
+export const POINTER_SPEED_MIN = 0.5
+export const POINTER_SPEED_MAX = 3
+export const POINTER_SPEED_STEP = 0.25
+
 /**
  * Neue Zeigerposition (jeweils 0..1) nach einem Wischer über `dx`/`dy`
  * CSS-Pixel im Zeiger-Overlay.
  *
  * Gerechnet wird auf dem <em>angezeigten</em> Bild: bei doppeltem Zoom legt
  * derselbe Fingerweg nur den halben Weg auf dem Monitor zurück. Genau das macht
- * das Hineinzoomen erst nützlich.
+ * das Hineinzoomen erst nützlich. `speed` ist der Regler dazu — die einzige
+ * Stelle, an der gerechnet wird, bleibt die einzige.
  */
 export function movePointer(
   pointer: Point,
@@ -188,14 +194,15 @@ export function movePointer(
   dy: number,
   media: Size,
   scale: number,
+  speed = 1,
 ): Point {
-  if (media.width <= 0 || media.height <= 0 || scale <= 0) {
+  if (media.width <= 0 || media.height <= 0 || scale <= 0 || !(speed > 0)) {
     return pointer
   }
 
   return {
-    x: clampUnit(pointer.x + dx / (media.width * scale)),
-    y: clampUnit(pointer.y + dy / (media.height * scale)),
+    x: clampUnit(pointer.x + (dx * speed) / (media.width * scale)),
+    y: clampUnit(pointer.y + (dy * speed) / (media.height * scale)),
   }
 }
 
