@@ -176,6 +176,9 @@ class HostServer(
          * das dauert, bis das Handy in der Hand liegt.
          */
         private const val DIALOG_WAIT_MS = 25_000L
+
+        /** Wie oft während der Rückfrage ein Lebenszeichen hinausgeht. */
+        private const val AWAITING_INTERVAL_MS = 2_000L
         private const val SOURCE_POLL_MS = 250L
     }
 
@@ -352,6 +355,27 @@ class HostServer(
     }
 
     /**
+     * Schickt alle zwei Sekunden `{"t":"awaiting"}`, bis der Thread
+     * unterbrochen wird — das Lebenszeichen, solange am Gerät gefragt wird.
+     */
+    private fun keepAwaiting(socket: WebSocketConnection): Thread =
+        Thread({
+            try {
+                while (socket.isOpen) {
+                    Thread.sleep(AWAITING_INTERVAL_MS)
+                    socket.sendText(JSONObject().put("t", "awaiting").toString())
+                }
+            } catch (_: InterruptedException) {
+                // Die Antwort ist da.
+            } catch (_: Exception) {
+                // Der Socket ist zu; der wartende Thread merkt es selbst.
+            }
+        }, "remotedesktop-awaiting").apply {
+            isDaemon = true
+            start()
+        }
+
+    /**
      * Räumt auf, wenn eine Verbindung endet.
      *
      * <p>
@@ -453,41 +477,49 @@ class HostServer(
             // weg — dann bleibt es beim Verhalten von vorher.
             socket.sendText(JSONObject().put("t", "awaiting").toString())
 
+            // **Angemeldet wird sofort, nicht erst nach der Zustimmung.** Eine
+            // Verbindung, die noch auf die Antwort wartet, ist eine Verbindung:
+            // endete vorher eine andere desselben Geräts, sah `partOver` null
+            // offene und vergaß Zustimmung und Aufnahme — und die wartende
+            // fragte danach ein zweites Mal (18.09.2026). Ein älterer Bild-Socket
+            // desselben Geräts wird dabei abgelöst.
+            val release = live.register(clientOf(request), LiveConnections.Kind.SCREEN) {
+                socket.close()
+            }
+
+            // Während gefragt wird, alle zwei Sekunden ein Lebenszeichen: eine
+            // ältere App hält sonst die Stille für einen Abbruch.
+            val heartbeat = keepAwaiting(socket)
+
             // Erst die Zustimmung, dann die Aufnahme. Andersherum stünde am
             // Handy ein Systemdialog, bevor jemand überhaupt zugestimmt hat,
             // dass dieses Gerät zusehen darf.
-            requireConfirmation(request)?.let { failure ->
-                socket.sendText(
-                    JSONObject().put("t", "error").put("message", failure).toString(),
-                )
+            val refused = requireConfirmation(request)
+            val source = if (refused == null) awaitSource() else null
+
+            heartbeat.interrupt()
+
+            if (refused != null || source == null) {
+                // Kein Fehler im Sinne von kaputt: es hat niemand zugestimmt
+                // oder die Aufnahme bestätigt. Die App zeigt den Satz an, statt
+                // ein schwarzes Bild stehen zu lassen.
+                runCatching {
+                    socket.sendText(
+                        JSONObject()
+                            .put("t", "error")
+                            .put("message", refused ?: NO_SCREEN)
+                            .toString(),
+                    )
+                }
 
                 socket.close()
-                return@Response
-            }
-
-            val source = awaitSource()
-
-            if (source == null) {
-                // Kein Fehler im Sinne von kaputt: es hat niemand die Aufnahme
-                // bestätigt. Die App zeigt den Satz an, statt ein schwarzes Bild
-                // stehen zu lassen.
-                socket.sendText(
-                    JSONObject()
-                        .put("t", "error")
-                        .put("message", NO_SCREEN)
-                        .toString(),
-                )
-
-                socket.close()
+                release()
+                partOver(clientOf(request), sessionOf(request))
                 return@Response
             }
 
             val display = screen()
             val stream = ScreenStream(source, display.width, display.height)
-
-            val release = live.register(clientOf(request), LiveConnections.Kind.SCREEN) {
-                socket.close()
-            }
 
             // Zwei Schleifen: das Bild geht in einem eigenen Thread hinaus,
             // während dieser hier auf Steuerbefehle hört. Sie in einer zu
@@ -517,12 +549,21 @@ class HostServer(
      */
     private fun inputSocket(request: HttpServer.Request): HttpServer.Response =
         HttpServer.Response(101) { socket ->
+            // Sofort angemeldet, wie beim Bild — siehe dort.
+            val release = live.register(clientOf(request), LiveConnections.Kind.INPUT) {
+                socket.close()
+            }
+
             requireConfirmation(request)?.let { failure ->
-                socket.sendText(
-                    JSONObject().put("t", "error").put("message", failure).toString(),
-                )
+                runCatching {
+                    socket.sendText(
+                        JSONObject().put("t", "error").put("message", failure).toString(),
+                    )
+                }
 
                 socket.close()
+                release()
+                partOver(clientOf(request), sessionOf(request))
                 return@Response
             }
 
@@ -537,10 +578,6 @@ class HostServer(
             // ging hinaus und blieb in der Statuszeile stehen — während alles
             // Folgende ankam.
             awaitInput()
-
-            val release = live.register(clientOf(request), LiveConnections.Kind.INPUT) {
-                socket.close()
-            }
 
             // Je Verbindung höchstens eine Meldung derselben Art. Ohne das
             // stünde bei jedem Antippen dieselbe Zeile in der Statuszeile, und

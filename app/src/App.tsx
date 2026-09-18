@@ -14,6 +14,7 @@ import { useIdentity } from './lib/ownName.ts'
 import { InputChannel } from './lib/inputChannel.ts'
 import { useNotice } from './lib/notice.ts'
 import { useBackButton } from './lib/useBackButton.ts'
+import { useToast } from './lib/useToast.ts'
 import { useHardwareKeyboard } from './lib/useHardwareKeyboard.ts'
 import { protocolMismatch } from './lib/protocol.ts'
 import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
@@ -130,6 +131,7 @@ function Shell(): React.JSX.Element {
   const [hotkeyLoaded, setHotkeyLoaded] = useState(false)
   /** Wer „Später" gesagt hat, wird in dieser Sitzung nicht noch einmal gefragt. */
   const [hotkeySkipped, setHotkeySkipped] = useState(false)
+  const { toast, show: showToast } = useToast()
 
   const inputRef = useRef<InputChannel | undefined>(undefined)
 
@@ -564,7 +566,7 @@ function Shell(): React.JSX.Element {
   }, [touchTarget, view, selected, setError])
 
   // **Zurück am Handy** — eine Ebene hoch, nicht raus. Siehe useBackButton.
-  useBackButton({ menuOpen, setMenuOpen, pairing, setPairing, selected, disconnect, page, setPage, onError: setError })
+  useBackButton({ menuOpen, setMenuOpen, pairing, setPairing, selected, disconnect, page, setPage, onNotice: showToast })
 
   // **Der erste Start** — Name und Freigabe, genau einmal. Solange die Antwort
   // von der Plattform noch aussteht, wird nichts gezeigt: eine Erststartfrage,
@@ -688,6 +690,12 @@ function Shell(): React.JSX.Element {
       </header>
 
       <ErrorBanner message={error} onDismiss={clearError} />
+
+      {toast !== undefined && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
 
       <main className={view === 'screen' ? 'app-body screen' : 'app-body'}>
         {/* Die Bildschirmansicht bleibt auch auf den anderen Seiten bestehen,

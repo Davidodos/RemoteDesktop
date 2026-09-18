@@ -15,7 +15,8 @@ interface Options {
   disconnect: () => void
   page: Page
   setPage: Dispatch<SetStateAction<Page>>
-  onError: (message: string) => void
+  /** Der kurze Hinweis unten — kein Fehler, sondern eine Ankündigung. */
+  onNotice: (message: string) => void
 }
 
 /**
@@ -93,7 +94,7 @@ function apply(step: BackStep, state: Options, exit: () => Promise<void>): void 
       state.setPage('devices')
       return
     case 'warn':
-      state.onError('Noch einmal Zurück beendet die App.')
+      state.onNotice('Noch einmal Zurück beendet die App.')
       return
     case 'exit':
       void exit().catch(() => undefined)

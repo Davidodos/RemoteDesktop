@@ -87,6 +87,19 @@ class ScreenStream(
         const val HEADER_BYTES = 8
     }
 
+    private fun announce(socket: WebSocketConnection, width: Int, height: Int) {
+        socket.sendText(
+            JSONObject()
+                .put("t", "meta")
+                .put("monitor", 0)
+                .put("width", width)
+                .put("height", height)
+                .put("fps", fps)
+                .put("count", 1)
+                .toString(),
+        )
+    }
+
     /** Was die App über den Socket schicken darf. */
     private var paused = false
     private var mode = "auto"
@@ -103,16 +116,10 @@ class ScreenStream(
      * geöffnet wurde.
      */
     fun run(socket: WebSocketConnection) {
-        socket.sendText(
-            JSONObject()
-                .put("t", "meta")
-                .put("monitor", 0)
-                .put("width", displayWidth)
-                .put("height", displayHeight)
-                .put("fps", fps)
-                .put("count", 1)
-                .toString(),
-        )
+        announce(socket, displayWidth, displayHeight)
+
+        var announcedWidth = displayWidth
+        var announcedHeight = displayHeight
 
         lastStats = now()
 
@@ -157,6 +164,13 @@ class ScreenStream(
             if (announcedMissing) {
                 socket.sendText(JSONObject().put("t", "available").toString())
                 announcedMissing = false
+            }
+
+            // Gedreht: erst die neue Fläche ankündigen, dann das Bild darauf.
+            if (frame.width != announcedWidth || frame.height != announcedHeight) {
+                announcedWidth = frame.width
+                announcedHeight = frame.height
+                announce(socket, announcedWidth, announcedHeight)
             }
 
             socket.sendBinary(frame(frame))

@@ -188,7 +188,9 @@ R5 (Aufräumen). **R1–R5 sind umgesetzt** (18.09.2026, Commits `a205dd8` bis z
 Aufräumen), offen ist nur R6, die Abnahme am Gerät. Was sich dabei geändert
 hat, steht unter **31t** in `docs/TASKS-V4.md`. **31u** (18.09.2026) behebt den
 leeren Bildschirm nach dem ersten Testlauf (Hook unter frühen Rückgaben) und
-bringt Zurück-Taste, Zeigerregler, Installer-Haken und „Beenden" für beides.
+bringt Zurück-Taste, Zeigerregler, Installer-Haken und „Beenden" für beides. **31v** behebt die doppelte
+Rückfrage beim ersten Verbinden zum Handy, lässt das Bild mit dem Handy drehen
+und startet das Fenster nach dem Setup wieder (`{win}\explorer.exe`).
 
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native

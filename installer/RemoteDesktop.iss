@@ -211,6 +211,10 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Run /TN {#Service}"; \
 ; Der Explorer läuft dagegen immer als der angemeldete Benutzer und ohne
 ; Erhöhung. Ein Programm, das er startet, erbt genau das.
 ;
+; **{win} und nicht {sys}** (18.09.2026): explorer.exe liegt in C:\Windows,
+; nicht in System32 — mit {sys} kam nach jedem Setup „CreateProcess schlug
+; fehl; Code 2", und der Haken startete nichts.
+;
 ; Zwei Einträge, weil „postinstall" zwei Sachen zugleich ist: eine
 ; Ankreuzfläche auf der Abschlussseite — und die gibt es bei „/VERYSILENT"
 ; nicht (nach einem Fern-Update blieb das Fenster deshalb einmal zu,
@@ -219,10 +223,10 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Run /TN {#Service}"; \
 ;
 ; „runasoriginaluser" bleibt daneben stehen: bei einer Installation von Hand
 ; genügt es allein, und es schadet nicht, wo es nichts ausrichtet.
-Filename: "{sys}\explorer.exe"; Parameters: """{app}\{#Exe}"""; \
+Filename: "{win}\explorer.exe"; Parameters: """{app}\{#Exe}"""; \
     Description: "RemoteDesktop jetzt starten"; \
     Check: ShouldOpenWindow; Flags: nowait runasoriginaluser postinstall skipifsilent
-Filename: "{sys}\explorer.exe"; Parameters: """{app}\{#Exe}"""; \
+Filename: "{win}\explorer.exe"; Parameters: """{app}\{#Exe}"""; \
     Check: ShouldOpenWindow; Flags: nowait runasoriginaluser skipifnotsilent
 
 [UninstallRun]

@@ -383,6 +383,10 @@ export function ScreenView({
         setAwaiting(false)
         setUnavailable(undefined)
         setMonitorCount(meta.count)
+
+        // Eine neue Fläche — ein gedrehtes Handy. Ein Zoom auf die alte
+        // stünde jetzt an der falschen Stelle.
+        updateViewport(RESET_VIEWPORT)
       },
       onStats: setStats,
       onState: setConnection,

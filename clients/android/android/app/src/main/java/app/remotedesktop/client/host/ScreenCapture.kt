@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.PixelFormat
+import android.graphics.Point
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.ImageReader
@@ -230,24 +231,49 @@ object ScreenCapture {
         )
     }
 
+    /** Wie oft nachgesehen wird, ob das Handy gedreht wurde. */
+    private const val ROTATION_CHECK_MS = 500L
+
+    /** Die echte Größe des Bildschirms, so wie er gerade steht. */
+    @Suppress("DEPRECATION")
+    private fun currentDisplay(context: Context): HostServer.Screen {
+        val manager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        val size = Point()
+
+        manager.getDisplay(android.view.Display.DEFAULT_DISPLAY).getRealSize(size)
+
+        return HostServer.Screen(size.x, size.y)
+    }
+
     /**
      * Die laufende Aufnahme: virtueller Bildschirm → `ImageReader` → Bitmap →
      * JPEG.
+     *
+     * <p>
+     * **Sie dreht sich mit** (18.09.2026). Der virtuelle Bildschirm hatte die
+     * Größe vom Öffnen, meist hochkant. Drehte jemand das Handy, spiegelte
+     * Android das Querformat verkleinert in die hochkante Fläche, und am PC
+     * stand ein schmaler Streifen. Jetzt wird bei einer neuen Ausrichtung auf
+     * die neue Größe umgestellt; die Gegenseite bekommt eine neue `meta` und
+     * zeigt das Bild quer.
+     * </p>
      */
     private class ProjectionSource(
-        context: Context,
+        private val context: Context,
         private val projection: MediaProjection,
         display: HostServer.Screen,
     ) : FrameSource {
 
-        private val target = scaled(display)
+        private var target = scaled(display)
 
         override val width: Int get() = target.width
         override val height: Int get() = target.height
 
-        private val reader = ImageReader.newInstance(
+        private var reader = ImageReader.newInstance(
             target.width, target.height, PixelFormat.RGBA_8888, 2,
         )
+
+        private var lastRotationCheck = 0L
 
         private val handler = Handler(Looper.getMainLooper())
 
@@ -279,7 +305,46 @@ object ScreenCapture {
             )
         }
 
+        /** Stellt auf die neue Größe um, wenn das Handy gedreht wurde. */
+        private fun followRotation() {
+            val now = System.currentTimeMillis()
+
+            if (now - lastRotationCheck < ROTATION_CHECK_MS) {
+                return
+            }
+
+            lastRotationCheck = now
+
+            val wanted = scaled(runCatching { currentDisplay(context) }.getOrNull() ?: return)
+
+            if (wanted.width == target.width && wanted.height == target.height) {
+                return
+            }
+
+            val display = virtualDisplay ?: return
+            val fresh = ImageReader.newInstance(wanted.width, wanted.height, PixelFormat.RGBA_8888, 2)
+
+            runCatching {
+                display.resize(wanted.width, wanted.height, context.resources.displayMetrics.densityDpi)
+                display.surface = fresh.surface
+            }.onFailure {
+                Log.w(TAG, "Die Aufnahme ließ sich nicht drehen.", it)
+                fresh.close()
+                return
+            }
+
+            runCatching { reader.close() }
+
+            reader = fresh
+            target = wanted
+
+            reusable?.recycle()
+            reusable = null
+        }
+
         override fun next(quality: Int): CapturedFrame? {
+            followRotation()
+
             // Das jüngste Bild, nicht das älteste: bei einem Rückstand ist alles
             // davor bereits veraltet, und eine Fernsteuerung, die hinterherläuft,
             // ist unbrauchbarer als eine, die Bilder auslässt.

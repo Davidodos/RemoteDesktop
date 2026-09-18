@@ -956,6 +956,31 @@ button.danger:active:not(:disabled) {
   border: none;
 }
 
+/* Kurzer Hinweis unten, oval, verschwindet von allein (useToast). */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 5rem);
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: calc(100% - 3rem);
+  padding: 0.6rem 1.25rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 85%, transparent);
+  color: var(--bg);
+  font-size: 0.9rem;
+  text-align: center;
+  pointer-events: none;
+  animation: toast-in 150ms ease-out;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0.5rem);
+  }
+}
+
 /* ---- Bildschirm ---- */
 
 .screen-view {

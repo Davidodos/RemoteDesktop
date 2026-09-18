@@ -162,6 +162,58 @@ class ScreenStreamTest {
     }
 
     /**
+     * Ein gedrehtes Handy liefert Bilder in einer anderen Größe. Die neue
+     * Fläche muss vor dem ersten Bild darauf angekündigt werden — sonst zeichnet
+     * die Gegenseite ein Querformat in eine hochkante Fläche.
+     */
+    @Test(timeout = 10_000)
+    fun `nach dem Drehen kommt eine neue meta vor dem Bild`() {
+        val sizes = ArrayDeque(listOf(640 to 1424, 1424 to 640))
+        val source = object : FrameSource {
+            override val width = 640
+            override val height = 1424
+            override val isRunning = true
+
+            @Volatile
+            var calls = 0
+
+            override fun next(quality: Int): CapturedFrame? {
+                calls++
+                val (w, h) = sizes.removeFirstOrNull() ?: return null
+
+                return CapturedFrame(ByteArray(10), w, h)
+            }
+
+            override fun close() = Unit
+        }
+        val (socket, messages) = collector()
+
+        Thread {
+            while (source.calls <= 3) {
+                Thread.sleep(1)
+            }
+
+            socket.close()
+        }.start()
+
+        ScreenStream(source, 640, 1424, fps = 60, sleep = {}).run(socket)
+
+        val metas = messages.filterIsInstance<String>()
+            .map(::JSONObject)
+            .filter { it.getString("t") == "meta" }
+
+        assertEquals(2, metas.size)
+        assertEquals(1424, metas[1].getInt("width"))
+        assertEquals(640, metas[1].getInt("height"))
+
+        // Die zweite meta steht vor dem zweiten Bild.
+        val secondMeta = messages.indexOfFirst { it is String && JSONObject(it).getInt("width") == 1424 }
+        val secondFrame = messages.withIndex().filter { it.value is ByteArray }[1].index
+
+        assertTrue(secondMeta < secondFrame)
+    }
+
+    /**
      * **Der Befund dahinter (17.08.2026):** ein Handy, auf dem sich nichts
      * bewegte, meldete nach einer Sekunde „Bildschirm nicht verfügbar". Android
      * liefert aber nur bei Änderung ein Bild — ein ruhiger Bildschirm liefert

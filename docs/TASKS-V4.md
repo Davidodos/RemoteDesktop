@@ -1860,6 +1860,31 @@ es ihn nicht — dort geht die Maus eins zu eins hinaus.
 `local.secret`, der Agent hält an; beim nächsten Anmelden startet ihn die
 Aufgabe wieder.
 
+## Phase 31v — doppelte Rückfrage, Drehen, Installer-Start, Hinweis unten ✅ (18.09.2026, am Gerät noch zu prüfen)
+
+**Beim ersten Verbinden Windows→Android kam alles zweimal** (Karte und
+Android-Dialog), danach flackerte die Verbindung. Der Bild-Kanal der App hält
+eine Verbindung nach sechs Sekunden Stille für tot und baut sie neu auf — und
+während drüben gefragt wird, ist es still. Das erste Mal liest man Karte und
+Dialog, das dauert länger. Beim Abriss sah `partOver` am Host null offene
+Verbindungen (die wartenden meldeten sich erst nach der Zustimmung an),
+vergaß Zustimmung und Aufnahme, und die nachfolgende Verbindung fragte neu.
+Drei Stellen: die App hält still, solange `awaiting` die letzte Nachricht war
+(`screenChannel.ts`); der Host schickt beim Warten alle zwei Sekunden ein
+`awaiting` (`keepAwaiting`); und Bild- wie Eingabe-Socket melden sich bei
+`LiveConnections` an, **bevor** gefragt wird.
+
+**Gedrehtes Handy:** der virtuelle Bildschirm hatte die Größe vom Öffnen.
+Jetzt folgt `ProjectionSource` der Drehung (`VirtualDisplay.resize` plus neuer
+`ImageReader`), `ScreenStream` kündigt die neue Fläche mit einer zweiten `meta`
+an, und die App zeigt das Bild quer und setzt den Zoom zurück.
+
+**Installer:** `explorer.exe` liegt in `{win}`, nicht in `{sys}` — daher kam
+„CreateProcess schlug fehl; Code 2", und der Haken startete nichts.
+
+**„Noch einmal Zurück beendet die App"** steht als ovaler Hinweis unten und
+geht nach zwei Sekunden (`useToast`), nicht mehr als rotes Band.
+
 ## Phase 32 — Dateidienst im Windows-Agent
 
 Neues Recht `files`. **Achtung:** ein neues Recht bekommt kein bereits

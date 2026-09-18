@@ -83,6 +83,9 @@ export class ScreenChannel {
   private state: ConnectionState = 'disconnected'
 
   private stallTimer: number | undefined
+
+  /** Ob drüben gerade jemand gefragt wird — dann gilt Stille nicht als Abbruch. */
+  private awaiting = false
   private lastMessageAt = 0
 
   /** Wie oft seit der letzten stehenden Verbindung erfolglos versucht wurde. */
@@ -202,8 +205,18 @@ export class ScreenChannel {
     try {
       const message = JSON.parse(raw) as Record<string, unknown>
 
+      if (message['t'] !== 'awaiting') {
+        this.awaiting = false
+      }
+
       switch (message['t']) {
         case 'awaiting':
+          // Drüben wird gefragt — Karte, dann womöglich der Systemdialog. Das
+          // dauert, solange jemand liest, und ist kein Stillstand: ohne diese
+          // Zeile riss der Wächter nach sechs Sekunden ab, der Host vergaß
+          // die Zustimmung, und am Handy kam alles ein zweites Mal
+          // (18.09.2026).
+          this.awaiting = true
           this.callbacks.onAwaiting()
           break
 
@@ -315,7 +328,7 @@ export class ScreenChannel {
         return
       }
 
-      if (Date.now() - this.lastMessageAt > STALL_TIMEOUT_MS) {
+      if (!this.awaiting && Date.now() - this.lastMessageAt > STALL_TIMEOUT_MS) {
         this.reconnectNow()
       }
     }, STALL_CHECK_MS)
