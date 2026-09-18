@@ -53,9 +53,9 @@ Let's-Encrypt-Zertifikat für ihren `*.ts.net`-Namen → die App darf ohne
 Mixed-Content-Block direkt per WSS zum Agent verbinden. Im LAN routet Tailscale
 direkt, ohne Umweg über die Cloud.
 
-## Netzwerk: vier Modi, ein Code
+## Netzwerk: drei Modi, ein Code
 
-Seit V3 (`setup/NetworkProfile.cs`) gibt es vier Wege, und der Code kennt den
+Seit V3 (`setup/NetworkProfile.cs`) gibt es drei Wege, und der Code kennt den
 Unterschied nicht: er benutzt die Adresse aus `setup.json`, sonst nichts. Die
 Adresse ist in **jedem** Modus Pflicht — sie steht im QR-Code, und ein Modus, in
 dem sie fehlen durfte, war der Modus, in dem sie fehlte.
@@ -64,7 +64,6 @@ dem sie fehlen durfte, war der Modus, in dem sie fehlte.
 |---|---|---|
 | **Heimnetz** | die LAN-Adresse dieses Rechners | selbst ausgestellt |
 | **Tailscale** | der Name im Tailscale-Netz | von Tailscale, Pflicht vor „Weiter" |
-| **Headscale** | der Name am eigenen Koordinator | selbst ausgestellt |
 | **Anderer VPN-Anbieter** | was der Nutzer einträgt | selbst ausgestellt |
 
 Es gibt **keine** Fallunterscheidung „zuhause vs. unterwegs" im Code und **kein**
@@ -74,10 +73,11 @@ steht in `docs/NETZ.md`.
 
 ## Komponenten
 
-### 1. Agent (`agent/`) — C# / .NET 8, Windows-Dienst
+### 1. Agent (`agent/`) — C# / .NET 8, geplante Aufgabe in der Benutzersitzung
 
-Läuft auf PC und Laptop. Self-contained Single-File-`.exe`, installiert sich als
-Windows-Dienst + Tray-Icon.
+Läuft auf PC und Laptop als geplante Aufgabe in der Sitzung des angemeldeten
+Benutzers (`setup/AgentTask.cs`) — ein Dienst säße in Sitzung 0 und sähe dort
+weder Bildschirm noch Desktop. Das Tray-Icon gehört dem Fenster (`desktop/`).
 
 **Warum C# und nicht Node/TS?** Praktisch jede geforderte Funktion ist ein
 direkter Win32-API-Aufruf: `SendInput` (Maus/Tastatur), `keybd_event` mit
@@ -96,9 +96,11 @@ In Node bräuchte das durchgehend fragile Native-Module; in C# ist es
 | `POST /api/power` | `sleep` \| `shutdown` \| `restart` \| `lock` |
 | `POST /api/media` | `playpause` \| `next` \| `prev` \| `volup` \| `voldown` \| `mute` |
 
-Auth: Pre-Shared-Token pro Gerät im `Authorization`-Header. Tailscale-ACL ist
-die erste Schicht, das Token die zweite — ein kompromittiertes Gerät im Tailnet
-soll nicht automatisch den PC übernehmen können.
+Auth: Kopplung pro Gerät (Schlüsselpaar, Challenge-Response, Sitzungstoken
+zwölf Stunden) im `Authorization`-Header bzw. als `?token=` an den WebSockets.
+Das Netz ist die erste Schicht, die Kopplung die zweite — ein fremdes Gerät im
+selben Netz soll nicht automatisch den PC übernehmen können. Einzelheiten in
+`docs/SICHERHEIT.md`.
 
 ### 2. Waker (`waker/`) — Node.js / TypeScript, Docker auf der NAS
 

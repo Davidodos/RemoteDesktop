@@ -305,6 +305,14 @@ app.Logger.LogInformation(
     site.SiteId ?? "unbekannt",
     site.Mac ?? "unbekannt");
 
+// Einmal beim Start: ob ffmpeg da ist, entscheidet, ob H.264 angeboten wird.
+var ffmpegAvailable = FfmpegLocator.IsAvailable(settings.FfmpegPath);
+
+if (!ffmpegAvailable)
+{
+    app.Logger.LogInformation("ffmpeg ({Path}) nicht gefunden — das Bild kommt als JPEG.", settings.FfmpegPath);
+}
+
 // Hostname und Monitor-Layout — die App baut daraus ihre Monitor-Tabs.
 app.MapGet("/api/info", (InputExecutor executor) =>
 {
@@ -334,7 +342,7 @@ app.MapGet("/api/info", (InputExecutor executor) =>
         // statt sieben, und alles, was es nicht kann, ist dort schlicht nicht
         // da. Ein Agent ohne dieses Feld ist älter als V4; die App nimmt dann
         // die Liste von damals an.
-        capabilities = AgentCapabilities.Windows,
+        capabilities = AgentCapabilities.For(h264: ffmpegAvailable),
 
         // Was dieses Gerät ist. Es entscheidet nur über das Symbol in der
         // Liste — was es kann, steht darüber.

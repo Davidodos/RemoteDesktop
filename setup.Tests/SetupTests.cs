@@ -182,92 +182,6 @@ public class CoordinatorTests
     }
 }
 
-public class SetupStepsTests
-{
-    private sealed record Probe(
-        bool HasTailscale = false,
-        bool IsConnected = false,
-        string TailnetName = "",
-        bool HasCertificate = false,
-        bool HasService = false) : ISetupProbe;
-
-    [Fact]
-    public void Ohne_Agent_entfallen_Zertifikat_und_Dienst()
-    {
-        var steps = SetupSteps.For(
-            new Selection(SetupComponent.Client, AutostartMode.Client),
-            new Probe());
-
-        Assert.DoesNotContain(steps, step => step.Title.Contains("Zertifikat"));
-        Assert.DoesNotContain(steps, step => step.Title.Contains("Agent"));
-    }
-
-    [Fact]
-    public void Wer_Tailscale_schon_hat_faengt_weiter_hinten_an()
-    {
-        var steps = SetupSteps.For(
-            Selection.Default,
-            new Probe(HasTailscale: true, IsConnected: true, TailnetName: "pc.example.ts.net"));
-
-        // Die Adresse kommt vor dem Zertifikat: sie ist der Name, auf den das
-        // Zertifikat lauten muss. Andersherum holte man eins auf gut Glück.
-        Assert.Equal(SetupSteps.AddressStep, SetupSteps.Next(steps)?.Title);
-
-        var mitAdresse = SetupSteps.For(
-            Selection.Default,
-            new Probe(HasTailscale: true, IsConnected: true, TailnetName: "pc.example.ts.net"),
-            new NetworkProfile(NetworkKind.Tailscale, "pc.example.ts.net", Coordinator.Default));
-
-        Assert.Equal("Zertifikat holen", SetupSteps.Next(mitAdresse)?.Title);
-    }
-
-    [Fact]
-    public void Der_erste_offene_Schritt_ist_der_erste_offene()
-    {
-        Assert.Equal("Tailscale installieren", SetupSteps.Next(SetupSteps.For(
-            Selection.Default, new Probe()))?.Title);
-    }
-
-    [Fact]
-    public void Koppeln_haelt_die_Einrichtung_nicht_auf()
-    {
-        // Es ist der einzige Schritt, der nie abgehakt wird — ein weiteres Handy
-        // hinzuzunehmen bleibt immer möglich.
-        var steps = SetupSteps.For(
-            Selection.Default,
-            new Probe(HasTailscale: true, IsConnected: true, HasCertificate: true,
-                HasService: true),
-            new NetworkProfile(NetworkKind.Tailscale, "pc.example.ts.net", Coordinator.Default));
-
-        Assert.True(SetupSteps.Ready(steps));
-        Assert.Equal("Handy koppeln", SetupSteps.Next(steps)?.Title);
-    }
-
-    [Fact]
-    public void Solange_etwas_fehlt_ist_es_nicht_bereit()
-    {
-        var steps = SetupSteps.For(
-            Selection.Default,
-            new Probe(HasTailscale: true, IsConnected: true, HasCertificate: true));
-
-        Assert.False(SetupSteps.Ready(steps));
-    }
-
-    [Fact]
-    public void Jeder_Schritt_erklaert_sich_ohne_Fachwort()
-    {
-        // Die Zusage dieser Phase: Meldungen für Menschen ohne Vorwissen. Wer
-        // hier ein Fachwort einbaut, merkt es beim Testlauf.
-        var verboten = new[] { "Tailnet", "MagicDNS", "Zertifikatskette", "Endpoint", "Scope" };
-
-        foreach (var step in SetupSteps.For(Selection.Default, new Probe()))
-        {
-            Assert.NotEmpty(step.Explanation);
-            Assert.All(verboten, wort => Assert.DoesNotContain(wort, step.Explanation));
-        }
-    }
-}
-
 public class CoordinatorConfigTests
 {
     [Fact]
@@ -607,110 +521,6 @@ public class NetworkConfigTests
 }
 
 /// <summary>
-/// Dieselbe Schrittliste, aber je nach Netzmodus eine andere.
-/// </summary>
-public class SetupStepsProfileTests
-{
-    private sealed record Probe(
-        bool HasTailscale = false,
-        bool IsConnected = false,
-        string TailnetName = "",
-        bool HasCertificate = false,
-        bool HasService = false) : ISetupProbe;
-
-    private static NetworkProfile Heimnetz(string address = "192.168.178.20") =>
-        new(NetworkKind.Lan, address, Coordinator.Default);
-
-    [Fact]
-    public void Im_Heimnetz_kommt_Tailscale_nicht_vor()
-    {
-        // Der Kern des Befunds: wer den Rechner nur aus dem eigenen WLAN
-        // steuert, lief bisher durch zwei Schritte für ein Programm, das er nie
-        // braucht — und blieb am dritten hängen.
-        var steps = SetupSteps.For(Selection.Default, new Probe(), Heimnetz());
-
-        Assert.All(steps, step =>
-        {
-            Assert.DoesNotContain("Tailscale", step.Title);
-            Assert.DoesNotContain("Tailscale", step.Explanation);
-        });
-    }
-
-    [Fact]
-    public void Ohne_Tailscale_gibt_es_auch_nichts_abzuholen()
-    {
-        // Das Zertifikat stellt sich der Agent selbst aus. Ein Schritt „holen"
-        // zeigte auf ein Programm, das gar nicht installiert ist.
-        var steps = SetupSteps.For(Selection.Default, new Probe(), Heimnetz());
-
-        Assert.DoesNotContain(steps, step => step.Title == SetupSteps.CertificateStep);
-        Assert.Contains(steps, step => step.Title == "Agent einrichten");
-    }
-
-    [Fact]
-    public void Eine_eingetragene_Adresse_hakt_den_ersten_Schritt_ab()
-    {
-        var offen = SetupSteps.For(Selection.Default, new Probe(), Heimnetz(""));
-        var fertig = SetupSteps.For(Selection.Default, new Probe(), Heimnetz());
-
-        Assert.Equal(SetupSteps.AddressStep, SetupSteps.Next(offen)?.Title);
-        Assert.Equal("Agent einrichten", SetupSteps.Next(fertig)?.Title);
-    }
-
-    [Fact]
-    public void Im_Heimnetz_ist_es_bereit_sobald_der_Dienst_steht()
-    {
-        var steps = SetupSteps.For(
-            Selection.Default, new Probe(HasService: true), Heimnetz());
-
-        Assert.True(SetupSteps.Ready(steps));
-        Assert.Equal("Handy koppeln", SetupSteps.Next(steps)?.Title);
-    }
-
-    [Fact]
-    public void Beim_eigenen_VPN_wird_auf_die_Anleitung_verwiesen()
-    {
-        // RemoteDesktop richtet fremde VPN nicht ein. Dann muss wenigstens
-        // dastehen, wo es erklärt ist.
-        var steps = SetupSteps.For(
-            Selection.Default,
-            new Probe(),
-            new NetworkProfile(NetworkKind.Vpn, "", Coordinator.Default));
-
-        Assert.Contains("Anleitung", steps[0].Explanation);
-    }
-
-    [Fact]
-    public void Ohne_Profil_bleibt_alles_wie_bisher()
-    {
-        // Bestehende Installationen laufen über Tailscale. Ein Update darf ihre
-        // Einrichtung nicht umschreiben.
-        Assert.Equal(
-            SetupSteps.For(Selection.Default, new Probe()).Select(step => step.Title),
-            SetupSteps.For(Selection.Default, new Probe(), NetworkProfile.Default)
-                .Select(step => step.Title));
-    }
-
-    [Fact]
-    public void Auch_die_neuen_Schritte_kommen_ohne_Fachwort_aus()
-    {
-        var verboten = new[] { "Tailnet", "MagicDNS", "Zertifikatskette", "Endpoint", "Scope", "SAN" };
-
-        foreach (var profil in new[]
-                 {
-                     Heimnetz(""), new NetworkProfile(NetworkKind.Vpn, "", Coordinator.Default)
-                 })
-        {
-            foreach (var step in SetupSteps.For(Selection.Default, new Probe(), profil))
-            {
-                Assert.NotEmpty(step.Explanation);
-                Assert.All(verboten, wort => Assert.DoesNotContain(wort, step.Explanation));
-            }
-        }
-    }
-}
-
-/// <summary>
 /// Alle Teile auf einen Blick — auch die, die es hier nicht gibt.
 ///
 /// Der Befund dahinter: bis Release v1.0.0 wurde ausgeblendet, was fehlte.
@@ -821,26 +631,6 @@ public class InventoryTests
     }
 
     [Fact]
-    public void Ohne_WebView2_wird_das_Fenster_nicht_angeboten()
-    {
-        // Es ginge auf und bliebe leer — das sähe aus wie ein Absturz.
-        var client = Teil(Vollstaendig with { WebView2 = false }, Inventory.ClientTitle);
-
-        Assert.Empty(client.Actions);
-        Assert.Contains("WebView2", client.State);
-    }
-
-    [Fact]
-    public void Die_Fernsteuerung_kennt_kein_Starten_und_kein_Beenden()
-    {
-        // Sie ist kein Dienst. Knöpfe dafür wären eine Verwechslung mit dem
-        // Agent, und die kostete beim ersten Fehlgriff die eigene Sitzung.
-        var client = Teil(Vollstaendig, Inventory.ClientTitle);
-
-        Assert.Equal([PartAction.Open], client.Actions);
-    }
-
-    [Fact]
     public void Im_Heimnetz_gibt_es_am_Netz_nichts_zu_installieren()
     {
         var netz = Teil(
@@ -885,10 +675,12 @@ public class InventoryTests
     }
 
     [Fact]
-    public void Es_sind_immer_drei_Teile_egal_was_fehlt()
+    public void Es_sind_immer_zwei_Teile_egal_was_fehlt()
     {
-        Assert.Equal(3, Inventory.For(new Machine(), NetworkProfile.Default).Count);
-        Assert.Equal(3, Inventory.For(Vollstaendig, NetworkProfile.Default).Count);
+        // Agent und Netz. Das Fenster selbst steht nicht mehr dabei — es ist
+        // das, worin man gerade liest.
+        Assert.Equal(2, Inventory.For(new Machine(), NetworkProfile.Default).Count);
+        Assert.Equal(2, Inventory.For(Vollstaendig, NetworkProfile.Default).Count);
     }
 
     [Fact]

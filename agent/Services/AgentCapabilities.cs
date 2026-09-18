@@ -62,4 +62,11 @@ public static class AgentCapabilities
     /// </summary>
     public static readonly IReadOnlyList<string> Windows =
         [Screen, Input, Keys, H264, Media, Power, Actions, Wake];
+
+    /// <summary>
+    /// Was dieser Rechner tatsächlich meldet: ohne ffmpeg kein
+    /// <see cref="H264"/> — sonst probierte die App es und fiele hörbar zurück.
+    /// </summary>
+    public static IReadOnlyList<string> For(bool h264) =>
+        h264 ? Windows : [.. Windows.Where(capability => capability != H264)];
 }

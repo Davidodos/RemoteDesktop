@@ -3,7 +3,12 @@
 Handy-App (Android) zur Fernsteuerung von PC und Laptop (beide Windows 10/11).
 
 Veröffentlichen und Updates: **`docs/RELEASE.md`**
-Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/TASKS.md`**
+Architektur: **`docs/ARCHITEKTUR.md`** · Phasenplan bis Phase 8: **`docs/archiv/TASKS.md`**
+
+**Alle Dateien unter `docs/` und die READMEs sind Entwicklungsunterlagen.** Sie
+werden sachlich richtig gehalten, aber nicht für Fremde geschrieben. Zur
+Veröffentlichung entstehen eigene Dokumente (Funktionen, Änderungen,
+Anleitung). Abgeschlossene Phasenpläne liegen unter `docs/archiv/`.
 
 **V4 (läuft):** beide Richtungen — ein Handy lässt sich ebenso steuern wie ein
 PC — und ein Dateimanager. Arbeitsanweisung in **`docs/TASKS-V4.md`**.
@@ -179,7 +184,9 @@ Einzelheiten unter **31r** in `docs/TASKS-V4.md`.
 **Durchsicht vor der Veröffentlichung (18.09.2026):** Befunde und Plan in
 **`docs/DURCHSICHT-2026-09.md`** — R1 (Stabilität Windows→Android, Ursache
 des Bildabbruchs) zuerst, dann R2 (Sicherheit), R3 (Netzmodi), R4 (Texte),
-R5 (Aufräumen). Der Stand steht dort unter „Umsetzungsstand".
+R5 (Aufräumen). **R1–R5 sind umgesetzt** (18.09.2026, Commits `a205dd8` bis zum
+Aufräumen), offen ist nur R6, die Abnahme am Gerät. Was sich dabei geändert
+hat, steht unter **31t** in `docs/TASKS-V4.md`.
 
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
@@ -192,7 +199,7 @@ Leitsatz: das Handy wird ein Agent und spricht dasselbe Protokoll; was ein Gerä
 kann, sagt es selbst über `capabilities` in `/api/info`.
 
 **V3 (abgeschlossen):** gemeinsame Oberfläche für alle Teile, Tailscale optional.
-Arbeitsanweisung in **`docs/TASKS-V3.md`**. Stand 08.08.2026: **Phasen 21–26
+Arbeitsanweisung in **`docs/archiv/TASKS-V3.md`**. Stand 08.08.2026: **Phasen 21–26
 erledigt**, dazu die Nachträge vom 07. und 08.08. (Live-Aktualisierung im
 Fenster, Rollen, Tailnet-Name im QR-Code, Geräteverwaltung in der App;
 Einrichtungsassistent im Fenster statt Häkchen im Installer, ein Datenordner
@@ -200,11 +207,11 @@ Einrichtungsassistent im Fenster statt Häkchen im Installer, ein Datenordner
 erneute Prüfung am echten Gerät. Netzmodi und die
 VPN-Anleitung stehen in **`docs/NETZ.md`**.
 
-**V2-Umbau zur echten App (abgeschlossen):** Begründungen in **`docs/PLAN-V2.md`**,
-Arbeitsanweisung in **`docs/TASKS-V2.md`**. Nächste Phase umsetzen:
+**V2-Umbau zur echten App (abgeschlossen):** Begründungen in **`docs/archiv/PLAN-V2.md`**,
+Arbeitsanweisung in **`docs/archiv/TASKS-V2.md`**. Nächste Phase umsetzen:
 `/naechste-phase`. Stand 04.08.2026: **Phasen 9–16 erledigt** — der V2-Umbau ist
 durch. Phasen 9–13 sind am echten Gerät durchgeprüft; offen sind nur noch
-Hardware-Punkte und die Sammlung „Aufräumarbeiten zum Schluss" in `TASKS-V2.md`,
+Hardware-Punkte und die Sammlung „Aufräumarbeiten zum Schluss" in `docs/archiv/TASKS-V2.md`,
 die jetzt dran wäre. Phasen 17–20 (Tailscale ablösen) sind zurückgestellt; die
 Entscheidung darüber steht nach Phase 16 an.
 
@@ -242,7 +249,9 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
   „zuhause vs. unterwegs" — der Modus entscheidet, nicht der Ort. Anleitung:
   `docs/NETZ.md`.
 - Der Agent hat volle Kontrolle über den PC. Jeder neue Endpoint braucht
-  Token-Auth — keine Ausnahmen, auch nicht „nur zum Testen".
+  einen Ausweis — das Sitzungstoken einer Kopplung, oder für die Wege des
+  eigenen Fensters Loopback **und** `local.secret` — keine Ausnahmen, auch
+  nicht „nur zum Testen". Ein geteiltes Token gibt es seit v1.4 nicht mehr.
 - Ein Widerruf wirkt **sofort und rückwirkend**: `agent/Auth/LiveConnections.cs`
   trennt die laufenden WebSockets, `WebRtcRegistry.CloseOwnedAsync` den
   Videostrom. Jede neue Dauerverbindung meldet sich dort an — sonst überlebt sie
@@ -277,15 +286,18 @@ Der Kotlin-Anteil (`clients/android/.../surfaces/`) hat einen eigenen Testlauf:
   kein Anschlag, sondern Text). Etwas zu versuchen und aus dem Fehlschlag zu
   schließen, was die Gegenseite ist, erzeugt bei jedem Verbinden eine
   Fehlermeldung über eine Sache, die nie angeboten wurde.
-- Aller Zustand liegt in **einem** Ordner: `{app}\data` (`setup/AgentPaths.cs`) —
-  Schlüssel, Zertifikate, `clients.json`, `setup.json`, `devicename.txt`,
-  `hotkey.txt`. Nichts
-  davon gehört neben die `.exe`, und nichts nach `ProgramData`. Der einzige
-  Rückstand außerhalb ist `%localappdata%\RemoteDesktop` (WebView2), und den
-  räumt der Uninstaller weg — siehe `installer/RemoteDesktop.iss`.
+- Zustand liegt an **drei** Orten, nach Rechten getrennt (`setup/AgentPaths.cs`,
+  seit v1.4): `{app}\data` ist für jeden lesbar (`clients.json`, `peers.json`,
+  `setup.json`, `agent.pub`, `cert.crt`, `agentca.crt`, `agent.log`);
+  `{app}\data\secret` nur für Administratoren und System (`agentkey.txt`,
+  `cert.key`, `agent.pfx`, `agentca.pfx`, `update\`); und was das Fenster ohne
+  Rechte schreibt, liegt in `%localappdata%\RemoteDesktop` (`clientkey.json`,
+  `devicename.txt`, `hotkey.txt`, `trusted.json`, `local.secret`, WebView2).
+  Nichts davon gehört neben die `.exe`, und nichts nach `ProgramData`. Der
+  Uninstaller räumt alle drei weg — siehe `installer/RemoteDesktop.iss`.
 - **Der eigene Gerätename wird einmal vergeben, nicht bei jeder Kopplung.** Er
   liegt nativ, weil er in `/api/info` steht und das auch ohne offene Oberfläche
-  beantwortet wird: am PC in `{app}\data\devicename.txt`
+  beantwortet wird: am PC in `%localappdata%\RemoteDesktop\devicename.txt`
   (`setup/DeviceNameFile.cs`), am Handy in `HostPreference`. Beide lesen ihn bei
   jedem Aufruf frisch — eine Umbenennung wirkt ohne Neustart. Wer eine der
   Fassungen ändert, ändert auch `app/src/lib/ownName.ts`: dieselben Regeln fürs

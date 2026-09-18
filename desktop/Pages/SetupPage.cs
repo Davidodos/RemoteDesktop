@@ -7,28 +7,11 @@ namespace RemoteDesktopClient.Pages;
 /// Die Einrichtung: eine Frage je Schritt, und kein Schritt ohne Antwort.
 ///
 /// <para>
-/// **Der Befund dahinter:** bis v1.2.0 entschied der Installer, was auf diesem
-/// Rechner passiert — Häkchen für den Dienst, Häkchen für den Autostart, und
-/// gestartet wurde der Agent gleich mit. Wer beim Klicken durch den Installer
-/// noch gar nicht wusste, ob er den Rechner fernsteuerbar machen will, hatte ihn
-/// danach trotzdem laufen.
-/// </para>
-///
-/// <para>
-/// **Der zweite Befund, und der teurere:** bis v1.3.0 stand die Netzfrage in
-/// *einem* Schritt — Modus wählen, Tailscale einrichten, Adresse eintippen,
-/// Zertifikat holen, alles auf einer Karte, und „Weiter" ging immer. Am echten
-/// Gerät kam man damit bis zum Ende durch, las „Einrichtung abgeschlossen" und
-/// bekam auf dem Handy trotzdem die Rückfrage, der Rechner habe sich sein
-/// Zertifikat selbst ausgestellt. Denn nichts davon war Pflicht gewesen.
-/// </para>
-///
-/// <para>
-/// Jetzt wird erst der Weg gewählt und dann — im nächsten Schritt und für sich —
-/// eingerichtet, was genau dieser Weg braucht. „Weiter" bleibt gesperrt, solange
-/// etwas davon fehlt, und daneben steht, was. Ein Assistent, den man mit einer
-/// halben Einrichtung verlassen kann, verschiebt den Fehlschlag nur dorthin, wo
-/// er niemandem mehr etwas erklärt.
+/// Erst wird der Weg gewählt, dann — im nächsten Schritt und für sich —
+/// eingerichtet, was genau dieser Weg braucht. „Weiter" bleibt gesperrt,
+/// solange etwas fehlt, und daneben steht, was: ein Assistent, den man mit
+/// einer halben Einrichtung verlassen kann, verschiebt den Fehlschlag nur auf
+/// das Handy.
 /// </para>
 ///
 /// <para>
@@ -209,11 +192,8 @@ public sealed class SetupPage : PageView
     /// den andere Geräte je zu sehen bekommen.
     ///
     /// <para>
-    /// **Der Befund dahinter:** es gab ihn nicht. Wer koppelte, tippte jedes Mal
-    /// neu ein, wie dieser Rechner drüben heißen soll; wer nur seinen Code
-    /// vorzeigte, hieß drüben <c>DESKTOP-4F2K9L1</c>. Jetzt steht er einmal in
-    /// <c>{app}\data\devicename.txt</c> und geht bei jeder Kopplung von allein
-    /// mit — siehe <see cref="DeviceNameFile"/>.
+    /// Einmal vergeben, in <c>%localappdata%\RemoteDesktop\devicename.txt</c>,
+    /// und bei jeder Kopplung von allein dabei — siehe <see cref="DeviceNameFile"/>.
     /// </para>
     /// </summary>
     private Card NameCard()

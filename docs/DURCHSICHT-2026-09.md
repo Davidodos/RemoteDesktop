@@ -51,7 +51,20 @@ umgeschrieben, nur sachlich richtig gehalten.
   Inventory, Übersicht ohne „Über" und mit „Updates" nur bei Angebot,
   Tooltip, CertificateTrustStep, TakeoverSetup), E4 (ein Satz zur Zoomgeste
   beim ersten Handy vom Rechner aus, `storage.pinchHintShown`).
-- R5 offen.
+- **R5 erledigt:** D2 (`setup/SetupSteps.cs` samt Tests, `Inventory.Client`
+  und `PartAction.Open`, `desktop/LocalAgent.cs` weg; `platform/web.ts` heißt
+  `fallback.ts`; `h264` steht nur mit gefundenem ffmpeg unter den
+  Fähigkeiten — `FfmpegLocator`), D3 (`useHardwareKeyboard` aus `App.tsx`,
+  `PairingUri.kt` und `LiveConnections.kt` aus `HostServer.kt`; **nicht**
+  herausgezogen: die Übernahme aus `ScreenView.tsx` — der Effekt hängt an
+  sechs Refs, und ohne Gerät ließe sich ein Fehler dabei nicht sehen), D4
+  (Befund-Kommentare in `ShellWindow`, `RemotePage`, `WindowsSetup`,
+  `SetupPage`, `LiveConnections` auf einen Satz), D5 (README, ARCHITEKTUR,
+  SICHERHEIT, NETZ, CLAUDE.md; alte Phasenpläne unter `docs/archiv/`; 31t in
+  TASKS-V4.md). Headscale bleibt lesbar (`NetworkKind.Headscale`,
+  `CoordinatorConfig`), weil alte `setup.json` es enthalten können;
+  `serviceWorker.ts` bleibt eine Fassung lang.
+- **R6 offen:** Abnahme am Gerät — die Liste steht unter 31t in TASKS-V4.md.
 
 ---
 

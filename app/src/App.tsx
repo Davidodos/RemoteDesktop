@@ -2,14 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentClient } from './lib/agentClient.ts'
 import { collectPeers } from './lib/bothWays.ts'
 import { capabilitiesOf, isTouchTarget } from './lib/capabilities.ts'
-import {
-  describeHotkey,
-  hotkeyMatches,
-  parseHotkey,
-  serializeHotkey,
-  type Hotkey,
-} from './lib/hotkey.ts'
-import { touchInputFor } from './lib/touchTyping.ts'
+import { describeHotkey, parseHotkey, serializeHotkey, type Hotkey } from './lib/hotkey.ts'
 import { deviceLabel } from './lib/deviceNames.ts'
 import {
   collectDevices,
@@ -17,10 +10,10 @@ import {
   rememberContact,
   saveLocalDevice,
 } from './lib/deviceSources.ts'
-import { belongsToRemote, toAgentKey } from './lib/hardwareKeyboard.ts'
 import { useIdentity } from './lib/ownName.ts'
 import { InputChannel } from './lib/inputChannel.ts'
 import { useNotice } from './lib/notice.ts'
+import { useHardwareKeyboard } from './lib/useHardwareKeyboard.ts'
 import { protocolMismatch } from './lib/protocol.ts'
 import { isSelfConnection, selfConnectionMessage } from './lib/selfConnection.ts'
 import { buildSurfaceBoard } from './lib/surfaceBoard.ts'
@@ -511,142 +504,15 @@ function Shell(): React.JSX.Element {
 
   const endTakeover = useCallback((): void => setTakeover(false), [])
 
-  /**
-   * Die echte Tastatur — vier Fälle, in dieser Reihenfolge.
-   *
-   * <ol>
-   * <li><b>Das Umschaltkürzel.</b> Es bleibt immer hier. Ginge es mit hinaus,
-   *   gäbe es aus der Übernahme keinen Weg zurück.</li>
-   * <li><b>Übernahme.</b> Alles hinaus, auch aus Eingabefeldern heraus — es
-   *   gibt in diesem Zustand keine eigenen mehr, das Bild füllt den
-   *   Bildschirm.</li>
-   * <li><b>Ein Handy.</b> Dort ist ein Buchstabe kein Anschlag, sondern Text.
-   *   Siehe `lib/touchTyping.ts` — davor stand bei jedem Zeichen eine
-   *   Fehlermeldung.</li>
-   * <li><b>Ein Rechner ohne Übernahme.</b> Wie bisher: was in ein Feld dieser
-   *   App gehört, bleibt hier.</li>
-   * </ol>
-   */
-  useEffect(() => {
-    const input = inputRef.current
-    const platform = getPlatform()
-
-    if (selected === undefined || input === undefined || !platform.capabilities.physicalKeyboard) {
-      return
-    }
-
-    const forward = (event: KeyboardEvent, down: boolean): void => {
-      if (hotkey !== undefined && hotkeyMatches(event, hotkey)) {
-        event.preventDefault()
-
-        // Nur beim Drücken: das Loslassen desselben Griffs schaltete ihn sonst
-        // sofort wieder zurück.
-        if (down) {
-          setTakeover((running) => !running)
-        }
-
-        return
-      }
-
-      if (takeover) {
-        event.preventDefault()
-
-        const key = toAgentKey(event.code)
-
-        if (key === undefined) {
-          return
-        }
-
-        if (down) {
-          input.keyDown(key)
-        } else {
-          input.keyUp(key)
-        }
-
-        return
-      }
-
-      if (!belongsToRemote(event.target)) {
-        return
-      }
-
-      if (touchTarget) {
-        forwardToTouch(event, down)
-        return
-      }
-
-      const key = toAgentKey(event.code)
-
-      if (key === undefined) {
-        return
-      }
-
-      // Sonst löst der Browser seine eigenen Kürzel aus — Strg+W schlösse das
-      // Fenster, statt am Zielrechner einen Tab zu schließen.
-      event.preventDefault()
-
-      if (down) {
-        input.keyDown(key)
-      } else {
-        input.keyUp(key)
-      }
-    }
-
-    /**
-     * Ein Handy nimmt Text an, keine Anschläge. Zwei Sonderfälle stehen hier
-     * und nicht in `touchTyping.ts`: das Einfügen braucht die Zwischenablage,
-     * und die gibt es nur über die Plattform.
-     */
-    const forwardToTouch = (event: KeyboardEvent, down: boolean): void => {
-      if (!down) {
-        // Geschickt wird beim Drücken. Ein zweites Mal beim Loslassen wäre
-        // jeder Buchstabe doppelt.
-        return
-      }
-
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
-        event.preventDefault()
-
-        void platform.clipboard.readText().then(
-          (text) => text.length > 0 && input.typeText(text),
-          () =>
-            setError(
-              'Die Zwischenablage ließ sich nicht lesen. Einmal ins Fenster klicken und '
-              + 'erneut einfügen.',
-            ),
-        )
-
-        return
-      }
-
-      const touch = touchInputFor(event)
-
-      // Auch das Verschluckte wird abgefangen: F5 soll nicht nebenbei dieses
-      // Fenster neu laden, nur weil drüben nichts damit anzufangen ist.
-      event.preventDefault()
-
-      if (touch === undefined) {
-        return
-      }
-
-      if (touch.kind === 'text') {
-        input.typeText(touch.text)
-      } else {
-        input.combo(touch.key)
-      }
-    }
-
-    const onDown = (event: KeyboardEvent): void => forward(event, true)
-    const onUp = (event: KeyboardEvent): void => forward(event, false)
-
-    window.addEventListener('keydown', onDown)
-    window.addEventListener('keyup', onUp)
-
-    return () => {
-      window.removeEventListener('keydown', onDown)
-      window.removeEventListener('keyup', onUp)
-    }
-  }, [selected, hotkey, takeover, touchTarget])
+  useHardwareKeyboard({
+    selected,
+    inputRef,
+    hotkey,
+    takeover,
+    setTakeover,
+    touchTarget,
+    onError: setError,
+  })
 
   // **Der erste Start** — Name und Freigabe, genau einmal. Solange die Antwort
   // von der Plattform noch aussteht, wird nichts gezeigt: eine Erststartfrage,

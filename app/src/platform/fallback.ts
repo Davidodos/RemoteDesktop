@@ -135,7 +135,7 @@ const webQr: QrScanner = {
   },
 }
 
-export const webPlatform: Platform = {
+export const fallbackPlatform: Platform = {
   name: 'web',
   // Der Browser verrät den Rechnernamen nicht — und soll es auch nicht.
   machineName: undefined,

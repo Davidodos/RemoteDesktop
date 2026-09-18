@@ -203,18 +203,10 @@ public static class AgentService
     /// Ob Windows die Aufgabe kennt.
     ///
     /// <para>
-    /// **Der Befund dahinter:** der erste Versuch las den Schlüssel der
-    /// Aufgabenplanung unter <c>HKLM\…\TaskCache\Tree</c>. Den darf ein
-    /// gewöhnlicher Benutzer nicht öffnen — und <c>OpenSubKey</c> liefert dann
-    /// nicht <c>null</c>, sondern **wirft**. Am echten Gerät stand deshalb eine
-    /// leere Übersichtsseite und danach ein Absturzfenster.
-    /// </para>
-    ///
-    /// <para>
-    /// Gefragt wird jetzt <c>schtasks</c> selbst — das darf jeder, und es ist
-    /// dieselbe Auskunft, die auch das Anlegen gibt. Weil dafür ein Programm
-    /// startet, gilt die Antwort ein paar Sekunden; nach jedem Handgriff wird
-    /// sie mit <see cref="Forget"/> weggeworfen.
+    /// Gefragt wird <c>schtasks</c> selbst — das darf jeder Benutzer, die
+    /// Registry der Aufgabenplanung nicht. Weil dafür ein Programm startet,
+    /// gilt die Antwort ein paar Sekunden; nach jedem Handgriff wird sie mit
+    /// <see cref="Forget"/> weggeworfen.
     /// </para>
     /// </summary>
     public static bool Installed
@@ -270,11 +262,8 @@ public static class AgentService
     /// Ob überhaupt ein Agent-Prozess läuft.
     ///
     /// <para>
-    /// **Der Befund dahinter:** das Fenster fragte allein <c>/health</c> und
-    /// meldete „gestoppt", sobald die Antwort ausblieb — auch dann, wenn der
-    /// Agent lief und nur nicht bedienen konnte. Das ist ein Unterschied, der
-    /// jemandem beim Suchen hilft: „läuft nicht" schickt zum Startknopf,
-    /// „antwortet nicht" zum Port und zum Zertifikat.
+    /// „Läuft nicht" schickt zum Startknopf, „antwortet nicht" zum Port und
+    /// zum Zertifikat — deshalb zwei Fragen statt einer.
     /// </para>
     /// </summary>
     public static bool ProcessRunning
@@ -371,7 +360,7 @@ public static class AgentService
             catch (Exception)
             {
                 // Ein gesperrter Schlüssel ist keine Auskunft, aber ganz sicher
-                // kein Grund abzustürzen — siehe den Befund bei `Installed`.
+                // kein Grund abzustürzen — siehe `Installed`.
                 return false;
             }
         }
@@ -431,7 +420,7 @@ public static class AgentService
 /// Registry, ein Aufruf von <c>tailscale status</c>. Ohne Windows sagt davon
 /// nichts etwas aus, deshalb liegt hier auch keine Entscheidung.
 /// </summary>
-public sealed class WindowsProbe : ISetupProbe
+public sealed class WindowsProbe
 {
     private static readonly string CertificateDirectory = Elevation.DataDirectory;
 

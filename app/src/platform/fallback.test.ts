@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlatformError } from './errors.ts'
-import { webPlatform } from './web.ts'
+import { fallbackPlatform } from './fallback.ts'
 
 /**
  * Die Web-Umsetzung ist die Messlatte für Android und Windows: was sie
@@ -9,32 +9,32 @@ import { webPlatform } from './web.ts'
  * der Browser nicht mitspielt — genau dort ist bisher die App abgestürzt.
  */
 
-describe('webPlatform.storage', () => {
+describe('fallbackPlatform.storage', () => {
   beforeEach(() => {
     localStorage.clear()
   })
 
   it('gibt zurück, was zuvor abgelegt wurde', () => {
-    webPlatform.storage.set('remotedesktop.test', 'wert')
+    fallbackPlatform.storage.set('remotedesktop.test', 'wert')
 
-    expect(webPlatform.storage.get('remotedesktop.test')).toBe('wert')
+    expect(fallbackPlatform.storage.get('remotedesktop.test')).toBe('wert')
   })
 
   it('meldet einen unbekannten Schlüssel als undefined, nicht als null', () => {
     // null würde sich durch die ganze App ziehen und überall eine zweite
     // Fallunterscheidung erzwingen.
-    expect(webPlatform.storage.get('gibt.es.nicht')).toBeUndefined()
+    expect(fallbackPlatform.storage.get('gibt.es.nicht')).toBeUndefined()
   })
 
   it('entfernt einen Schlüssel wieder', () => {
-    webPlatform.storage.set('remotedesktop.test', 'wert')
-    webPlatform.storage.remove('remotedesktop.test')
+    fallbackPlatform.storage.set('remotedesktop.test', 'wert')
+    fallbackPlatform.storage.remove('remotedesktop.test')
 
-    expect(webPlatform.storage.get('remotedesktop.test')).toBeUndefined()
+    expect(fallbackPlatform.storage.get('remotedesktop.test')).toBeUndefined()
   })
 })
 
-describe('webPlatform.storage im privaten Modus', () => {
+describe('fallbackPlatform.storage im privaten Modus', () => {
   // Manche Browser werfen bei jedem localStorage-Zugriff. Ein Absturz beim
   // Start wäre die Folge — deshalb muss die Schicht das schlucken.
   afterEach(() => {
@@ -46,8 +46,8 @@ describe('webPlatform.storage im privaten Modus', () => {
       throw new Error('SecurityError')
     })
 
-    expect(() => webPlatform.storage.get('irgendwas')).not.toThrow()
-    expect(webPlatform.storage.get('irgendwas')).toBeUndefined()
+    expect(() => fallbackPlatform.storage.get('irgendwas')).not.toThrow()
+    expect(fallbackPlatform.storage.get('irgendwas')).toBeUndefined()
   })
 
   it('bleibt beim Schreiben stumm, wenn kein Platz da ist', () => {
@@ -55,7 +55,7 @@ describe('webPlatform.storage im privaten Modus', () => {
       throw new Error('QuotaExceededError')
     })
 
-    expect(() => webPlatform.storage.set('a', 'b')).not.toThrow()
+    expect(() => fallbackPlatform.storage.set('a', 'b')).not.toThrow()
   })
 
   it('bleibt beim Entfernen stumm', () => {
@@ -63,25 +63,25 @@ describe('webPlatform.storage im privaten Modus', () => {
       throw new Error('SecurityError')
     })
 
-    expect(() => webPlatform.storage.remove('a')).not.toThrow()
+    expect(() => fallbackPlatform.storage.remove('a')).not.toThrow()
   })
 })
 
-describe('webPlatform.capabilities', () => {
+describe('fallbackPlatform.capabilities', () => {
   it('sagt nein zu allem, was der Browser nicht kann', () => {
     // Die Oberfläche blendet danach Knöpfe aus. Stünde hier versehentlich
     // true, liefe der Nutzer in eine Funktion, die es nicht gibt.
-    expect(webPlatform.capabilities.camera).toBe(false)
-    expect(webPlatform.capabilities.pointerLock).toBe(false)
-    expect(webPlatform.capabilities.backgroundSession).toBe(false)
-    expect(webPlatform.capabilities.selfUpdate).toBe(false)
+    expect(fallbackPlatform.capabilities.camera).toBe(false)
+    expect(fallbackPlatform.capabilities.pointerLock).toBe(false)
+    expect(fallbackPlatform.capabilities.backgroundSession).toBe(false)
+    expect(fallbackPlatform.capabilities.selfUpdate).toBe(false)
   })
 
   it('fragt die Zwischenablage erst beim Zugriff ab', () => {
     // Als fester Wert wäre die Angabe falsch, sobald sich navigator später
     // ändert — etwa im WebView2-Fenster.
     const beschreibung = Object.getOwnPropertyDescriptor(
-      webPlatform.capabilities,
+      fallbackPlatform.capabilities,
       'clipboard',
     )
 
@@ -89,19 +89,19 @@ describe('webPlatform.capabilities', () => {
   })
 })
 
-describe('webPlatform: was der Browser nicht hergibt', () => {
+describe('fallbackPlatform: was der Browser nicht hergibt', () => {
   it('wirft einen PlatformError beim QR-Scan', async () => {
-    await expect(webPlatform.qr.scan()).rejects.toBeInstanceOf(PlatformError)
+    await expect(fallbackPlatform.qr.scan()).rejects.toBeInstanceOf(PlatformError)
   })
 
   it('meldet „kein Update" als Ergebnis, nicht als Fehler', async () => {
     // Der Service Worker erledigt das. Ein Fehler wäre hier irreführend.
-    await expect(webPlatform.update.check()).resolves.toBeUndefined()
+    await expect(fallbackPlatform.update.check()).resolves.toBeUndefined()
   })
 
   it('wirft, wenn jemand trotzdem installieren will', async () => {
     await expect(
-      webPlatform.update.install({ version: '2.0.0', url: 'https://example.invalid/app' }),
+      fallbackPlatform.update.install({ version: '2.0.0', url: 'https://example.invalid/app' }),
     ).rejects.toBeInstanceOf(PlatformError)
   })
 })

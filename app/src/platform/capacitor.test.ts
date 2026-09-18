@@ -6,7 +6,7 @@ import {
   type CapacitorPlugins,
 } from './capacitor.ts'
 import { PlatformError } from './errors.ts'
-import { webPlatform } from './web.ts'
+import { fallbackPlatform } from './fallback.ts'
 
 /**
  * Die Android-Plattform, geprüft ohne Android.
@@ -271,8 +271,8 @@ describe('was die APK kann und die PWA nicht', () => {
     // Assert — das sind die beiden Gründe, aus denen es die APK überhaupt gibt.
     expect(capabilities.camera).toBe(true)
     expect(capabilities.backgroundSession).toBe(true)
-    expect(webPlatform.capabilities.camera).toBe(false)
-    expect(webPlatform.capabilities.backgroundSession).toBe(false)
+    expect(fallbackPlatform.capabilities.camera).toBe(false)
+    expect(fallbackPlatform.capabilities.backgroundSession).toBe(false)
   })
 
   it('aber weiterhin kein Pointer Lock und keine echte Tastatur', () => {
@@ -374,8 +374,8 @@ describe('der Vordergrunddienst', () => {
 
   it('im Browser passiert an derselben Stelle nichts', async () => {
     // Assert — die Aufrufstelle in App.tsx kommt ohne Fallunterscheidung aus.
-    await expect(webPlatform.session.begin('PC')).resolves.toBeUndefined()
-    await expect(webPlatform.session.end()).resolves.toBeUndefined()
+    await expect(fallbackPlatform.session.begin('PC')).resolves.toBeUndefined()
+    await expect(fallbackPlatform.session.end()).resolves.toBeUndefined()
   })
 })
 

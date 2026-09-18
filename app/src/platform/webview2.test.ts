@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { webPlatform } from './web.ts'
+import { fallbackPlatform } from './fallback.ts'
 import { isWebView2, webview2Platform } from './webview2.ts'
 
 /**
@@ -31,7 +31,7 @@ describe('was das Fenster kann', () => {
   test('der Rechnername kommt vom Wirtsprogramm', () => {
     // Assert — nur damit lässt sich die Selbstverbindung sperren.
     expect(webview2Platform(HOST).machineName).toBe('PC-DAVID')
-    expect(webPlatform.machineName).toBeUndefined()
+    expect(fallbackPlatform.machineName).toBeUndefined()
   })
 
   test('Pointer Lock, Tastatur und Zwischenablage sind da', () => {
@@ -47,7 +47,7 @@ describe('was das Fenster kann', () => {
   test('die Sitzung überlebt den Hintergrund', () => {
     // Assert — anders als ein Browser-Tab wird das Fenster nicht gedrosselt.
     expect(webview2Platform(HOST).capabilities.backgroundSession).toBe(true)
-    expect(webPlatform.capabilities.backgroundSession).toBe(false)
+    expect(fallbackPlatform.capabilities.backgroundSession).toBe(false)
   })
 
   test('Kamera und Selbst-Update stehen bewusst auf false', () => {

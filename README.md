@@ -22,7 +22,6 @@ Mitte, der mitliest. Die Verbindung geht direkt von deinem Handy zu deinem PC.
 |---|---|---|
 | **Heimnetz** | Handy und Rechner hängen am selben Router. Kein VPN, kein Konto, nichts einzurichten | nein |
 | **Tailscale** | Du willst auch aus dem Mobilfunknetz ran. Kostenlos, Anmeldung mit einem Konto, das du schon hast | ja |
-| **Headscale** | Du betreibst den Koordinator selbst — derselbe Client, dein Server | ja |
 | **Anderer VPN-Anbieter** | Du betreibst schon WireGuard, OpenVPN, ZeroTier … — dann behältst du es | ja |
 
 Das Fenster fragt dich beim Einrichten danach und führt dich durch den Rest.
@@ -40,18 +39,12 @@ offene Tür ins Internet, die jemand ausprobieren könnte.
 Lade `RemoteDesktop-Setup.exe` aus den
 [Releases](https://github.com/Davidodos/RemoteDesktop/releases) und starte sie.
 
-Es wird immer alles abgelegt — die Oberfläche, der Agent und die Weboberfläche.
-Der Installer fragt nur, was davon auch *laufen* soll:
-
-| | wofür |
-|---|---|
-| **Diesen Rechner fernsteuerbar machen** | Trägt den Agent als Dienst ein. Auf einem Arbeitslaptop, der nur steuern und nie gesteuert werden soll, lässt du das Häkchen weg — dann läuft dort kein Dienst, der Zugriff erlaubt. |
-| **Autostart** | Agent beim Hochfahren, Fenster beim Anmelden. |
-| **Tailscale mitinstallieren** | Nur nötig, wenn du auch von unterwegs ranwillst. |
-
-Alles davon lässt sich später im Fenster umstellen: der Agent kann dort
-eingerichtet, gestartet, beendet und wieder entfernt werden. Du musst den
-Installer nie wieder suchen.
+Der Installer legt nur Dateien ab — die Oberfläche, den Agent und die
+Weboberfläche. Was davon *laufen* soll, fragt das Fenster beim ersten Start:
+ob dieser Rechner fernsteuerbar sein soll, auf welchem Weg das Handy ihn
+erreicht, und ob alles beim Anmelden mitstartet. Alles davon lässt sich
+später unter **Einstellungen** umstellen; den Installer musst du nie wieder
+suchen.
 
 ### 2. Einrichtung abschließen
 
@@ -82,9 +75,10 @@ ist normal bei Apps außerhalb des Play Store.
 
 ### 4. Koppeln
 
-Im Fenster am Rechner auf **Geräte koppeln…**. Dort steht ein sechsstelliger
-Code und derselbe Code als QR-Bild. In der App auf **Gerät koppeln**, den
-QR-Code scannen, fertig.
+Im Fenster am Rechner auf **Geräte** → **Kopplungscode anzeigen**. Dort steht
+ein sechsstelliger Code, derselbe Code als QR-Bild und ein Prüfzeichen. In der
+App auf **Gerät koppeln**, den QR-Code scannen, fertig — ohne Kamera Adresse,
+Code und Prüfzeichen eintippen.
 
 Der Code gilt **fünf Minuten** und funktioniert **einmal**. Danach kennen sich
 die beiden Geräte dauerhaft — und zwar nur diese beiden.

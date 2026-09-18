@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { credentialsFor } from './direct.ts'
 import { setPlatform } from '../platform/index.ts'
-import { webPlatform } from '../platform/web.ts'
+import { fallbackPlatform } from '../platform/fallback.ts'
 import { createClientKey } from '../lib/clientKey.ts'
 import type { ClientKey, Platform } from '../platform/index.ts'
 import type { Device } from '../lib/types.ts'
@@ -22,7 +22,7 @@ import type { Device } from '../lib/types.ts'
  */
 describe('credentialsFor', () => {
   beforeEach(() => {
-    setPlatform(webPlatform)
+    setPlatform(fallbackPlatform)
     window.localStorage.clear()
   })
 
@@ -75,7 +75,7 @@ describe('credentialsFor', () => {
 /** Eine Plattform, deren Gegenstelle den Ausweis dieses Geräts führt. */
 function withNodeKey(key: ClientKey): Platform {
   return {
-    ...webPlatform,
-    node: { ...webPlatform.node, key: vi.fn(() => Promise.resolve(key)) },
+    ...fallbackPlatform,
+    node: { ...fallbackPlatform.node, key: vi.fn(() => Promise.resolve(key)) },
   }
 }

@@ -10,7 +10,7 @@ import type { LocalNode } from './localNode.ts'
 import type { SessionKeepAlive } from './session.ts'
 import type { TrustService } from './trust.ts'
 import type { SurfaceBoardPublisher } from './surfaces.ts'
-import { webPlatform } from './web.ts'
+import { fallbackPlatform } from './fallback.ts'
 
 /**
  * Was die App von ihrer Umgebung braucht.
@@ -179,7 +179,7 @@ export {
   type HostStatus,
 } from './host.ts'
 
-let current: Platform = webPlatform
+let current: Platform = fallbackPlatform
 
 /**
  * Setzt die Umsetzung für diesen Lauf. Das rufen der Android- und der

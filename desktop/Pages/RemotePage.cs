@@ -141,12 +141,8 @@ public sealed class RemotePage : Control
     /// Wohin WebView2 seinen eigenen Zwischenspeicher legt.
     ///
     /// <para>
-    /// **Der Befund dahinter:** ohne Angabe legt WebView2 ihn **neben die
-    /// Programmdatei**, also nach <c>C:\Program Files\RemoteDesktop</c>. Dort
-    /// darf ein Programm ohne Administratorrechte nicht schreiben, und genau
-    /// das ist das Fenster. Am echten Gerät stand deshalb „Die Oberfläche ließ
-    /// sich nicht laden — Zugriff verweigert (0x80070005)“. Der Ordner gehört
-    /// dem angemeldeten Menschen, also liegt er in seinem Profil.
+    /// Ohne Angabe läge er neben der Programmdatei unter <c>Program Files</c>,
+    /// wo das Fenster ohne Adminrechte nicht schreiben darf.
     /// </para>
     /// </summary>
     private static string UserDataFolder => Path.Combine(
@@ -171,14 +167,9 @@ public sealed class RemotePage : Control
 
         // **Erst den Zwischenspeicher wegräumen, dann laden.**
         //
-        // Der Befund dahinter: die Oberfläche kommt über einen virtuellen Host
-        // und damit über `https` — für WebView2 ist das eine Website wie jede
-        // andere, und sie wird zwischengespeichert. Der Ordner dafür liegt im
-        // Profil des Benutzers und überlebt jede Deinstallation. Wer eine neue
-        // Fassung installierte, bekam deshalb die alte zu sehen: dieselbe
-        // Meldung, derselbe Fehler, an einem Code, der längst behoben war. Ein
-        // Fehlerbild, das sich nicht ändert, obwohl man es geändert hat, ist das
-        // teuerste, das es gibt — es lenkt jede Suche auf die falsche Fährte.
+        // Die Oberfläche kommt über einen virtuellen Host, und WebView2
+        // speichert sie wie jede Website zwischen — nach einem Update sah man
+        // sonst die alte Fassung.
         //
         // Nur der Zwischenspeicher, ausdrücklich nicht der lokale Speicher: dort
         // liegen der Schlüssel dieses Fensters und die Geräteliste. Sie zu
@@ -297,11 +288,8 @@ public sealed class RemotePage : Control
     /// das Fenster und antwortet mit derselben Kennung.
     ///
     /// <para>
-    /// **Der Befund dahinter:** die Seite läuft unter <c>https</c>, das
-    /// Zertifikat der Gegenstelle liegt unter <c>http://…:8442/ca.crt</c>.
-    /// Chromium verwirft das als aktiven Mixed Content, bevor irgendetwas über
-    /// das Netz geht — und die Ausnahme sieht aus wie ein Rechner, der nicht
-    /// antwortet. Genau das stand am Gerät, während die Gegenstelle lief.
+    /// Die Seite läuft unter <c>https</c> und dürfte <c>http://…:8442/ca.crt</c>
+    /// selbst nicht anfragen (Mixed Content) — deshalb holt es das Fenster.
     /// </para>
     /// </summary>
     private void OnMessage(CoreWebView2 core, CoreWebView2WebMessageReceivedEventArgs message)
@@ -513,12 +501,8 @@ public sealed class RemotePage : Control
     /// anmeldet.
     ///
     /// <para>
-    /// **Der Befund dahinter:** er lag im localStorage der WebView, und der
-    /// Agent kannte ihn nur, weil die React-App ihn beim Start hinterlegte. Wer
-    /// das Fenster öffnete und direkt auf „Geräte" ging, hatte nie eine
-    /// laufende React-App — die Gegenseite bekam beim Koppeln ein leeres
-    /// <c>clientKey</c>. Jetzt liegt er in einer Datei, die beide lesen, und
-    /// niemand muss ihn irgendwo hinterlegen.
+    /// In einer Datei, die Agent und Fenster lesen — nicht im localStorage der
+    /// WebView, den es ohne laufende Seite nicht gibt.
     /// </para>
     /// </summary>
     private static object Ausweis()

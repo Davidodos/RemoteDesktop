@@ -8,11 +8,8 @@ namespace RemoteDesktopClient;
 /// Das Fenster. Es gibt nur dieses eine.
 ///
 /// <para>
-/// **Der Befund dahinter:** bis V3 waren es drei — Einstellungen, Fernsteuerung
-/// und Kopplung, jedes mit eigener Titelzeile, eigenem Platz auf der Taskleiste
-/// und eigener Vorstellung davon, wie ein Knopf aussieht. Wer ein Gerät koppeln
-/// wollte, während er einen Rechner steuerte, schob Fenster hin und her. Jetzt
-/// sind es Seiten, und der Wechsel ist ein Klick in der Leiste links.
+/// Bis V3 waren es drei Fenster; jetzt sind es Seiten, und der Wechsel ist ein
+/// Klick in der Leiste links.
 /// </para>
 ///
 /// <para>
@@ -107,13 +104,9 @@ public sealed class ShellWindow : Form
     /// Von allein nachsehen, statt auf einen Seitenwechsel zu warten.
     ///
     /// <para>
-    /// **Der Befund dahinter:** der Installer startet den Dienst und öffnet
-    /// gleich danach das Fenster. Bis der Agent antwortet, vergehen ein paar
-    /// Sekunden — das Fenster fragte genau einmal, bekam „nein“ und blieb bei
-    /// „Agent gestoppt“. Wer dann auf „Starten“ klickte, bekam einen Fehler,
-    /// weil der Dienst längst lief. Dasselbe galt für die gekoppelten Geräte:
-    /// ein frisch gekoppeltes Handy tauchte erst auf, wenn man einmal die Seite
-    /// wechselte und zurückkam.
+    /// Einmal beim Öffnen zu fragen reichte nicht: der Agent antwortet erst
+    /// Sekunden nach dem Start, und ein frisch gekoppeltes Gerät erschien erst
+    /// nach einem Seitenwechsel.
     /// </para>
     /// </summary>
     private async Task TickAsync()
@@ -171,12 +164,8 @@ public sealed class ShellWindow : Form
         // Die Oberfläche im Hintergrund hochfahren, auch wenn gerade eine
         // andere Seite zu sehen ist.
         //
-        // **Der Befund dahinter:** die WebView entstand erst beim ersten Öffnen
-        // der Fernsteuerung. Solange sie nicht lief, holte niemand das Angebot
-        // zur Gegenkopplung ab — und der Kopplungscode darin ist nach fünf
-        // Minuten wertlos. Wer am Handy koppelte und den Tab später öffnete,
-        // fand dort „Noch kein Gerät gekoppelt", obwohl alles richtig gelaufen
-        // war. Nebenbei ist der erste Wechsel auf die Seite jetzt sofort da.
+        // Entstünde die WebView erst beim ersten Öffnen, holte bis dahin
+        // niemand die Gegenkopplung ab — und der Code darin verfällt.
         //
         // Fehlschläge bleiben hier still: sie gehören auf die Seite, wenn
         // jemand sie öffnet, und nicht in eine Statuszeile, in der niemand sie
@@ -297,10 +286,8 @@ public sealed class ShellWindow : Form
     /// schreiben statt ins Verderben.
     ///
     /// <para>
-    /// **Der Befund dahinter:** eine gesperrte Registry warf beim Erfragen des
-    /// Agent-Zustands. Die Übersicht blieb leer, weil sie nie bis zum Füllen
-    /// kam, und kurz darauf stand das Absturzfenster von .NET auf dem
-    /// Bildschirm. Keine Auskunft rechtfertigt ein beendetes Programm.
+    /// Keine Auskunft rechtfertigt ein beendetes Programm — eine gesperrte
+    /// Registry hat das Fenster einmal mitgenommen.
     /// </para>
     /// </summary>
     private async Task SafelyAsync(PageView view)
@@ -342,12 +329,6 @@ public sealed class ShellWindow : Form
         {
             switch (action)
             {
-                case PartAction.Open:
-                    await ShowPageAsync(Page.Remote);
-                    _busy = false;
-
-                    return;
-
                 case PartAction.Download:
                     OverviewPage.Open(Tailscale.Download);
                     Say("Tailscale öffnet sich im Browser. Danach hier weiter.");

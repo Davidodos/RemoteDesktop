@@ -156,7 +156,7 @@ Dienst in Sitzung 0 würde diese Grenze aufheben — bewusst noch nicht gebaut.
 **Der private Geräteschlüssel liegt in den Preferences der App.** Wer das
 entsperrte Handy hat, hat den PC. Der Bildschirmsperre des Handys kommt damit
 dieselbe Bedeutung zu wie dem Schlüssel selbst. Android böte mit
-`EncryptedSharedPreferences` mehr; die Abwägung steht in `docs/TASKS-V2.md`,
+`EncryptedSharedPreferences` mehr; die Abwägung steht in `docs/archiv/TASKS-V2.md`,
 Phase 12.
 
 ## Wenn ein Gerät verloren geht

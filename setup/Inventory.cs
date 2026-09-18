@@ -13,9 +13,6 @@ public enum PartAction
 
     Stop,
 
-    /// <summary>Das Fernsteuerfenster öffnen.</summary>
-    Open,
-
     /// <summary>Tailscale herunterladen — ein fremdes Programm, von deren Seite.</summary>
     Download,
 
@@ -94,11 +91,10 @@ public sealed record Part(
 public static class Inventory
 {
     public const string AgentTitle = "Agent";
-    public const string ClientTitle = "Fernsteuerung";
     public const string NetworkTitle = "Netz";
 
     public static IReadOnlyList<Part> For(Machine machine, NetworkProfile profile) =>
-        [Agent(machine), Client(machine), Network(machine, profile)];
+        [Agent(machine), Network(machine, profile)];
 
     /// <summary>Ein Satz für den Knopf, kein Aufzählungsname.</summary>
     public static string Describe(PartAction action) => action switch
@@ -107,7 +103,6 @@ public static class Inventory
         PartAction.Remove => "Entfernen",
         PartAction.Start => "Starten",
         PartAction.Stop => "Beenden",
-        PartAction.Open => "Öffnen",
         PartAction.Download => "Tailscale herunterladen",
         PartAction.SignIn => "Jetzt anmelden",
         _ => "Zertifikat holen"
@@ -188,30 +183,6 @@ public static class Inventory
                 Ok: false,
                 Missing: false,
                 [PartAction.Start, PartAction.Remove]);
-    }
-
-    /// <summary>
-    /// Das Fenster, mit dem man andere Rechner steuert. Es ist kein Dienst,
-    /// deshalb gibt es hier nichts zu starten oder zu beenden — nur zu öffnen.
-    /// </summary>
-    private static Part Client(Machine machine)
-    {
-        const string purpose = "Das Fenster, mit dem du von hier aus andere Rechner steuerst.";
-
-        if (!machine.WebView2)
-        {
-            return new Part(
-                ClientTitle,
-                purpose,
-                "Windows fehlt die Anzeigekomponente WebView2",
-                Ok: false,
-                Missing: true,
-                []);
-        }
-
-        return machine.ClientFiles
-            ? new Part(ClientTitle, purpose, "bereit", true, false, [PartAction.Open])
-            : new Part(ClientTitle, purpose, "nicht installiert", false, true, []);
     }
 
     /// <summary>

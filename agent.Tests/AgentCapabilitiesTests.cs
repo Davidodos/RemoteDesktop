@@ -14,6 +14,27 @@ public class AgentCapabilitiesTests
             AgentCapabilities.Windows);
     }
 
+    [Fact]
+    public void Ohne_ffmpeg_fehlt_h264()
+    {
+        Assert.DoesNotContain(AgentCapabilities.H264, AgentCapabilities.For(h264: false));
+        Assert.Equal(AgentCapabilities.Windows, AgentCapabilities.For(h264: true));
+    }
+
+    [Fact]
+    public void Ffmpeg_wird_im_Suchpfad_gesucht()
+    {
+        var folder = Directory.CreateTempSubdirectory().FullName;
+        File.WriteAllText(Path.Combine(folder, "ffmpeg.exe"), string.Empty);
+
+        Assert.True(RemoteDesktopAgent.Capture.H264.FfmpegLocator.IsAvailable("ffmpeg", folder));
+        Assert.False(RemoteDesktopAgent.Capture.H264.FfmpegLocator.IsAvailable("ffmpeg", "/gibt/es/nicht"));
+        Assert.False(RemoteDesktopAgent.Capture.H264.FfmpegLocator.IsAvailable(
+            Path.Combine(folder, "fehlt.exe"), folder));
+
+        Directory.Delete(folder, recursive: true);
+    }
+
     /// <summary>
     /// Wie <see cref="Keys_ist_kein_Recht"/>: „h264“ sagt, in welcher Form das
     /// Bild herauskommt, nicht wer es sehen darf. Das Recht dafür ist

@@ -82,7 +82,7 @@ Das gehört an den Anfang, nicht in die Fußnoten:
 
 ## Ablauf je Phase
 
-Wie in `docs/TASKS-V3.md`: Zustand lesen → nur diese Phase bauen → Abnahme
+Wie in `docs/archiv/TASKS-V3.md`: Zustand lesen → nur diese Phase bauen → Abnahme
 nachweisen → hier eintragen → committen.
 
 ## Umgebung
@@ -1794,6 +1794,43 @@ Kürzel-Karte heißt „Toggle für Remote Windows-Steuerung", das leere Feld
 ---
 
 # Teil B — Dateimanager
+
+## Phase 31t — Durchsicht vor der Veröffentlichung ✅ (18.09.2026, am Gerät noch zu prüfen)
+
+Befunde und Plan: `docs/DURCHSICHT-2026-09.md`; dort steht unter
+„Umsetzungsstand", was zu welchem Commit gehört. Kurz:
+
+**R1 — der Bildabbruch Windows→Android.** `useNotice` gab bei jedem Rendern neue
+Rückrufe heraus, und daran hingen Effekte: jede Meldung baute den Bild-Socket
+neu auf, und Meldungen verschwanden sofort wieder. Dazu vergaß der Android-Host
+mit dem Ende des Bild-Sockets die Aufnahme-Erlaubnis, behielt aber die
+Zustimmung (`NO_SCREEN`-Schleife), schickte in der Pause keine Kennzahlen
+(6-s-Wächter), und der Threadpool lief voll. Alles in `a205dd8`.
+
+**R2 — Sicherheit.** `data` nur lesbar, `data\secret` admin-only,
+Benutzerdateien in `%localappdata%\RemoteDesktop`; lokale Endpunkte mit
+`local.secret`; am Handy keine `/api/pair/code`- und `/api/clients`-Routen mehr;
+ein Update-Weg (Installer, Staging in `secret\update`); Trust-Karte und
+Windows-Stammspeicher weg; Sammel-Token weg; Name Constraints auf beiden
+Stellen; Prüfzeichen neben dem Kopplungscode für den Weg ohne Kamera.
+
+**R3 — Netzmodi.** Zertifikat wird ohne Neustart erneuert (Tailscale täglich
+geprüft, eigenes bei Netzwechsel), IPv6 im Zertifikat, Adressen sauber geprüft.
+
+**R4 — Texte.** Ein Begriff je Sache (Ein/Aus, Tastenkombinationen, Kürzel,
+Freigabe), falsche und tote Verweise raus, kürzer; ein Satz zur Zoomgeste beim
+ersten Handy vom Rechner aus.
+
+**R5 — Aufräumen.** `SetupSteps`, `Inventory.Client`, `LocalAgent` weg; `web.ts`
+heißt `fallback.ts`; `h264` nur mit ffmpeg; `useHardwareKeyboard`,
+`PairingUri.kt`, `LiveConnections.kt` herausgezogen; Befund-Kommentare im
+Fenster gekürzt; alte Phasenpläne unter `docs/archiv/`.
+
+**Was am Gerät zu prüfen ist (R6):** Windows→Android über eine längere Sitzung
+(kein Bildabbruch), Koppeln in beide Richtungen mit QR und mit Prüfzeichen,
+Koppeln bei gestopptem Agent (Rückfrage von Windows), Update aus der
+Geräteliste, ein Netzwechsel des Laptops im Heimnetz, und nach einem Update von
+v1.3: Kopplungen und Ausweis bleiben (Umzug der Dateien).
 
 ## Phase 32 — Dateidienst im Windows-Agent
 
