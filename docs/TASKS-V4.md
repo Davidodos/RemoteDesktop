@@ -1885,6 +1885,41 @@ an, und die App zeigt das Bild quer und setzt den Zoom zurück.
 **„Noch einmal Zurück beendet die App"** steht als ovaler Hinweis unten und
 geht nach zwei Sekunden (`useToast`), nicht mehr als rotes Band.
 
+## Phase 31w — Koppeln in Schritten, Koppeln ohne Freigabe, Rechte ✅ (19.09.2026, am Gerät noch zu prüfen)
+
+**Koppeln ist eine Schrittfolge** (`PairingView`): erst „Dieses Gerät koppeln"
+oder „Anderes Gerät eintragen" (darunter ein Satz: beide Wege verbinden in
+beide Richtungen), dann je QR-Code oder von Hand. Am Rechner führt „Anderes
+Gerät eintragen" direkt zur Handeingabe. Der Code ist einer für QR und
+Handeingabe (`usePairingCode`); „Schließen" und das Verlassen der Seite
+verwerfen ihn sofort (`cancelPairing`, am Agent `POST /api/pair/code/cancel`).
+Oben links ein Pfeil, und die Zurück-Taste von Android geht denselben Schritt
+zurück (`pairingBack` in `useBackButton`). Am Ende steht auf **beiden** Seiten
+„*Name* erfolgreich gekoppelt" mit „Fertig" und „Weiteres Gerät …" — die
+Seite mit dem Code merkt die Kopplung an ihrer Clientliste (neuer Eintrag oder
+neues `createdAt`, auch beim erneuten Koppeln).
+
+**Koppeln geht ohne Freigabe.** Am Handy lauscht der Server, solange der Code
+gilt, im Modus „nur Koppeln" (`HostRuntime.startForPairing`): `/health`,
+`/api/info`, `/api/pair`, sonst 503. Am Rechner startet das Fenster den Agent
+dafür erhöht mit `--Agent:PairOnly=true` (`AdminTask.PairOnly`, eine
+UAC-Rückfrage — das Zertifikat liest nur ein Administrator). Er sperrt alles
+außer Kopplung (`PairOnlyMode`), macht kein Update und beendet sich 30
+Sekunden nachdem kein Code mehr offen ist, oder wenn das Fenster den Code
+verwirft. Auch ohne eingerichteten Agent: er geht nie von allein an. Sein
+Benutzerordner kommt als `--Agent:UserDirectory` mit, weil ein erhöhter
+Prozess eines Standardbenutzers im Profil des Administrators säße.
+
+**Rechte:** „Was freigegeben ist" heißt „Rechte". Bildschirm und Eingaben sind
+Karten fester Größe (`PermissionCards`) mit „Freigegeben" bzw. „Nicht
+freigegeben" (Eingaben: „… Benötigt Bedienungshilfen") und „Aktivieren" /
+„Deaktivieren". Eingaben deaktivieren schaltet die Bedienungshilfe ab
+(`disableSelf`); wieder an geht es nur über Android. Darunter die Anleitung
+(`InputGuide`, in der App): erst „Eingeschränkte Einstellungen zulassen" in
+der App-Info (Android 13+), dann die Bedienungshilfe. Dieselben Karten stehen
+im Erststart, dessen Frage jetzt „Remote-Steuerung für dieses Gerät
+zulassen?" lautet.
+
 ## Phase 32 — Dateidienst im Windows-Agent
 
 Neues Recht `files`. **Achtung:** ein neues Recht bekommt kein bereits

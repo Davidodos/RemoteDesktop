@@ -50,6 +50,19 @@ public sealed class PairingCodes
         }
     }
 
+    /// <summary>
+    /// Verwirft den offenen Code. Wer die Anzeige schließt, meint damit auch:
+    /// dieser Code soll nicht mehr gelten — sonst bliebe er fünf Minuten
+    /// einlösbar, ohne dass ihn noch jemand sieht.
+    /// </summary>
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _code = null;
+        }
+    }
+
     /// <summary>Wie lange der offene Code noch gilt; <c>null</c> ohne offenen Code.</summary>
     public TimeSpan? RemainingLifetime()
     {

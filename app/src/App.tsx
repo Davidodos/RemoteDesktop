@@ -80,6 +80,9 @@ function Shell(): React.JSX.Element {
   const [devices, setDevices] = useState<Device[]>([])
   const [selected, setSelected] = useState<Device | undefined>(undefined)
   const [pairing, setPairing] = useState(false)
+
+  /** Der Rückweg der Kopplungsseite — ein Schritt zurück, siehe PairingView. */
+  const pairingBack = useRef<(() => void) | undefined>(undefined)
   const [page, setPage] = useState<Page>('devices')
   const [menuOpen, setMenuOpen] = useState(false)
   const [connection, setConnection] = useState<ConnectionState>('disconnected')
@@ -566,7 +569,18 @@ function Shell(): React.JSX.Element {
   }, [touchTarget, view, selected, setError])
 
   // **Zurück am Handy** — eine Ebene hoch, nicht raus. Siehe useBackButton.
-  useBackButton({ menuOpen, setMenuOpen, pairing, setPairing, selected, disconnect, page, setPage, onNotice: showToast })
+  useBackButton({
+    menuOpen,
+    setMenuOpen,
+    pairing,
+    setPairing,
+    pairingBack,
+    selected,
+    disconnect,
+    page,
+    setPage,
+    onNotice: showToast,
+  })
 
   // **Der erste Start** — Name und Freigabe, genau einmal. Solange die Antwort
   // von der Plattform noch aussteht, wird nichts gezeigt: eine Erststartfrage,
@@ -590,20 +604,22 @@ function Shell(): React.JSX.Element {
   if (pairing) {
     return (
       <PairingView
-        onCancel={() => setPairing(false)}
-        onPaired={(all, paired, warnung) => {
-          setDevices(all)
+        backRef={pairingBack}
+        onClose={() => {
           setPairing(false)
 
-          // Nur, wenn die Gegenrichtung nicht zustande kam. Sonst hat die
-          // Kopplung geklappt, und dazu gibt es nichts zu sagen.
-          if (warnung !== undefined) {
-            setError(warnung)
-          }
+          // **Zurück in die Liste, nicht in die Sitzung.** Koppeln und
+          // Verbinden sind zwei Entscheidungen: wer ein Gerät einträgt, will
+          // es später steuern können — nicht zwangsläufig jetzt.
+          setPage('devices')
+        }}
+        onPaired={(all, paired) => {
+          setDevices(all)
 
           // Der Name kommt aus `/api/info` des frisch gekoppelten Agents —
           // eine zweite Anfrage braucht es hier nicht.
           if (
+            paired !== undefined &&
             isSelfConnection(
               { name: paired.name, fingerprint: paired.fingerprint },
               {
@@ -613,16 +629,7 @@ function Shell(): React.JSX.Element {
             )
           ) {
             setError(selfConnectionMessage(paired.name))
-            return
           }
-
-          // **Zurück in die Liste, nicht in die Sitzung.** Koppeln und
-          // Verbinden sind zwei Entscheidungen: wer ein Gerät einträgt, will
-          // es später steuern können — nicht zwangsläufig jetzt. Direkt in den
-          // Bildschirm zu springen nahm die zweite Entscheidung vorweg und war
-          // beim Einrichten mehrerer Geräte hintereinander jedes Mal ein
-          // Rückweg.
-          setPage('devices')
         }}
       />
     )

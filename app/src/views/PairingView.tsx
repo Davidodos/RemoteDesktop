@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState, type MutableRefObject } from 'react'
 import { CertificateTrustStep } from './CertificateTrustStep.tsx'
-import { PairingOffer } from './PairingOffer.tsx'
+import { PairingOffer, usePairingCode } from './PairingOffer.tsx'
 import {
   certificateFingerprint,
   downloadAuthority,
@@ -10,7 +10,7 @@ import {
   TRUST_PORT,
 } from '../lib/certificateTrust.ts'
 import { saveLocalDevice } from '../lib/deviceSources.ts'
-import { grantPeer } from '../lib/bothWays.ts'
+import { collectPeers, grantPeer } from '../lib/bothWays.ts'
 import { ownName } from '../lib/ownName.ts'
 import { pairBothWays } from '../lib/pairing.ts'
 import { DEFAULT_AGENT_PORT, parsePairingUri, type PairingTarget } from '../lib/pairingUri.ts'
@@ -19,34 +19,62 @@ import type { Device } from '../lib/types.ts'
 
 interface Props {
   /**
-   * @param warnung Ein Satz, wenn die Gegenrichtung nicht zustande kam. Die
-   *   Kopplung selbst hat dann trotzdem geklappt — beides in einem Fehler zu
-   *   melden hieße, eine gelungene Kopplung als Fehlschlag darzustellen.
+   * Eine Kopplung ist durch — am Handy wie am Rechner, gleich von welcher
+   * Seite aus. Die Liste ist dann schon neu; die Seite zeigt ihre Meldung
+   * selbst.
    */
-  onPaired: (devices: Device[], paired: Device, warnung?: string) => void
-  onCancel: () => void
+  onPaired: (devices: Device[], paired?: Device) => void
+  /** Zurück in die Geräteliste. */
+  onClose: () => void
+  /**
+   * Wohin die Zurück-Taste von Android geht: ein Schritt zurück, nicht raus.
+   * Die Seite trägt hier ihren eigenen Rückweg ein.
+   */
+  backRef: MutableRefObject<(() => void) | undefined>
+}
+
+/** Die Schritte der Kopplung, in der Reihenfolge, in der sie kommen. */
+type Step =
+  | 'choose'
+  | 'offer'
+  | 'offer-qr'
+  | 'offer-manual'
+  | 'enter'
+  | 'enter-manual'
+
+/** Die Meldung am Ende. */
+interface Done {
+  name: string
+  /** Welche Seite dieses Gerät war — danach richtet sich „Weiteres Gerät …". */
+  side: 'offer' | 'enter'
+  warnung?: string
 }
 
 /**
- * Koppeln — eine Seite, beide Richtungen.
+ * Koppeln — Schritt für Schritt.
  *
  * <p>
- * **Oben: dieses Gerät koppeln** (QR-Code, darunter Code und Adresse).
- * **Darunter: ein anderes eintragen** — am Handy per Kamera oder von Hand, am
- * Rechner nur von Hand. Beides gehört auf dieselbe Seite, weil beim Koppeln
- * immer beide Seiten etwas tun.
+ * **Zuerst die eine Frage:** zeigt dieses Gerät den Code, oder trägt es den
+ * eines anderen ein? Beide Wege enden gleich — die Kopplung verbindet die
+ * Geräte in beide Richtungen —, verlangen aber an diesem Gerät etwas anderes.
+ * Danach je zwei Wege: QR-Code oder von Hand. Am Rechner gibt es keine Kamera;
+ * „Anderes Gerät eintragen" führt dort direkt zur Handeingabe.
  * </p>
  *
  * <p>
- * **Einzutippen sind Adresse, Code und — bei einem Gerät ohne Tailscale — das
- * Prüfzeichen**, das dort neben dem Code steht. Der eigene Name steht in den
- * Einstellungen und geht von allein mit; die Gegenseite erscheint unter dem
- * Namen, den sie sich selbst gegeben hat.
+ * **Am Ende steht auf beiden Geräten dieselbe Meldung.** Das Gerät, das den
+ * Code zeigte, erfährt die Kopplung an seiner Clientliste (siehe
+ * `usePairingCode`).
  * </p>
  */
-export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
+export function PairingView({ onPaired, onClose, backRef }: Props): React.JSX.Element {
+  const platform = getPlatform()
+  const camera = platform.capabilities.camera
+
+  const [step, setStep] = useState<Step>('choose')
   const [error, setError] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<Done | undefined>(undefined)
 
   /**
    * Gekoppelt, aber noch nicht fertig: ein Gerät ohne Tailscale weist sich mit
@@ -58,7 +86,25 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
     { device: Device; devices: Device[]; warnung?: string } | undefined
   >(undefined)
 
-  const platform = getPlatform()
+  const offer = usePairingCode((name) => {
+    // Der Steckbrief der Gegenseite liegt jetzt hier. Erst abholen, dann den
+    // Code verwerfen — eine Gegenstelle, die nur für ihn lief, geht damit aus,
+    // und danach wäre er nicht mehr zu haben.
+    void collectPeers()
+      .then((devices) => {
+        if (devices !== undefined) {
+          onPaired(devices)
+        }
+      }, () => undefined)
+      .finally(offer.cancel)
+
+    setDone({ name, side: 'offer' })
+  })
+
+  const finish = (devices: Device[], device: Device, warnung?: string): void => {
+    onPaired(devices, device)
+    setDone({ name: device.name, side: 'enter', ...(warnung === undefined ? {} : { warnung }) })
+  }
 
   const pair = async (target: PairingTarget): Promise<void> => {
     setBusy(true)
@@ -73,7 +119,7 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
       // ein `null` vom Agent bedeutet „nichts zu bestätigen", sah aber aus wie
       // ein Wert. Siehe `certificateFingerprint`.
       if (certificateFingerprint(device.caFingerprint) === undefined || trusted) {
-        onPaired(devices, device, warnung)
+        finish(devices, device, warnung)
 
         return
       }
@@ -102,55 +148,183 @@ export function PairingView({ onPaired, onCancel }: Props): React.JSX.Element {
     await pair(target)
   }
 
+  const go = (next: Step): void => {
+    setError(undefined)
+    setStep(next)
+  }
+
+  /** Den Code anzeigen — derselbe, falls noch einer gilt. */
+  const show = (next: 'offer-qr' | 'offer-manual'): void => {
+    go(next)
+
+    if (offer.code === undefined && !offer.busy) {
+      offer.renew()
+    }
+  }
+
+  /** Zurück an den Anfang — ein offener Code gilt dann nicht mehr. */
+  const restart = (): void => {
+    offer.cancel()
+    setDone(undefined)
+    go('choose')
+  }
+
+  /** Raus aus der Kopplung, zurück in die Geräteliste. */
+  const close = (): void => {
+    offer.cancel()
+    onClose()
+  }
+
+  const back = (): void => {
+    if (done !== undefined) {
+      close()
+      return
+    }
+
+    // Die Kopplung steht schon; zurück gibt es hier nicht mehr, nur weiter.
+    if (awaitingTrust !== undefined) {
+      return
+    }
+
+    switch (step) {
+      case 'choose':
+        close()
+        return
+      case 'offer':
+      case 'enter':
+        restart()
+        return
+      case 'offer-qr':
+      case 'offer-manual':
+        go('offer')
+        return
+      case 'enter-manual':
+        if (camera) {
+          go('enter')
+        } else {
+          restart()
+        }
+    }
+  }
+
+  useEffect(() => {
+    backRef.current = back
+  })
+
+  useEffect(
+    () => () => {
+      backRef.current = undefined
+    },
+    [backRef],
+  )
+
   if (awaitingTrust !== undefined) {
     return (
       <CertificateTrustStep
         device={awaitingTrust.device}
-        onDone={() =>
-          onPaired(awaitingTrust.devices, awaitingTrust.device, awaitingTrust.warnung)
-        }
+        onDone={() => {
+          const { devices, device, warnung } = awaitingTrust
+
+          setAwaitingTrust(undefined)
+          finish(devices, device, warnung)
+        }}
       />
     )
   }
 
   return (
     <div className="token-prompt pairing-page">
-      <h1>Gerät koppeln</h1>
+      <button type="button" className="link-button back-arrow" onClick={back} aria-label="Zurück">
+        ←
+      </button>
+
+      <h1>{TITLES[step]}</h1>
 
       {error !== undefined && <p className="error-text">{error}</p>}
 
-      <section className="settings-group">
-        <h2>Dieses Gerät koppeln</h2>
-        <PairingOffer />
-      </section>
+      {step === 'choose' && (
+        <>
+          <p>
+            Ein Gerät zeigt den Code, das andere trägt ihn ein. Die Kopplung verbindet die Geräte in
+            beide Richtungen.
+          </p>
+          <div className="choice-buttons">
+            <button type="button" onClick={() => go('offer')}>
+              Dieses Gerät koppeln
+            </button>
+            <button type="button" onClick={() => go(camera ? 'enter' : 'enter-manual')}>
+              Anderes Gerät eintragen
+            </button>
+          </div>
+        </>
+      )}
 
-      <section className="settings-group">
-        <h2>Anderes Gerät eintragen</h2>
+      {step === 'offer' && (
+        <div className="choice-buttons">
+          <button type="button" onClick={() => show('offer-qr')}>
+            QR-Code erzeugen
+          </button>
+          <button type="button" onClick={() => show('offer-manual')}>
+            Manuell koppeln
+          </button>
+        </div>
+      )}
 
-        {/* Ohne Kamera gibt es den Knopf nicht: einer, der nur eine
-            Fehlermeldung erzeugt, wäre schlimmer als keiner. Im Fenster und im
-            Browser bleibt das Formular darunter der Weg. */}
-        {platform.capabilities.camera && (
+      {(step === 'offer-qr' || step === 'offer-manual') && (
+        <PairingOffer
+          pairing={offer}
+          mode={step === 'offer-qr' ? 'qr' : 'manual'}
+          onClose={close}
+        />
+      )}
+
+      {step === 'enter' && (
+        <div className="choice-buttons">
           <button type="button" disabled={busy} onClick={() => void scan()}>
             {busy ? 'Koppeln…' : 'QR-Code scannen'}
           </button>
-        )}
+          <button type="button" disabled={busy} onClick={() => go('enter-manual')}>
+            Manuell eintragen
+          </button>
+        </div>
+      )}
 
+      {step === 'enter-manual' && (
         <ManualForm busy={busy} onTarget={(target) => void pair(target)} />
-      </section>
+      )}
 
-      <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
-        Zurück
-      </button>
+      {done !== undefined && (
+        <div className="request-overlay">
+          <div className="overlay-card">
+            <h2>{done.name} erfolgreich gekoppelt</h2>
+            {done.warnung !== undefined && <p>{done.warnung}</p>}
+            <button type="button" onClick={close}>
+              Fertig
+            </button>
+            <button type="button" className="secondary" onClick={restart}>
+              {done.side === 'offer' ? 'Weiteres Gerät koppeln' : 'Weiteres Gerät eintragen'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+const TITLES: Record<Step, string> = {
+  choose: 'Gerät koppeln',
+  offer: 'Dieses Gerät koppeln',
+  'offer-qr': 'QR-Code',
+  'offer-manual': 'Manuell koppeln',
+  enter: 'Anderes Gerät eintragen',
+  'enter-manual': 'Manuell eintragen',
 }
 
 /**
  * Adresse und Code der Gegenseite — von Hand.
  *
- * Der einzige Weg ohne Kamera und damit der Normalfall am Rechner. Ein Knopf
- * davor hätte ihn versteckt.
+ * Der einzige Weg ohne Kamera und damit der Normalfall am Rechner — dort
+ * führt „Anderes Gerät eintragen" deshalb direkt hierher.
  */
 function ManualForm({
   busy,

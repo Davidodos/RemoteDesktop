@@ -336,6 +336,59 @@ input::placeholder {
   font-size: 0.9rem;
 }
 
+/* Ein Recht behält seine Größe, gleich ob an oder aus: Platz für zwei Zeilen
+   Hinweis, und ein Knopf, der für „Deaktivieren" breit genug ist. Sonst springt
+   er beim Umschalten unter dem Finger weg. */
+.permission-card {
+  min-height: 4.8rem;
+}
+
+.permission-card .settings-hint {
+  min-height: 2.6em;
+}
+
+.permission-card button {
+  width: 7.5rem;
+}
+
+.permission-card + .permission-card {
+  margin-top: 0.6rem;
+}
+
+.guide-link.link-button {
+  align-self: flex-start;
+  margin-top: 0.4rem;
+}
+
+/* Die Anleitung: nummerierte Schritte, je mit dem Knopf, der dorthin führt. */
+.guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+  padding-left: 1.2rem;
+  color: var(--text-dim);
+}
+
+.guide-steps strong {
+  color: var(--text);
+}
+
+.guide-steps button {
+  display: block;
+  margin-top: 0.6rem;
+}
+
+/* Der Pfeil oben links: ein Schritt zurück, auf jeder Seite an derselben Stelle. */
+.back-arrow {
+  align-self: flex-start;
+}
+
+.choice-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 /* Der Kopplungscode wird abgetippt — von jemandem, der ihn quer über den Tisch
    liest. Groß und mit Ziffernabstand, nicht als Fließtext. */
 .fingerprint {

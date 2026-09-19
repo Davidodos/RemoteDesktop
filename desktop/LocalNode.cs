@@ -178,20 +178,99 @@ public static class LocalNode
     /// Ein frischer Kopplungscode.
     ///
     /// <para>
-    /// Der eine Weg, der einen laufenden Agent wirklich voraussetzt: der Code
-    /// lebt in seinem Speicher, und einlösen muss ihn ebenfalls er. Einen Code
-    /// anzuzeigen, den niemand einlösen kann, wäre eine Einladung ins Leere —
-    /// deshalb fliegt hier ein Fehler statt eines leeren Feldes.
+    /// Der Code lebt im Speicher des Agents, und einlösen muss ihn ebenfalls er.
+    /// **Läuft keiner, wird einer gestartet — nur zum Koppeln** (siehe
+    /// <c>PairOnlyMode</c> im Agent): ohne Bild und Eingabe, und er beendet sich
+    /// nach dem Code von selbst. Dafür fragt Windows einmal nach; sein
+    /// Zertifikat darf nur ein erhöhter Prozess lesen. Ein Rechner, der nur
+    /// andere steuert, lässt sich damit trotzdem von einem Handy aus koppeln.
     /// </para>
     /// </summary>
     public static async Task<JsonElement> CodeAsync(CancellationToken cancellationToken = default)
     {
+        if (!await RunningAsync(cancellationToken))
+        {
+            await StartForPairingAsync(cancellationToken);
+        }
+
         using var response = await Client.SendAsync(
             Request(HttpMethod.Post, "/api/pair/code"), cancellationToken);
 
         response.EnsureSuccessStatusCode();
 
         return await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+    }
+
+    /// <summary>
+    /// Die Anzeige ist zu: der offene Code gilt nicht mehr. War der Agent nur
+    /// zum Koppeln gestartet, endet er hier — einen, den jemand bewusst
+    /// gestartet hat, lässt das in Ruhe.
+    /// </summary>
+    public static async Task CancelCodeAsync(CancellationToken cancellationToken = default)
+    {
+        await PostAsync("/api/pair/code/cancel", new { }, cancellationToken);
+
+        if (await PairOnlyAsync(cancellationToken))
+        {
+            await QuitAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>Ob der laufende Agent nur zum Koppeln gestartet wurde.</summary>
+    public static async Task<bool> PairOnlyAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var response = await Client.SendAsync(
+                Request(HttpMethod.Get, "/api/pair/mode"), cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);
+
+            return body.TryGetProperty("pairOnly", out var flag) && flag.ValueKind == JsonValueKind.True;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+                                       or JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>So lange wird gewartet, bis der eben gestartete Agent antwortet.</summary>
+    private static readonly TimeSpan StartupLimit = TimeSpan.FromSeconds(20);
+
+    private static async Task StartForPairingAsync(CancellationToken cancellationToken)
+    {
+        var started = await Task.Run(
+            () => Elevation.Run(AdminTask.PairOnly, Elevation.UserDirectory), cancellationToken);
+
+        if (!started.Ok)
+        {
+            throw new InvalidOperationException(
+                "Zum Koppeln muss der Agent kurz laufen, und Windows hat das nicht zugelassen: "
+                + started.Message);
+        }
+
+        var deadline = DateTimeOffset.UtcNow + StartupLimit;
+
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            // Das Geheimnis legt der Agent erst beim Start an — deshalb erst
+            // nach „läuft" fragen, dann nach dem Code.
+            if (await RunningAsync(cancellationToken)
+                && LocalSecretFile.Read(LocalSecretFile.In(Elevation.UserDirectory)) is not null)
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
+        }
+
+        throw new InvalidOperationException("Der Agent ist gestartet, antwortet aber nicht.");
     }
 
     /// <summary>

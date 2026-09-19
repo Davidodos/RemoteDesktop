@@ -53,7 +53,14 @@ public enum AdminTask
     Grant,
 
     /// <summary>Das Gegenstück: ein Gerät aus der Datei nehmen.</summary>
-    Revoke
+    Revoke,
+
+    /// <summary>
+    /// Den Agent nur zum Koppeln starten — ohne Aufgabe, ohne Bild und Eingabe,
+    /// und er beendet sich nach dem Code von selbst. Siehe <c>PairOnlyMode</c>
+    /// im Agent. Das Argument ist der Benutzerordner des Fensters.
+    /// </summary>
+    PairOnly
 }
 
 /// <summary>
@@ -203,6 +210,7 @@ public static class Elevation
         AdminTask.Complete => Complete(argument),
         AdminTask.Grant => Grant(argument),
         AdminTask.Revoke => Revoke(argument),
+        AdminTask.PairOnly => StartPairOnly(argument),
         _ => WriteNetwork(argument)
     };
 
@@ -366,6 +374,47 @@ public static class Elevation
                 // Eine Datei im Temp-Ordner, die liegen bleibt, ist kein Grund,
                 // dem Nutzer etwas zu melden.
             }
+        }
+    }
+
+    /// <summary>
+    /// Startet den Agent für eine Kopplung und wartet nicht auf ihn. Er erbt die
+    /// Rechte dieses Aufrufs — genau die braucht er für sein Zertifikat.
+    /// </summary>
+    private static RunResult StartPairOnly(string userDirectory)
+    {
+        var binary = AgentBinary.Locate();
+
+        if (binary is null)
+        {
+            return new RunResult(
+                -1, string.Empty,
+                "RemoteDesktopAgent.exe liegt nicht neben diesem Programm — den Installer noch einmal ausführen.");
+        }
+
+        try
+        {
+            var info = new System.Diagnostics.ProcessStartInfo(binary)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = Path.GetDirectoryName(binary) ?? AppContext.BaseDirectory
+            };
+
+            info.ArgumentList.Add("--Agent:PairOnly=true");
+
+            if (userDirectory.Length > 0)
+            {
+                info.ArgumentList.Add($"--Agent:UserDirectory={userDirectory}");
+            }
+
+            using var _ = System.Diagnostics.Process.Start(info);
+
+            return new RunResult(0, "Agent zum Koppeln gestartet.", string.Empty);
+        }
+        catch (Exception failure)
+        {
+            return new RunResult(-1, string.Empty, failure.Message);
         }
     }
 

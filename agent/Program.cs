@@ -36,6 +36,10 @@ RemoteDesktopSetup.AgentPaths.Adopt(
 
 var settings = AgentSettings.Load(builder.Configuration);
 
+// Nur zum Koppeln gestartet — siehe PairOnlyMode. Dann kein Update, keine
+// Erneuerung des Zertifikats: der Prozess lebt ohnehin nur Minuten.
+var pairOnly = builder.Configuration.GetValue(PairOnlyMode.Setting, false);
+
 // Die Ordner müssen stehen, bevor irgendetwas hineingeschrieben wird — der
 // Installer legt sie zwar an, aber ein Entwicklungsbau hat keinen Installer.
 Directory.CreateDirectory(settings.DataDirectory);
@@ -194,7 +198,10 @@ builder.Services.AddSingleton(provider => new InstallerUpdate(
     settings.UpdateRepository,
     Path.Combine(settings.SecretDirectory, "update"),
     provider.GetRequiredService<ILogger<InstallerUpdate>>()));
-builder.Services.AddHostedService<StartupUpdate>();
+if (!pairOnly)
+{
+    builder.Services.AddHostedService<StartupUpdate>();
+}
 
 // Hält das Zertifikat gültig: täglich nachsehen, bei Netzwechsel neu ausstellen.
 builder.Services.AddSingleton(serving);
@@ -205,7 +212,14 @@ builder.Services.AddSingleton(new CertificateRenewal.Source(
     settings.KeyPath ?? Path.Combine(settings.SecretDirectory, "cert.key"),
     Environment.MachineName,
     CurrentNames));
-builder.Services.AddHostedService<CertificateRenewal>();
+if (pairOnly)
+{
+    builder.Services.AddHostedService<PairOnlyMode.Lifetime>();
+}
+else
+{
+    builder.Services.AddHostedService<CertificateRenewal>();
+}
 
 // Wecken als Netz-Fähigkeit: ein wacher Rechner weckt den schlafenden im
 // selben Netz. Wo „dasselbe Netz" ist, sagt die Standort-Kennung unten.
@@ -246,11 +260,21 @@ app.Use(async (context, next) =>
     context.Response.StatusCode = StatusCodes.Status404NotFound;
 });
 
+if (pairOnly)
+{
+    app.UsePairOnly();
+}
+
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 app.UseCors();
 app.UseClientAuth();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+
+// Ob das Fenster diesen Agent nach der Kopplung beenden darf — einen, den
+// jemand bewusst gestartet hat, nie. Nur lokal (ClientAuthMiddleware): wer im
+// Netz sähe, dass gerade nur gekoppelt wird, wüsste, wann Raten lohnt.
+app.MapGet("/api/pair/mode", () => Results.Ok(new { pairOnly }));
 
 // Das Fenster sagt „Beenden" — und meint beides. Nur vom Rechner selbst mit
 // dem lokalen Geheimnis (ClientAuthMiddleware); ein Ende mit Rückgabewert 0
@@ -690,7 +714,12 @@ internal sealed record AgentSettings(
             ?? DefaultDataDirectory;
 
         var secretDirectory = AgentPaths.SecretIn(dataDirectory);
-        var userDirectory = AgentPaths.UserDirectory;
+        // Überschreibbar für den Start nur zum Koppeln: der läuft erhöht, bei
+        // einem Standardbenutzer unter dem Administratorkonto — und dessen
+        // Profil ist nicht das, aus dem das Fenster liest.
+        var userDirectory = configuration["Agent:UserDirectory"] is { Length: > 0 } given
+            ? given
+            : AgentPaths.UserDirectory;
 
         // Ohne Eintrag: dorthin legt „Zertifikat holen" die Dateien von
         // Tailscale — das Zertifikat in `data`, den Schlüssel in `secret`.

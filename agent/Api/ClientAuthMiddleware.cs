@@ -38,6 +38,7 @@ public static class ClientAuthMiddleware
     private static readonly string[] LocalOnly =
     [
         "/api/pair/code",
+        "/api/pair/mode",
         "/api/pair/self",
         "/api/pair/peers",
         "/api/pair/grant",

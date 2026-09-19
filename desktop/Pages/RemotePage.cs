@@ -359,6 +359,8 @@ public sealed class RemotePage : Control
 
                 "local-code" => await LocalNode.CodeAsync(),
 
+                "local-code-cancel" => await CodeCancelled(),
+
                 "local-clients" => new { clients = await LocalNode.ClientsAsync() },
 
                 // Der eigene Name. Er wird einmal in der Einrichtung vergeben
@@ -393,6 +395,13 @@ public sealed class RemotePage : Control
         }
 
         Reply(core, request.Id!, payload);
+    }
+
+    private static async Task<object> CodeCancelled()
+    {
+        await LocalNode.CancelCodeAsync();
+
+        return new { cancelled = true };
     }
 
     /// <summary>
@@ -435,7 +444,9 @@ public sealed class RemotePage : Control
 
         return new
         {
-            running = await LocalNode.RunningAsync(),
+            // Ein Agent, der nur zum Koppeln läuft, gibt diesen Rechner nicht
+            // frei — für die Oberfläche läuft dann keiner.
+            running = await LocalNode.RunningAsync() && !await LocalNode.PairOnlyAsync(),
             deviceName = Environment.MachineName,
             port = AgentData.AgentPort,
             addresses = profile is null ? Array.Empty<string>() : [profile.Host],

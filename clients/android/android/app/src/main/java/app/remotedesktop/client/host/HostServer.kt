@@ -107,6 +107,11 @@ class HostServer(
      * verbinden?" kommt in dem Fall nicht noch einmal; sie ist beantwortet.
      */
     private val requestScreen: () -> Unit = {},
+    /**
+     * Ob der Server nur zum Koppeln läuft — dann gibt es Info und Kopplung und
+     * sonst nichts. Siehe `HostRuntime.startForPairing`.
+     */
+    private val pairOnly: () -> Boolean = { false },
 ) {
 
     companion object {
@@ -128,12 +133,18 @@ class HostServer(
          */
         const val NO_INPUT =
             "Dieses Gerät nimmt noch keine Eingaben an. Am Handy unter " +
-                "„Dieses Gerät freigeben\" die Fernsteuerung einschalten."
+                "Einstellungen → Freigabe → Rechte die Eingaben aktivieren."
 
         /** Wenn am Gerät niemand zugestimmt hat. */
         const val NOT_CONFIRMED =
             "Am anderen Gerät hat niemand zugestimmt. Jede Verbindung wird dort " +
                 "einzeln bestätigt — die App muss offen sein."
+
+        /** Wenn der Server nur zum Koppeln läuft. */
+        const val NOT_SHARED = "Dieses Gerät ist nicht freigegeben."
+
+        /** Was im Modus „nur Koppeln" erreichbar bleibt. */
+        private val PAIR_ONLY_PATHS = setOf("/health", "/api/info", "/api/pair")
 
         /** Wenn der vorgelegte Ausweis zu keiner Sitzung gehört. */
         const val NOT_SIGNED_IN = "Nicht angemeldet."
@@ -152,7 +163,7 @@ class HostServer(
          */
         const val NO_SCREEN =
             "Dieses Gerät gibt seinen Bildschirm noch nicht frei. Am Handy unter " +
-                "„Dieses Gerät freigeben\" die Bildschirmaufnahme einschalten."
+                "Einstellungen → Freigabe → Rechte den Bildschirm aktivieren."
 
         /**
          * So lange wird auf die Aufnahme gewartet, bevor der Satz oben
@@ -217,6 +228,10 @@ class HostServer(
         // abgewiesen, käme der eigentliche Aufruf nie zustande.
         if (request.method == "OPTIONS") {
             return HttpServer.Response(204)
+        }
+
+        if (pairOnly() && request.path !in PAIR_ONLY_PATHS) {
+            return HttpServer.Response.error(503, NOT_SHARED)
         }
 
         if (HostScopes.WITHOUT_CREDENTIAL.any { HostScopes.matches(request.path, it) }) {

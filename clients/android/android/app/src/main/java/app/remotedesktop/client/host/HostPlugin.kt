@@ -116,8 +116,12 @@ class HostPlugin : Plugin() {
     fun pairingCode(call: PluginCall) {
         val runtime = HostRuntime.of(context)
 
-        if (!runtime.isRunning) {
-            call.reject("Der Host läuft nicht — erst freigeben, dann koppeln.")
+        // Koppeln ist keine Freigabe: ist sie aus, lauscht der Server nur für
+        // diesen Code. Siehe HostRuntime.startForPairing.
+        try {
+            runtime.startForPairing()
+        } catch (failure: Exception) {
+            call.reject("Der Server für die Kopplung ließ sich nicht starten: ${failure.message}")
             return
         }
 
@@ -135,13 +139,15 @@ class HostPlugin : Plugin() {
     }
 
     /**
-     * Fragt die Bildschirmaufnahme an.
-     *
-     * Der Systemdialog kommt von Android und lässt sich nicht umgehen. Er
-     * kommt auch nicht einmalig: nach einem Neustart des Geräts ist die
-     * Erlaubnis weg. Das steht auf der Freigabeseite, damit niemand sein Handy
-     * in dem Glauben weglegt, es bleibe einsehbar.
+     * Die Anzeige des Codes ist zu: er gilt nicht mehr, und ein Server, der nur
+     * dafür lief, geht aus.
      */
+    @PluginMethod
+    fun cancelPairing(call: PluginCall) {
+        HostRuntime.of(context).endPairing()
+        call.resolve()
+    }
+
     /**
      * Die Einstellung „dieses Handy gibt sein Bild her" — **ohne**
      * Systemdialog.
@@ -235,6 +241,39 @@ class HostPlugin : Plugin() {
 
         context.startActivity(intent)
 
+        call.resolve()
+    }
+
+    /**
+     * Schaltet die Bedienungshilfe ab. Wieder einschalten geht nur über die
+     * Systemeinstellungen — so ist es gewollt: wer sie abschaltet, soll sie
+     * auch bewusst wieder einschalten.
+     */
+    @PluginMethod
+    fun disableInput(call: PluginCall) {
+        if (!RemoteInputService.disable()) {
+            // Eingeschaltet, aber nicht gebunden: dann bleibt nur der Weg
+            // über die Einstellungen.
+            context.startActivity(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+
+        call.resolve(describe())
+    }
+
+    /**
+     * Die App-Info dieser App — dort steht seit Android 13 „Eingeschränkte
+     * Einstellungen zulassen", ohne das sich die Bedienungshilfe einer App
+     * außerhalb von Google Play nicht einschalten lässt.
+     */
+    @PluginMethod
+    fun openAppInfo(call: PluginCall) {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+            .setData(android.net.Uri.fromParts("package", context.packageName, null))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        context.startActivity(intent)
         call.resolve()
     }
 
@@ -339,7 +378,10 @@ class HostPlugin : Plugin() {
                     .put("id", client.id)
                     .put("label", client.label)
                     .put("scopes", JSArray(client.scopes.toTypedArray()))
-                    .put("lastSeenAt", client.lastSeenAt),
+                    .put("lastSeenAt", client.lastSeenAt)
+                    // Woran die Kopplungsseite eine frische Kopplung erkennt —
+                    // auch die eines Geräts, das schon einmal gekoppelt war.
+                    .put("createdAt", client.createdAt),
             )
         }
 
@@ -402,7 +444,8 @@ class HostPlugin : Plugin() {
         val runtime = HostRuntime.of(context)
 
         return JSObject()
-            .put("running", running ?: runtime.isRunning)
+            // Ein Server, der nur für einen Code lauscht, ist keine Freigabe.
+            .put("running", running ?: (runtime.isRunning && !runtime.isPairOnly))
             .put("deviceName", runtime.deviceName)
             .put("port", runtime.port)
             .put("caFingerprint", runtime.material.fingerprint)

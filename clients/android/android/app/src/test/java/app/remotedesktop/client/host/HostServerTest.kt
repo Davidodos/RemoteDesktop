@@ -229,6 +229,7 @@ class HostServerTest {
         screenPermitted: () -> Boolean = { true },
         requestScreen: () -> Unit = {},
         screenSource: () -> FrameSource? = { null },
+        pairOnly: () -> Boolean = { false },
     ): HostServer {
         val clients = ClientStore(File(folder, "clients2.json"))
         val codes = PairingCodes()
@@ -251,7 +252,27 @@ class HostServerTest {
             releaseScreen = releaseScreen,
             screenPermitted = screenPermitted,
             requestScreen = requestScreen,
+            pairOnly = pairOnly,
         )
+    }
+
+    /**
+     * Nur zum Koppeln gestartet — die Freigabe ist aus, ein Code steht auf dem
+     * Bildschirm. Dann gibt es Info und Kopplung und sonst nichts: ein Handy,
+     * das nur andere steuern soll, wird dabei nicht nebenbei steuerbar.
+     */
+    @Test
+    fun `nur zum Koppeln bleibt alles außer der Kopplung zu`() {
+        val host = quiet(pairOnly = { true })
+
+        fun status(method: String, path: String): Int =
+            host.handle(HttpServer.Request(method, path, emptyMap(), emptyMap(), ByteArray(0), false)).status
+
+        assertEquals(200, status("GET", "/health"))
+        assertEquals(400, status("POST", "/api/pair"))
+        assertEquals(503, status("POST", "/api/session"))
+        assertEquals(503, status("GET", "/ws/screen"))
+        assertEquals(503, status("GET", "/ws/input"))
     }
 
     /**

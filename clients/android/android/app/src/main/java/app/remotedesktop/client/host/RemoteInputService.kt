@@ -52,6 +52,18 @@ class RemoteInputService : AccessibilityService() {
         fun current(): RemoteInputService? = instance
 
         /**
+         * Schaltet sie ab — in den Systemeinstellungen steht sie danach auf
+         * „aus". `false`, wenn sie gerade nicht gebunden ist.
+         */
+        fun disable(): Boolean {
+            val service = instance ?: return false
+
+            service.disableSelf()
+
+            return true
+        }
+
+        /**
          * Ob der Nutzer sie eingeschaltet hat.
          *
          * Gefragt wird die Systemeinstellung und nicht [current]: der Dienst

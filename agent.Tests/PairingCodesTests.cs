@@ -25,6 +25,21 @@ public class PairingCodesTests
     }
 
     [Fact]
+    public void Ein_verworfener_Code_gilt_nicht_mehr()
+    {
+        // Arrange
+        var codes = new PairingCodes(new TestClock());
+        var code = codes.Issue();
+
+        // Act
+        codes.Clear();
+
+        // Assert
+        Assert.False(codes.TryRedeem(code));
+        Assert.Null(codes.RemainingLifetime());
+    }
+
+    [Fact]
     public void Nach_fuenf_Minuten_gilt_der_Code_nicht_mehr()
     {
         // Arrange

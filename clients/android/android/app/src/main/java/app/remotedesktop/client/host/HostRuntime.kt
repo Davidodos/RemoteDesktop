@@ -73,6 +73,13 @@ class HostRuntime private constructor(
 
     companion object {
 
+        /**
+         * So lange bleibt der Server nur zum Koppeln nach dem Ablauf des Codes
+         * noch da — die Antwort auf eine Kopplung in letzter Sekunde soll noch
+         * hinausgehen.
+         */
+        private const val PAIRING_GRACE_MS = 10_000L
+
         /** Alles, was zum Host gehört, liegt in einem Ordner. */
         private const val FOLDER = "host"
 
@@ -158,6 +165,19 @@ class HostRuntime private constructor(
     }
 
     val isRunning: Boolean get() = server.isRunning
+
+    /**
+     * Ob der Server nur zum Koppeln läuft — die Freigabe ist aus, aber gerade
+     * steht ein Code auf dem Bildschirm. Dann beantwortet er Info und Kopplung
+     * und sonst nichts; siehe [startForPairing].
+     */
+    @Volatile
+    var isPairOnly: Boolean = false
+        private set
+
+    /** Beendet den Server nur zum Koppeln, wenn niemand ihn mehr braucht. */
+    private val pairingTimer = java.util.Timer("remotedesktop-pairing", true)
+    private var pairingEnd: java.util.TimerTask? = null
 
     /**
      * Wie viele Verbindungen gerade offen sind — Bild und Eingabe zählen
@@ -250,6 +270,7 @@ class HostRuntime private constructor(
             releaseScreen = ScreenCapture::forget,
             screenPermitted = { ScreenCapture.isPermitted },
             requestScreen = connections::requestScreen,
+            pairOnly = { isPairOnly },
         )
 
         server.live.onChange = { count -> onConnectionsChanged?.invoke(count) }
@@ -265,8 +286,16 @@ class HostRuntime private constructor(
      * Einschalten ist der Augenblick, in dem jemand hinsieht, und zwischen zwei
      * Einschaltvorgängen liegt oft ein Netzwechsel. Deckt das vorhandene
      * Zertifikat die Liste schon ab, kostet der Aufruf nichts.
+     *
+     * Synchronisiert wie [startForPairing] und [endPairing]: sonst könnte der
+     * Ablauf eines Codes einen Server beenden, der gerade freigegeben wurde.
      */
+    @Synchronized
     fun start() {
+        // Die Freigabe kommt, während ein Code angezeigt wird: der Server läuft
+        // schon, ab jetzt ganz.
+        isPairOnly = false
+
         if (server.isRunning) {
             return
         }
@@ -279,7 +308,9 @@ class HostRuntime private constructor(
         server.start()
     }
 
+    @Synchronized
     fun stop() {
+        isPairOnly = false
         server.stop()
 
         // Ein offener Kopplungscode gehört zum laufenden Host. Bleibt er beim
@@ -289,6 +320,48 @@ class HostRuntime private constructor(
     }
 
     fun issueCode(): PairingCodes = codes
+
+    /**
+     * Startet den Server nur zum Koppeln, falls die Freigabe aus ist.
+     *
+     * <p>
+     * **Koppeln ist keine Freigabe.** Wer von diesem Handy aus nur andere
+     * steuern will, muss trotzdem einen Code zeigen können — und einlösen kann
+     * ihn nur, wer lauscht. Also lauscht der Server, solange der Code gilt, und
+     * beantwortet dabei Info und Kopplung, sonst nichts. Danach geht er wieder
+     * aus, spätestens mit dem Ablauf des Codes.
+     * </p>
+     */
+    @Synchronized
+    fun startForPairing() {
+        if (!server.isRunning) {
+            current = endpoint()
+            isPairOnly = true
+            server.start()
+        }
+
+        if (isPairOnly) {
+            pairingEnd?.cancel()
+            pairingEnd = object : java.util.TimerTask() {
+                override fun run() = endPairing()
+            }.also { pairingTimer.schedule(it, PairingCodes.LIFETIME_MS + PAIRING_GRACE_MS) }
+        }
+    }
+
+    /**
+     * Die Anzeige ist zu: der Code gilt nicht mehr, und ein Server, der nur
+     * dafür lief, geht aus.
+     */
+    @Synchronized
+    fun endPairing() {
+        codes.clear()
+        pairingEnd?.cancel()
+        pairingEnd = null
+
+        if (isPairOnly) {
+            stop()
+        }
+    }
 
     /**
      * Der eigene Steckbrief — er geht mit, wenn diese App ein anderes Gerät

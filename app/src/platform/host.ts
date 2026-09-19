@@ -42,6 +42,13 @@ export interface HostService {
   pairingCode(): Promise<HostPairingCode>
 
   /**
+   * Die Anzeige des Codes ist zu: er gilt ab jetzt nicht mehr. Lief die
+   * Gegenstelle nur für diesen Code (Freigabe aus, Agent gestoppt), geht sie
+   * damit wieder aus.
+   */
+  cancelPairing(): Promise<void>
+
+  /**
    * Fragt die Bildschirmaufnahme an. Android zeigt dabei seinen eigenen
    * Dialog — die App kann ihn weder umgehen noch vorwegnehmen.
    *
@@ -74,6 +81,20 @@ export interface HostService {
    * das ist bei einem Recht dieser Größe richtig so.
    */
   openInputSettings(): Promise<void>
+
+  /**
+   * Schaltet die Bedienungshilfe ab. Wieder einschalten geht nur über
+   * {@link openInputSettings} — gewollt: das Recht ist groß genug, dass es ein
+   * Mensch bewusst vergibt.
+   */
+  disableInput(): Promise<HostStatus>
+
+  /**
+   * Die App-Info dieser App. Dort steht seit Android 13 „Eingeschränkte
+   * Einstellungen zulassen" — ohne das lässt sich die Bedienungshilfe einer App
+   * außerhalb von Google Play gar nicht einschalten.
+   */
+  openAppInfo(): Promise<void>
 
   /**
    * Die offenen Rückfragen „darf dieses Gerät jetzt verbinden?".
@@ -172,6 +193,11 @@ export interface HostClient {
   scopes: string[]
   /** Wann dieses Gerät zuletzt eine Sitzung geöffnet hat, in Millisekunden. */
   lastSeenAt: number
+  /**
+   * Wann es gekoppelt wurde, in Millisekunden. Ein erneutes Koppeln setzt ihn
+   * neu — daran erkennt die Kopplungsseite, dass ihr Code eingelöst wurde.
+   */
+  createdAt?: number
 }
 
 /** Für Umgebungen, die kein Ziel sein können. */
@@ -183,10 +209,13 @@ export const noHost: HostService = {
   start: () => unavailable(),
   stop: () => unavailable(),
   pairingCode: () => unavailable(),
+  cancelPairing: () => Promise.resolve(),
   enableScreen: () => unavailable(),
   disableScreen: () => unavailable(),
   allowScreen: () => unavailable(),
   openInputSettings: () => unavailable(),
+  disableInput: () => unavailable(),
+  openAppInfo: () => unavailable(),
   onRequests: (): (() => void) => () => undefined,
   answer: () => unavailable(),
   onScreenNeeded: (): (() => void) => () => undefined,

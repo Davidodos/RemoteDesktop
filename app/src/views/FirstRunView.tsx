@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { cleanName, MAX_NAME_LENGTH } from '../lib/ownName.ts'
 import { getPlatform } from '../platform/index.ts'
 import type { HostStatus } from '../platform/index.ts'
+import { InputGuide } from './InputGuide.tsx'
+import { PermissionCards } from './PermissionCards.tsx'
 
 interface Props {
   /** Der vorgeschlagene Name — vom System, bis jemand einen eigenen wählt. */
@@ -22,7 +24,7 @@ type Step = 'name' | 'ask' | 'permissions'
  * </p>
  *
  * <p>
- * **Darf es ferngesteuert werden?** Ein „nein" ist hier der Normalfall und
+ * **Remote-Steuerung zulassen?** Ein „nein" ist hier der Normalfall und
  * kostet nichts: gekoppelt und gesteuert wird trotzdem, nur eben in die eine
  * Richtung. Ein „ja" führt sofort weiter zu den beiden Rechten, die Android
  * dafür verlangt — sie später nachzureichen hieße, dass am anderen Ende jemand
@@ -42,6 +44,7 @@ export function FirstRunView({ suggestion, rename, onDone }: Props): React.JSX.E
   const [status, setStatus] = useState<HostStatus | undefined>(undefined)
   const [error, setError] = useState<string | undefined>(undefined)
   const [busy, setBusy] = useState(false)
+  const [guide, setGuide] = useState(false)
 
   const refresh = useCallback((): void => {
     if (host.available) {
@@ -113,8 +116,11 @@ export function FirstRunView({ suggestion, rename, onDone }: Props): React.JSX.E
   if (step === 'ask') {
     return (
       <div className="token-prompt">
-        <h1>Darf dieses Gerät ferngesteuert werden?</h1>
-        <p>Andere Geräte steuern kannst du in beiden Fällen. Änderbar in den Einstellungen.</p>
+        <h1>Remote-Steuerung für dieses Gerät zulassen?</h1>
+        <p>
+          Aktiviert Bildschirmfreigabe und ermöglicht Eingaben von einem anderen Gerät. Jederzeit
+          in den Einstellungen änderbar.
+        </p>
 
         {error !== undefined && <p className="error-text">{error}</p>}
 
@@ -148,8 +154,16 @@ export function FirstRunView({ suggestion, rename, onDone }: Props): React.JSX.E
     )
   }
 
-  const input = status?.acceptingInput === true
-  const screen = status?.screenAllowed === true
+  if (guide) {
+    return (
+      <InputGuide
+        onBack={() => {
+          setGuide(false)
+          refresh()
+        }}
+      />
+    )
+  }
 
   return (
     <div className="token-prompt">
@@ -157,38 +171,15 @@ export function FirstRunView({ suggestion, rename, onDone }: Props): React.JSX.E
 
       {error !== undefined && <p className="error-text">{error}</p>}
 
-      <button
-        type="button"
-        disabled={screen}
-        onClick={() => {
-          setError(undefined)
-
-          // **Kein Systemdialog hier.** Nur die Einstellung: dieses Gerät gibt
-          // sein Bild her. Die Aufnahmeerlaubnis holt Android beim ersten
-          // Zusehen — vorher wäre sie eine Erlaubnis für nichts, und beim
-          // nächsten Neustart des Handys ist sie ohnehin wieder weg.
-          void host.allowScreen(true).then(setStatus, report)
-        }}
-      >
-        {screen ? '✓ Bildschirm freigegeben' : 'Bildschirm freigeben'}
-      </button>
-
-      <button
-        type="button"
-        disabled={input}
-        onClick={() => {
-          setError(undefined)
-
-          // Beim Zurückkommen ist der Stand ein anderer — nachgefragt wird
-          // deshalb hier und nicht erst beim nächsten Öffnen.
-          void host.openInputSettings().then(
-            () => window.setTimeout(refresh, 500),
-            report,
-          )
-        }}
-      >
-        {input ? '✓ Eingaben freigegeben' : 'Eingaben freigeben (Bedienungshilfe)'}
-      </button>
+      <div>
+        <PermissionCards
+          status={status}
+          onStatus={setStatus}
+          onRefresh={refresh}
+          onError={report}
+          onGuide={() => setGuide(true)}
+        />
+      </div>
 
       <button type="button" className="secondary" onClick={onDone}>
         Fertig

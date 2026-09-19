@@ -73,6 +73,14 @@ public static class PairingEndpoints
             });
         });
 
+        // Die Anzeige ist zu — der Code gilt nicht mehr. Nur lokal, wie oben.
+        app.MapPost("/api/pair/code/cancel", (PairingCodes codes) =>
+        {
+            codes.Clear();
+
+            return Results.Ok(new { cancelled = true });
+        });
+
         // ---- Die drei Wege der eigenen Oberfläche --------------------------
         //
         // Alle drei nur vom Rechner selbst (siehe ClientAuthMiddleware). Sie

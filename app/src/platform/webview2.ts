@@ -79,9 +79,15 @@ const pending = new Map<string, (result: { payload?: unknown; error?: string }) 
 /** Länger als das wartet niemand auf ein Zertifikat aus dem Heimnetz. */
 const BRIDGE_TIMEOUT_MS = 10_000
 
+/**
+ * Für einen Kopplungscode ohne laufenden Agent: das Fenster startet ihn erst,
+ * und davor steht eine Rückfrage von Windows, die ein Mensch beantwortet.
+ */
+const CODE_TIMEOUT_MS = 90_000
+
 let listening = false
 
-function ask<T>(request: Record<string, unknown>): Promise<T> {
+function ask<T>(request: Record<string, unknown>, timeoutMs = BRIDGE_TIMEOUT_MS): Promise<T> {
   const bridge = window.chrome?.webview
 
   if (bridge === undefined) {
@@ -109,7 +115,7 @@ function ask<T>(request: Record<string, unknown>): Promise<T> {
     const timer = window.setTimeout(() => {
       pending.delete(id)
       reject(new PlatformError('Das Fenster hat nicht geantwortet.'))
-    }, BRIDGE_TIMEOUT_MS)
+    }, timeoutMs)
 
     pending.set(id, (result) => {
       window.clearTimeout(timer)
@@ -277,7 +283,11 @@ const windowHost: HostService = {
   start: () => beimAgent(),
   stop: () => beimAgent(),
 
-  pairingCode: () => ask<HostPairingCode>({ kind: 'local-code' }),
+  pairingCode: () => ask<HostPairingCode>({ kind: 'local-code' }, CODE_TIMEOUT_MS),
+
+  cancelPairing: async (): Promise<void> => {
+    await ask({ kind: 'local-code-cancel' })
+  },
 
   // Bild und Eingabe gehören am Rechner dem Agent und brauchen keine
   // Zustimmung je Sitzung: wer hier gekoppelt ist, darf, was in seinen Rechten
@@ -286,6 +296,8 @@ const windowHost: HostService = {
   disableScreen: () => beimAgent(),
   allowScreen: () => beimAgent(),
   openInputSettings: () => beimAgent(),
+  disableInput: () => beimAgent(),
+  openAppInfo: () => beimAgent(),
   onRequests: (): (() => void) => () => undefined,
   answer: () => beimAgent(),
   onScreenNeeded: (): (() => void) => () => undefined,
@@ -360,7 +372,7 @@ function toHostClient(entry: unknown): HostClient[] {
     return []
   }
 
-  const { id, label, scopes, lastSeenAt } = entry as Record<string, unknown>
+  const { id, label, scopes, lastSeenAt, createdAt } = entry as Record<string, unknown>
 
   if (typeof id !== 'string' || id.length === 0) {
     return []
@@ -375,6 +387,7 @@ function toHostClient(entry: unknown): HostClient[] {
       // Millisekunden. Umgerechnet wird hier und nicht in der Ansicht: dort
       // wüsste niemand mehr, warum es zwei Formate gibt.
       lastSeenAt: zeitpunkt(lastSeenAt),
+      createdAt: zeitpunkt(createdAt),
     },
   ]
 }

@@ -1,4 +1,10 @@
-import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
+import {
+  useEffect,
+  useRef,
+  type Dispatch,
+  type MutableRefObject,
+  type SetStateAction,
+} from 'react'
 import { getPlatform } from '../platform/index.ts'
 import type { Device } from './types.ts'
 import type { Page } from '../views/Sidebar.tsx'
@@ -11,6 +17,11 @@ interface Options {
   setMenuOpen: Dispatch<SetStateAction<boolean>>
   pairing: boolean
   setPairing: Dispatch<SetStateAction<boolean>>
+  /**
+   * Der Rückweg innerhalb der Kopplung. Sie hat mehrere Schritte, und die
+   * Zurück-Taste geht einen davon zurück statt ganz hinaus.
+   */
+  pairingBack?: MutableRefObject<(() => void) | undefined>
   selected: Device | undefined
   disconnect: () => void
   page: Page
@@ -85,7 +96,11 @@ function apply(step: BackStep, state: Options, exit: () => Promise<void>): void 
       state.setMenuOpen(false)
       return
     case 'cancelPairing':
-      state.setPairing(false)
+      if (state.pairingBack?.current !== undefined) {
+        state.pairingBack.current()
+      } else {
+        state.setPairing(false)
+      }
       return
     case 'disconnect':
       state.disconnect()

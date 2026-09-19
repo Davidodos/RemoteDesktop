@@ -190,7 +190,13 @@ hat, steht unter **31t** in `docs/TASKS-V4.md`. **31u** (18.09.2026) behebt den
 leeren Bildschirm nach dem ersten Testlauf (Hook unter frühen Rückgaben) und
 bringt Zurück-Taste, Zeigerregler, Installer-Haken und „Beenden" für beides. **31v** behebt die doppelte
 Rückfrage beim ersten Verbinden zum Handy, lässt das Bild mit dem Handy drehen
-und startet das Fenster nach dem Setup wieder (`{win}\explorer.exe`).
+und startet das Fenster nach dem Setup wieder (`{win}\explorer.exe`). **31w**
+(19.09.2026) macht Koppeln zur Schrittfolge (wer zeigt den Code, dann QR oder
+von Hand, am Ende auf beiden Seiten „… erfolgreich gekoppelt"), lässt
+Koppeln ohne Freigabe zu (Handy: Server nur für den Code; Rechner: Agent
+erhöht mit `--Agent:PairOnly=true`, beendet sich danach selbst) und fasst
+Bildschirm und Eingaben als „Rechte" mit Aktivieren/Deaktivieren und einer
+Anleitung zu den Bedienungshilfen.
 
 **Teil A ist gebaut.** Mit 31g hat das Fenster drei Einträge statt fünf
 (Übersicht · Geräte · Einstellungen); „Geräte" *ist* die React-App, die native
