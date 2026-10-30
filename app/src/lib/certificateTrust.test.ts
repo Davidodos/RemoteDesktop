@@ -1,5 +1,6 @@
 import { describe, expect, it, test } from 'vitest'
 import {
+  answersSecurely,
   certificateFingerprint,
   certificateUrl,
   fetchAgentCertificate,
@@ -165,5 +166,26 @@ describe('downloadAuthority', () => {
     const dead = (() => Promise.reject(new Error('offline'))) as unknown as typeof fetch
 
     await expect(downloadAuthority('192.168.178.31', dead)).rejects.toThrow(/Port 8442/)
+  })
+})
+
+describe('answersSecurely', () => {
+  it('meldet ja, sobald der Agent über https überhaupt antwortet — auch mit 401', async () => {
+    const urls: string[] = []
+    const fetcher = (async (url: string) => {
+      urls.push(url)
+
+      return new Response(null, { status: 401 })
+    }) as unknown as typeof fetch
+
+    await expect(answersSecurely('pc.ts.net', 8443, fetcher)).resolves.toBe(true)
+    expect(urls).toEqual(['https://pc.ts.net:8443/api/info'])
+  })
+
+  it('meldet nein, wenn die verschlüsselte Verbindung nicht zustande kommt', async () => {
+    const untrusted = (() =>
+      Promise.reject(new TypeError('Failed to fetch'))) as unknown as typeof fetch
+
+    await expect(answersSecurely('pc.ts.net', 8443, untrusted)).resolves.toBe(false)
   })
 })

@@ -80,6 +80,49 @@ function render(overrides: Partial<Parameters<typeof PairingView>[0]> = {}): {
   return { onClose }
 }
 
+/** Ein Feld so füllen, dass React es mitbekommt. */
+async function type(selector: string, value: string): Promise<void> {
+  const input = container.querySelector<HTMLInputElement>(selector)
+
+  if (input === null) {
+    throw new Error(`Kein Feld ${selector}`)
+  }
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+}
+
+/** Eine Plattform, deren Zertifikat Android nur von Hand annimmt. */
+function manualTrustPlatform(): { install: ReturnType<typeof vi.fn> } {
+  const install = vi.fn(() => Promise.resolve('settings' as const))
+
+  setPlatform({
+    ...fallbackPlatform,
+    host: fakeHost(),
+    capabilities: { ...fallbackPlatform.capabilities, camera: false },
+    trust: {
+      available: true,
+      fetchAuthority: () => Promise.resolve({ base64: 'AA==', fingerprint: FINGERPRINT }),
+      install,
+    },
+  })
+
+  return { install }
+}
+
+const FINGERPRINT = 'abcd1234'.repeat(8)
+
+async function pairByHand(): Promise<void> {
+  render()
+  await click('Anderes Gerät eintragen')
+  await type('#pair-host', '100.115.154.57')
+  await type('#pair-code', '123456')
+  await type('#pair-check', 'abcd1234')
+  await click('Koppeln')
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
   container = document.createElement('div')
@@ -92,6 +135,7 @@ afterEach(() => {
   container.remove()
   setPlatform(fallbackPlatform)
   vi.useRealTimers()
+  vi.unstubAllGlobals()
 })
 
 describe('PairingView', () => {
@@ -216,5 +260,33 @@ describe('PairingView', () => {
     })
 
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('hält an, wenn Android das Zertifikat von Hand verlangt, statt „antwortet nicht" zu melden', async () => {
+    const { install } = manualTrustPlatform()
+    const fetcher = vi.fn((_url: string) => Promise.reject(new TypeError('Failed to fetch')))
+
+    vi.stubGlobal('fetch', fetcher)
+
+    await pairByHand()
+
+    expect(install).toHaveBeenCalledTimes(1)
+    expect(container.textContent).toContain('von Hand')
+    expect(container.textContent).not.toContain('antwortet nicht')
+    // Nur die Prüfung — die Kopplung selbst ging nicht hinaus, der Code bleibt gültig.
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://100.115.154.57:8443/api/info',
+    ])
+  })
+
+  it('installiert nichts, wenn die verschlüsselte Verbindung schon steht', async () => {
+    const { install } = manualTrustPlatform()
+
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(null, { status: 401 }))))
+
+    await pairByHand()
+
+    expect(install).not.toHaveBeenCalled()
+    expect(container.textContent).not.toContain('von Hand')
   })
 })

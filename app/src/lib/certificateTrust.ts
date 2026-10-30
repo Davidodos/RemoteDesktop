@@ -91,6 +91,26 @@ export function certificateUrl(host: string, port = TRUST_PORT): string {
 }
 
 /**
+ * Ob die verschlüsselte Verbindung zum Agent schon steht — dann gibt es nichts
+ * zu bestätigen. Jede Antwort zählt, auch 401: geprüft wird das Zertifikat,
+ * nicht der Ausweis. `no-cors`, damit eine fehlende Freigabe nicht aussieht wie
+ * ein abgelehntes Zertifikat.
+ */
+export async function answersSecurely(
+  host: string,
+  port: number,
+  fetcher: typeof fetch = fetch,
+): Promise<boolean> {
+  try {
+    await fetcher(`https://${host}:${port}/api/info`, { mode: 'no-cors' })
+
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Holt das Zertifikat und gibt es nur heraus, wenn sein Fingerabdruck stimmt.
  *
  * @param expected Der Fingerabdruck aus der Kopplung. Ohne ihn wird nichts

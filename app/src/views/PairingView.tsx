@@ -2,6 +2,7 @@ import { useEffect, useState, type MutableRefObject } from 'react'
 import { CertificateTrustStep } from './CertificateTrustStep.tsx'
 import { PairingOffer, usePairingCode } from './PairingOffer.tsx'
 import {
+  answersSecurely,
   certificateFingerprint,
   downloadAuthority,
   fetchAgentCertificate,
@@ -437,7 +438,12 @@ async function pairWith(target: PairingTarget): Promise<Paired> {
   let hindernis: string | undefined
 
   try {
-    const trusted = await trust(target)
+    // Steht die verschlüsselte Verbindung schon — Zertifikat von Tailscale, oder
+    // die Stelle ist bereits bestätigt —, gibt es nichts zu installieren. Ohne
+    // diese Prüfung öffnete jeder neue Anlauf die Einstellungen erneut.
+    const trusted: Trusted = (await answersSecurely(target.host, target.port))
+      ? { ok: true }
+      : await trust(target)
 
     if (!trusted.ok && trusted.fatal === true) {
       // Nicht weiter: die Gegenseite weist sich selbst aus, und der
@@ -448,6 +454,14 @@ async function pairWith(target: PairingTarget): Promise<Paired> {
 
     if (!trusted.ok) {
       hindernis = trusted.failure
+    }
+
+    // Ab Android 11 installiert das System die Stelle nur von Hand. Bis das
+    // erledigt ist, scheitert https zwangsläufig — und meldete „antwortet
+    // nicht", obwohl die Gegenstelle antwortete. Der Code bleibt gültig: die
+    // Anfrage ist nie angekommen.
+    if (trusted.manual === true) {
+      throw new Error(MANUAL_TRUST)
     }
 
     // Der eigene Steckbrief geht mit. Ist dieses Gerät kein mögliches Ziel,
@@ -503,7 +517,15 @@ interface Trusted {
    * Schritt genau der, den die Prüfung verhindern soll.
    */
   fatal?: boolean
+  /** Android hat die Datei in die Downloads gelegt — installieren muss der Mensch. */
+  manual?: boolean
 }
+
+const MANUAL_TRUST =
+  'Android verlangt das Zertifikat seit Version 11 von Hand: RemoteDesktop-CA.crt ' +
+  'liegt in den Downloads, die Einstellungen sind offen — Sicherheit → ' +
+  'Verschlüsselung und Anmeldedaten → Zertifikat installieren → CA-Zertifikat. ' +
+  'Danach noch einmal koppeln.'
 
 /**
  * Der ausstellenden Stelle der Gegenseite vertrauen.
@@ -547,9 +569,9 @@ async function trust(target: PairingTarget): Promise<Trusted> {
 
   try {
     verify(certificate, expected, target.check)
-    await platform.trust.install(certificate.base64, certificate.fingerprint)
+    const outcome = await platform.trust.install(certificate.base64, certificate.fingerprint)
 
-    return { ok: true }
+    return { ok: true, manual: outcome === 'settings' }
   } catch (failure) {
     return {
       ok: false,
